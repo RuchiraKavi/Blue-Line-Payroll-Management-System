@@ -1,29 +1,57 @@
 import React, { useEffect, useState } from "react";
 import { fetchDepartments } from "../../utils/EmployeeHelper";
+import { useAuth } from "../../hooks/useAuth";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 
 const EditEmployee = () => {
-const [employee, setEmployee] = useState({
-  name: "",
-  email: "",
-  employee_id: "",
-  dob: "",
-  gender: "",
-  marital_status: "",
-  joined_date: "",
-  resigned_date: "",
-  designation: "",
-  department: "",
-  basic_salary: "",
-  role: "",
-  image: null,
-});
+  const { user, loading } = useAuth();
+  const [employee, setEmployee] = useState({
+    name: "",
+    email: "",
+    employee_id: "",
+    dob: "",
+    gender: "",
+    marital_status: "",
+    joined_date: "",
+    resigned_date: "",
+    designation: "",
+    department: "",
+    basic_salary: "",
+    role: "",
+    image: null,
+  });
 
-
+  const [error, setError] = useState("");
   const [departments, setDepartments] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Available roles based on user permissions
+  const AVAILABLE_ROLES = {
+    admin: ["admin", "hr", "accountant", "employee", "intern"],
+    hr: ["hr", "accountant", "employee", "intern"],
+    accountant: [],
+    employee: [],
+    intern: [],
+  };
+
+  // Check authorization - only admin and hr can edit employees
+  useEffect(() => {
+    const normalizeRole = (r) => {
+      if (!r) return r;
+      const x = String(r).toLowerCase();
+      if (x === "hr_manager") return "hr";
+      if (x === "account_manager" || x === "accountant") return "accountant";
+      return x;
+    };
+    const userRole = normalizeRole(user?.role);
+    const allowedToEdit = ["admin", "hr"];
+
+    if (!loading && (!user || !allowedToEdit.includes(userRole))) {
+      navigate("/unauthorized");
+    }
+  }, [user, loading, navigate]);
 
   /* ================= Fetch Employee ================= */
   useEffect(() => {
@@ -90,6 +118,22 @@ const [employee, setEmployee] = useState({
   /* ================= Handle Submit ================= */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+
+    // Check role permission
+    const normalizeRole = (r) => {
+      if (!r) return r;
+      const x = String(r).toLowerCase();
+      if (x === "hr_manager") return "hr";
+      if (x === "account_manager" || x === "accountant") return "accountant";
+      return x;
+    };
+    const userRole = normalizeRole(user?.role);
+    const allowedRoles = AVAILABLE_ROLES[userRole];
+    if (!allowedRoles?.includes(employee.role)) {
+      setError(`You cannot assign role: ${employee.role}`);
+      return;
+    }
 
     const formData = new FormData();
     Object.keys(employee).forEach((key) => {
@@ -112,11 +156,29 @@ const [employee, setEmployee] = useState({
       if (res.data.success) {
         alert("Employee updated successfully");
         navigate("/admin-dashboard/employees");
+      } else {
+        setError(res.data.message || "Failed to update employee");
       }
     } catch (error) {
-      alert(error.response?.data?.message || "Update failed");
+      if (error.response?.status === 403) {
+        setError("You don't have permission to edit employees");
+        navigate("/unauthorized");
+      } else if (error.response?.status === 401) {
+        setError("Session expired. Please login again");
+        navigate("/login");
+      } else {
+        setError(error.response?.data?.message || "Update failed");
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-lg font-semibold text-gray-600">Loading...</div>
+      </div>
+    );
+  }
 
   /* ================= UI ================= */
   return (
@@ -125,6 +187,12 @@ const [employee, setEmployee] = useState({
     <h3 className="text-center text-2xl font-bold mb-6">
       Edit Employee
     </h3>
+
+    {error && (
+      <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-red-700 text-sm font-medium">{error}</p>
+      </div>
+    )}
 
     <form
       className="grid grid-cols-1 md:grid-cols-2 gap-6"
@@ -307,9 +375,23 @@ const [employee, setEmployee] = useState({
           className="input"
         >
           <option value="">Select Role</option>
-          <option value="admin">Admin</option>
-          <option value="employee">Employee</option>
+          {(() => {
+            const normalizeRole = (r) => {
+              if (!r) return r;
+              const x = String(r).toLowerCase();
+              if (x === "hr_manager") return "hr";
+              if (x === "account_manager" || x === "accountant") return "accountant";
+              return x;
+            };
+            const userRole = normalizeRole(user?.role);
+            return AVAILABLE_ROLES[userRole]?.map((role) => (
+              <option key={role} value={role}>
+                {role.charAt(0).toUpperCase() + role.slice(1)}
+              </option>
+            ));
+          })()}
         </select>
+        <p className="mt-1 text-xs text-gray-500">Available roles based on your permissions</p>
       </div>
 
       {/* Image Upload */}
