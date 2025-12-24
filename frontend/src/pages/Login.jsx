@@ -19,7 +19,8 @@ function Login() {
             if(response.data.success){
                 login(response.data.user);
                 localStorage.setItem("token", response.data.token);
-                if(response.data.user.role === 'admin'){
+                localStorage.setItem("role", response.data.user.role);
+                if(response.data.user.role === 'admin' || response.data.user.role === 'hr' || response.data.user.role === 'accountant'){
                     navigate('/admin-dashboard');
                 }else{
                     navigate('/employee-dashboard');

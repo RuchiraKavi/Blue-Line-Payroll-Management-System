@@ -28,6 +28,41 @@ const upload = multer({
   },
 });
 
+/* ================= GET LAST EMPLOYEE ID ================= */
+const getLastEmployeeId = async (req, res) => {
+  try {
+    // Find the last employee by sorting in descending order
+    const lastEmployee = await Employee.findOne()
+      .sort({ _id: -1 })
+      .select("employee_id");
+
+    let nextId = "BL001"; // Default first ID
+
+    if (lastEmployee && lastEmployee.employee_id) {
+      // Extract the numeric part from employee_id (e.g., "BL001" -> "001")
+      const match = lastEmployee.employee_id.match(/(\d+)$/);
+      if (match) {
+        const lastNumber = parseInt(match[1]);
+        const nextNumber = lastNumber + 1;
+        // Pad with zeros to maintain 3-digit format
+        nextId = `BL${String(nextNumber).padStart(3, "0")}`;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      nextId,
+      lastId: lastEmployee?.employee_id || null,
+    });
+  } catch (error) {
+    console.error("Get Last Employee ID Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching next employee ID",
+    });
+  }
+};
+
 /* ================= ADD EMPLOYEE ================= */
 const addEmployee = async (req, res) => {
   try {
@@ -47,16 +82,66 @@ const addEmployee = async (req, res) => {
       role,
     } = req.body;
 
+    // Normalize helper for roles
+    const normalizeRole = (r) => {
+      if (!r) return r;
+      const x = String(r).toLowerCase();
+      if (x === "hr_manager") return "hr";
+      if (x === "account_manager" || x === "accountant") return "account";
+      return x;
+    };
+
+    // Ensure only allowed assigners can create employees and only assign allowed roles
+    const assignerRole = normalizeRole(req.user?.role);
+    const adminAllowed = [
+      "admin",
+      "hr",
+      "hr_manager",
+      "account",
+      "account_manager",
+      "manager",
+      "employee",
+      "intern",
+    ];
+    const hrAllowed = ["hr", "hr_manager", "manager", "employee", "intern"];
+
+    if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
+      // route should normally be protected, but double-check
+      return res.status(403).json({ success: false, message: "Forbidden: you are not allowed to add employees" });
+    }
+
+    const assignedRole = normalizeRole(role) || "employee";
+    const allowedForAssigner = assignerRole === "admin" ? adminAllowed : hrAllowed;
+    if (!allowedForAssigner.includes(assignedRole)) {
+      return res.status(403).json({ success: false, message: `Forbidden: you cannot assign role '${role}'` });
+    }
+
     // Validate required fields
-    if (!name || !email || !password || !employee_id || !dob || !joined_date || !designation || !department || !basic_salary) {
+    if (!name || !email || !password || !dob || !joined_date || !designation || !department || !basic_salary) {
       return res.status(400).json({ success: false, message: "All required fields must be filled" });
+    }
+
+    // If employee_id not provided, generate next sequential ID
+    let finalEmployeeId = employee_id;
+    if (!finalEmployeeId) {
+      const lastEmployee = await Employee.findOne().sort({ _id: -1 }).select("employee_id");
+      let nextId = "BL001";
+      if (lastEmployee && lastEmployee.employee_id) {
+        const match = lastEmployee.employee_id.match(/(\d+)$/);
+        if (match) {
+          const lastNumber = parseInt(match[1]);
+          const nextNumber = lastNumber + 1;
+          nextId = `BL${String(nextNumber).padStart(3, "0")}`;
+        }
+      }
+      finalEmployeeId = nextId;
     }
 
     // Check if email or employee_id already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ success: false, message: "Email already exists" });
 
-    const existingEmployee = await Employee.findOne({ employee_id });
+    const existingEmployee = await Employee.findOne({ employee_id: finalEmployeeId });
     if (existingEmployee) return res.status(400).json({ success: false, message: "Employee ID already exists" });
 
     // Create new User
@@ -66,7 +151,7 @@ const addEmployee = async (req, res) => {
       email,
       password: hashedPassword,
       role: role || "employee",
-      profileImage: req.file ? req.file.filename : null
+      profileImage: req.file ? req.file.filename : null,
     });
 
     const savedUser = await newUser.save();
@@ -74,7 +159,7 @@ const addEmployee = async (req, res) => {
     // Create Employee linked to this User
     const newEmployee = new Employee({
       userId: savedUser._id,
-      employee_id,
+      employee_id: finalEmployeeId,
       email,
       dob,
       gender,
@@ -84,7 +169,7 @@ const addEmployee = async (req, res) => {
       designation,
       department,
       basic_salary,
-      image: req.file ? req.file.filename : null
+      image: req.file ? req.file.filename : null,
     });
 
     await newEmployee.save();
@@ -105,14 +190,12 @@ const getEmployee = async (req, res) => {
       .populate("userId", "name role profileImage") // include role
       .populate("department", "dep_name");
 
-    // Filter only employees with a valid user and role
-    const employeesOnly = employees.filter(
-      (emp) => emp.userId && emp.userId.role === "employee"
-    );
+    // Return all employees that have a linked user (don't restrict by user.role)
+    const employeesWithUser = employees.filter((emp) => emp.userId);
 
     return res.status(200).json({
       success: true,
-      employees: employeesOnly,
+      employees: employeesWithUser,
     });
   } catch (error) {
     console.error("Get Employees Error:", error);
@@ -289,5 +372,6 @@ export {
   viewEmployee,
   removeEmployee,
   updateEmployee,
+  getLastEmployeeId,
   upload,
 };

@@ -84,6 +84,8 @@ const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     setUser(userData);
+
+    localStorage.setItem("role", userData.role);
     // Calculate expiration time (1 hour = 3600000 milliseconds)
     const expirationTime = Date.now() + 3600000;
     localStorage.setItem("tokenExpiration", expirationTime.toString());
