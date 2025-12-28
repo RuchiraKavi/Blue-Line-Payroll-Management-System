@@ -91,6 +91,9 @@ const AddEmployee = () => {
 
   const validateForm = () => {
     if (!formData.name?.trim()) return "Name is required";
+    if (!formData.nic?.trim()) return "NIC is required";
+    if (!/^([0-9]{9}[vVxX]|[0-9]{12})$/.test(formData.nic))
+      return "Invalid NIC format";
     if (!formData.email?.trim()) return "Email is required";
     if (!formData.employee_id?.trim()) return "Employee ID is required";
     if (!formData.dob) return "Date of Birth is required";
@@ -104,6 +107,14 @@ const AddEmployee = () => {
     if (!formData.password?.trim()) return "Password is required";
     if (formData.password.length < 6) return "Password must be at least 6 characters";
     if (!formData.role) return "Role is required";
+    if (!formData.bank_name?.trim()) return "Bank Name is required";
+    if (!formData.bank_branch?.trim()) return "Bank Branch is required";
+
+    if (!formData.bank_account_number?.trim())
+      return "Bank Account Number is required";
+
+    if (!/^[0-9]{8,18}$/.test(formData.bank_account_number))
+      return "Bank Account Number must be 8–18 digits";
     return null;
   };
 
@@ -218,6 +229,23 @@ const AddEmployee = () => {
               required
             />
           </div>
+
+          {/* NIC */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                NIC <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="nic"
+                placeholder="National Identity Card Number"
+                value={formData.nic}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+              />
+            </div>
+
 
           {/* Email */}
           <div>
@@ -375,6 +403,55 @@ const AddEmployee = () => {
               required
             />
           </div>
+
+          {/* Bank Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Bank Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="bank_name"
+                placeholder="Bank Name"
+                value={formData.bank_name}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {/* Bank Branch */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Bank Branch <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="bank_branch"
+                placeholder="Branch Name"
+                value={formData.bank_branch}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {/* Bank Account Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Bank Account Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="bank_account_number"
+                placeholder="Account Number"
+                value={formData.bank_account_number}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+              />
+            </div>
+
 
           {/* Password */}
           <div>

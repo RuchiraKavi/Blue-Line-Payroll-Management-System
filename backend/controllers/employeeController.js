@@ -71,6 +71,7 @@ const addEmployee = async (req, res) => {
       email,
       password,
       employee_id,
+      nic,
       dob,
       gender,
       marital_status,
@@ -80,9 +81,12 @@ const addEmployee = async (req, res) => {
       department,
       basic_salary,
       role,
+      bank_name,
+      bank_branch,
+      bank_account_number,
     } = req.body;
 
-    // Normalize helper for roles
+    /* ---------------- ROLE NORMALIZATION ---------------- */
     const normalizeRole = (r) => {
       if (!r) return r;
       const x = String(r).toLowerCase();
@@ -91,8 +95,8 @@ const addEmployee = async (req, res) => {
       return x;
     };
 
-    // Ensure only allowed assigners can create employees and only assign allowed roles
     const assignerRole = normalizeRole(req.user?.role);
+
     const adminAllowed = [
       "admin",
       "hr",
@@ -103,64 +107,103 @@ const addEmployee = async (req, res) => {
       "employee",
       "intern",
     ];
+
     const hrAllowed = ["hr", "hr_manager", "manager", "employee", "intern"];
 
     if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
-      // route should normally be protected, but double-check
-      return res.status(403).json({ success: false, message: "Forbidden: you are not allowed to add employees" });
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: you are not allowed to add employees",
+      });
     }
 
     const assignedRole = normalizeRole(role) || "employee";
     const allowedForAssigner = assignerRole === "admin" ? adminAllowed : hrAllowed;
+
     if (!allowedForAssigner.includes(assignedRole)) {
-      return res.status(403).json({ success: false, message: `Forbidden: you cannot assign role '${role}'` });
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: you cannot assign role '${role}'`,
+      });
     }
 
-    // Validate required fields
-    if (!name || !email || !password || !dob || !joined_date || !designation || !department || !basic_salary) {
-      return res.status(400).json({ success: false, message: "All required fields must be filled" });
+    /* ---------------- VALIDATION ---------------- */
+    if (
+      !name ||
+      !email ||
+      !password ||
+      !nic ||
+      !dob ||
+      !joined_date ||
+      !designation ||
+      !department ||
+      !basic_salary ||
+      !bank_name ||
+      !bank_branch ||
+      !bank_account_number
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled",
+      });
     }
 
-    // If employee_id not provided, generate next sequential ID
+    /* ---------------- EMPLOYEE ID GENERATION ---------------- */
     let finalEmployeeId = employee_id;
+
     if (!finalEmployeeId) {
-      const lastEmployee = await Employee.findOne().sort({ _id: -1 }).select("employee_id");
+      const lastEmployee = await Employee.findOne()
+        .sort({ _id: -1 })
+        .select("employee_id");
+
       let nextId = "BL001";
-      if (lastEmployee && lastEmployee.employee_id) {
+
+      if (lastEmployee?.employee_id) {
         const match = lastEmployee.employee_id.match(/(\d+)$/);
         if (match) {
-          const lastNumber = parseInt(match[1]);
-          const nextNumber = lastNumber + 1;
+          const nextNumber = parseInt(match[1]) + 1;
           nextId = `BL${String(nextNumber).padStart(3, "0")}`;
         }
       }
+
       finalEmployeeId = nextId;
     }
 
-    // Check if email or employee_id already exists
+    /* ---------------- DUPLICATE CHECKS ---------------- */
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ success: false, message: "Email already exists" });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "Email already exists" });
+    }
 
-    const existingEmployee = await Employee.findOne({ employee_id: finalEmployeeId });
-    if (existingEmployee) return res.status(400).json({ success: false, message: "Employee ID already exists" });
+    const existingEmployeeId = await Employee.findOne({ employee_id: finalEmployeeId });
+    if (existingEmployeeId) {
+      return res.status(400).json({ success: false, message: "Employee ID already exists" });
+    }
 
-    // Create new User
+    const existingNIC = await Employee.findOne({ nic });
+    if (existingNIC) {
+      return res.status(400).json({ success: false, message: "NIC already exists" });
+    }
+
+    /* ---------------- CREATE USER ---------------- */
     const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
-      role: role || "employee",
+      role: assignedRole,
       profileImage: req.file ? req.file.filename : null,
     });
 
     const savedUser = await newUser.save();
 
-    // Create Employee linked to this User
+    /* ---------------- CREATE EMPLOYEE ---------------- */
     const newEmployee = new Employee({
       userId: savedUser._id,
       employee_id: finalEmployeeId,
       email,
+      nic,
       dob,
       gender,
       marital_status,
@@ -169,16 +212,28 @@ const addEmployee = async (req, res) => {
       designation,
       department,
       basic_salary,
+      bank_details: {
+        bank_name,
+        bank_branch,
+        bank_account_number,
+      },
       image: req.file ? req.file.filename : null,
     });
 
     await newEmployee.save();
 
-    res.status(201).json({ success: true, message: "Employee and User created successfully" });
+    /* ---------------- RESPONSE ---------------- */
+    res.status(201).json({
+      success: true,
+      message: "Employee and User created successfully",
+    });
 
   } catch (error) {
     console.error("Add Employee Error:", error);
-    res.status(500).json({ success: false, message: error.message || "Server error" });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
   }
 };
 

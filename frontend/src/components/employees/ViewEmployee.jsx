@@ -37,8 +37,8 @@ const ViewEmployee = () => {
     <>
       {employee ? (
         <div className="p-6 bg-gray-50 min-h-screen flex flex-col md:flex-row justify-center items-start gap-8">
-          {/* Employee Details */}
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden">
+
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-16 text-white">
               <h2 className="text-3xl font-bold mb-1">
@@ -56,8 +56,8 @@ const ViewEmployee = () => {
               />
             </div>
 
-            {/* Details */}
             <div className="p-6 space-y-6">
+
               {/* Personal Info */}
               <div>
                 <h3 className="text-xl font-semibold border-b pb-2 mb-4">
@@ -66,6 +66,7 @@ const ViewEmployee = () => {
                 <div className="grid md:grid-cols-2 gap-4">
                   <p><b>Name:</b> {employee.userId?.name}</p>
                   <p><b>Email:</b> {employee.userId?.email}</p>
+                  <p><b>NIC:</b> {employee.nic}</p>
                   <p><b>DOB:</b> {employee.dob?.slice(0, 10)}</p>
                   <p><b>Gender:</b> {employee.gender}</p>
                   <p><b>Marital Status:</b> {employee.marital_status}</p>
@@ -91,7 +92,7 @@ const ViewEmployee = () => {
                 </div>
               </div>
 
-              {/* Salary & Role */}
+              {/* Compensation */}
               <div>
                 <h3 className="text-xl font-semibold border-b pb-2 mb-4">
                   Compensation
@@ -107,29 +108,43 @@ const ViewEmployee = () => {
                 </div>
               </div>
 
-              {/* PDF Download for Details */}
-              <div className="mt-6 flex justify-center">
+              {/* Bank Details */}
+              <div>
+                <h3 className="text-xl font-semibold border-b pb-2 mb-4">
+                  Bank Details
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <p><b>Bank Name:</b> {employee.bank_details.bank_name}</p>
+                  <p><b>Bank Branch:</b> {employee.bank_details.bank_branch}</p>
+                  <p><b>Account Number:</b> {employee.bank_details.bank_account_number}</p>
+                </div>
+              </div>
+
+              {/* PDF Downloads */}
+              <div className="mt-6 flex flex-col items-center gap-4">
                 <PDFDownloadLink
                   document={<EmployeePDF employee={employee} />}
                   fileName={`${employee.employee_id}_details.pdf`}
                   className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600"
                 >
-                  {({ loading }) => (loading ? "Preparing PDF..." : "Get Employee Details")}
+                  {({ loading }) =>
+                    loading ? "Preparing PDF..." : "Get Employee Details"
+                  }
                 </PDFDownloadLink>
-              </div>
-              {/* Employee ID Card Preview */}
-              <div className="flex flex-col items-center gap-4">    
+
                 <PDFDownloadLink
                   document={<EmployeeIDCardPDF employee={employee} />}
                   fileName={`${employee.employee_id}_idcard.pdf`}
                   className="px-6 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
                 >
-                  {({ loading }) => (loading ? "Preparing ID Card PDF..." : "Get Employee ID Card")}
+                  {({ loading }) =>
+                    loading ? "Preparing ID Card PDF..." : "Get Employee ID Card"
+                  }
                 </PDFDownloadLink>
               </div>
+
             </div>
           </div>
-
         </div>
       ) : (
         <div className="flex justify-center items-center min-h-screen text-red-500 font-semibold">
