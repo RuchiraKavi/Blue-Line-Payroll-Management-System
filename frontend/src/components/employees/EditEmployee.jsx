@@ -9,6 +9,7 @@ const EditEmployee = () => {
   const [employee, setEmployee] = useState({
     name: "",
     email: "",
+    nic: "",
     employee_id: "",
     dob: "",
     gender: "",
@@ -19,8 +20,12 @@ const EditEmployee = () => {
     department: "",
     basic_salary: "",
     role: "",
+    bank_name: "",
+    bank_branch: "",
+    bank_account_number: "",
     image: null,
   });
+
 
   const [error, setError] = useState("");
   const [departments, setDepartments] = useState([]);
@@ -72,18 +77,20 @@ const EditEmployee = () => {
         setEmployee({
           name: emp.userId?.name || "",
           email: emp.userId?.email || "",
+          nic: emp.nic || "",
           employee_id: emp.employee_id || "",
           dob: emp.dob ? emp.dob.slice(0, 10) : "",
           gender: emp.gender || "",
           marital_status: emp.marital_status || "",
           joined_date: emp.joined_date ? emp.joined_date.slice(0, 10) : "",
-          resigned_date: emp.resigned_date
-            ? emp.resigned_date.slice(0, 10)
-            : "",
+          resigned_date: emp.resigned_date ? emp.resigned_date.slice(0, 10) : "",
           designation: emp.designation || "",
           department: emp.department?._id || "",
           basic_salary: emp.basic_salary || "",
           role: emp.userId?.role || "",
+          bank_name: emp.bank_details?.bank_name || "",
+          bank_branch: emp.bank_details?.bank_branch || "",
+          bank_account_number: emp.bank_details?.bank_account_number || "",
           image: null,
         });
       }
@@ -135,9 +142,20 @@ const EditEmployee = () => {
       return;
     }
 
+    // Validate bank details are not empty
+    if (!employee.bank_name?.trim() || !employee.bank_branch?.trim() || !employee.bank_account_number?.trim()) {
+      setError("Bank details (name, branch, account number) are required");
+      return;
+    }
+
     const formData = new FormData();
     Object.keys(employee).forEach((key) => {
-      if (employee[key] !== null && employee[key] !== "") {
+      // Skip null/empty values, but include image only if it's a File object
+      if (key === "image") {
+        if (employee[key] instanceof File) {
+          formData.append(key, employee[key]);
+        }
+      } else if (employee[key] !== null && employee[key] !== "") {
         formData.append(key, employee[key]);
       }
     });
@@ -211,6 +229,23 @@ const EditEmployee = () => {
           className="input"
         />
       </div>
+
+      {/* NIC */}
+      <div className="flex flex-col">
+        <label htmlFor="nic" className="mb-1 font-medium">
+          NIC <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="nic"
+          name="nic"
+          value={employee.nic}
+          onChange={handleChange}
+          required
+          className="input"
+        />
+      </div>
+
 
       {/* Email */}
       <div className="flex flex-col">
@@ -362,6 +397,55 @@ const EditEmployee = () => {
           className="input"
         />
       </div>
+
+      {/* Bank Name */}
+      <div className="flex flex-col">
+        <label htmlFor="bank_name" className="mb-1 font-medium">
+          Bank Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="bank_name"
+          name="bank_name"
+          value={employee.bank_name}
+          onChange={handleChange}
+          required
+          className="input"
+        />
+      </div>
+
+      {/* Bank Branch */}
+      <div className="flex flex-col">
+        <label htmlFor="bank_branch" className="mb-1 font-medium">
+          Bank Branch <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="bank_branch"
+          name="bank_branch"
+          value={employee.bank_branch}
+          onChange={handleChange}
+          required
+          className="input"
+        />
+      </div>
+
+      {/* Bank Account Number */}
+      <div className="flex flex-col">
+        <label htmlFor="bank_account_number" className="mb-1 font-medium">
+          Bank Account Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="bank_account_number"
+          name="bank_account_number"
+          value={employee.bank_account_number}
+          onChange={handleChange}
+          required
+          className="input"
+        />
+      </div>
+
 
       {/* Role */}
       <div className="flex flex-col">

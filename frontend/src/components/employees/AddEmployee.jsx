@@ -9,6 +9,23 @@ const AddEmployee = () => {
   const [departments, setDepartments] = useState([]);
   const [formData, setFormData] = useState({
     employee_id: "",
+    name: "",
+    email: "",
+    nic: "",
+    dob: "",
+    gender: "",
+    marital_status: "",
+    joined_date: "",
+    resigned_date: "",
+    designation: "",
+    department: "",
+    basic_salary: "",
+    password: "",
+    role: "",
+    bank_name: "",
+    bank_branch: "",
+    bank_account_number: "",
+    image: null,
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -223,6 +240,7 @@ const AddEmployee = () => {
             <input
               type="text"
               name="name"
+              value={formData.name}
               placeholder="Full Name"
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -255,6 +273,7 @@ const AddEmployee = () => {
             <input
               type="email"
               name="email"
+              value={formData.email}
               placeholder="Email Address"
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -286,6 +305,7 @@ const AddEmployee = () => {
             <input
               type="date"
               name="dob"
+              value={formData.dob}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
@@ -299,6 +319,7 @@ const AddEmployee = () => {
             </label>
             <select
               name="gender"
+              value={formData.gender}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
@@ -317,6 +338,7 @@ const AddEmployee = () => {
             </label>
             <select
               name="marital_status"
+              value={formData.marital_status}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
@@ -335,6 +357,7 @@ const AddEmployee = () => {
             <input
               type="date"
               name="joined_date"
+              value={formData.joined_date}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
@@ -349,6 +372,7 @@ const AddEmployee = () => {
             <input
               type="date"
               name="resigned_date"
+              value={formData.resigned_date}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
@@ -362,6 +386,7 @@ const AddEmployee = () => {
             <input
               type="text"
               name="designation"
+              value={formData.designation}
               placeholder="Job Title"
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -376,6 +401,7 @@ const AddEmployee = () => {
             </label>
             <select
               name="department"
+              value={formData.department}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
@@ -397,6 +423,7 @@ const AddEmployee = () => {
             <input
               type="number"
               name="basic_salary"
+              value={formData.basic_salary}
               placeholder="0.00"
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"

@@ -91,7 +91,7 @@ const addEmployee = async (req, res) => {
       if (!r) return r;
       const x = String(r).toLowerCase();
       if (x === "hr_manager") return "hr";
-      if (x === "account_manager" || x === "accountant") return "account";
+      if (x === "account_manager" || x === "accountant") return "accountant";
       return x;
     };
 
@@ -101,7 +101,7 @@ const addEmployee = async (req, res) => {
       "admin",
       "hr",
       "hr_manager",
-      "account",
+      "accountant",
       "account_manager",
       "manager",
       "employee",
@@ -347,6 +347,7 @@ const updateEmployee = async (req, res) => {
 
     const {
       name,
+      nic,
       email,
       employee_id,
       dob,
@@ -358,8 +359,12 @@ const updateEmployee = async (req, res) => {
       department,
       basic_salary,
       role,
+      bank_name,
+      bank_branch,
+      bank_account_number,
     } = req.body;
 
+    /* ================= FIND EMPLOYEE ================= */
     const employee = await Employee.findById(id);
     if (!employee) {
       return res.status(404).json({
@@ -376,32 +381,42 @@ const updateEmployee = async (req, res) => {
       });
     }
 
-    /* ---- Update User ---- */
+    /* ================= UPDATE USER ================= */
     await User.findByIdAndUpdate(
       employee.userId,
-      { name, email, role },
+      {
+        name,
+        email,
+        role,
+      },
       { new: true }
     );
 
-    /* ---- Image Handling ---- */
+    /* ================= IMAGE HANDLING ================= */
     let imagePath = employee.image;
     if (req.file) {
       imagePath = req.file.filename;
     }
 
-    /* ---- Update Employee ---- */
+    /* ================= UPDATE EMPLOYEE ================= */
     await Employee.findByIdAndUpdate(
       id,
       {
+        nic,
         employee_id,
         dob,
         gender,
         marital_status,
         joined_date,
-        resigned_date,
+        resigned_date: resigned_date || null,
         designation,
         department,
         basic_salary,
+        bank_details: {
+          bank_name,
+          bank_branch,
+          bank_account_number: bank_account_number,
+        },
         image: imagePath,
       },
       { new: true }
@@ -412,13 +427,14 @@ const updateEmployee = async (req, res) => {
       message: "Employee updated successfully",
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update Employee Error:", error);
     return res.status(500).json({
       success: false,
       message: "Edit employee server error",
     });
   }
 };
+
 
 /* ================= EXPORTS ================= */
 export {
