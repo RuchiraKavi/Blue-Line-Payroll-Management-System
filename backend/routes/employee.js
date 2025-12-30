@@ -1,6 +1,6 @@
     import express from "express";
     import authMiddleware from "../middleware/authMiddleware.js";
-    import { addEmployee, upload, getEmployee, viewEmployee, removeEmployee, updateEmployee, getLastEmployeeId } from "../controllers/employeeController.js";
+    import { addEmployee, upload, getEmployee, viewEmployee, removeEmployee, updateEmployee, getLastEmployeeId, getMyEmployeeProfile } from "../controllers/employeeController.js";
     import authorizeRoles from "../middleware/roleMiddleware.js";
 
     const router = express.Router();
@@ -15,8 +15,11 @@
     // All authenticated users can view a single employee
     router.get("/:id", authMiddleware, viewEmployee);
     // Only admin and hr can update employees
-    router.put("/:id", authMiddleware, authorizeRoles("admin", "hr"), upload.single("image"), updateEmployee);
+    router.put("/:id", authMiddleware, authorizeRoles("admin", "hr", "employee"), upload.single("image"), updateEmployee);
     // Only admin and hr can delete employees
     router.delete('/:id', authMiddleware, authorizeRoles("admin", "hr"), removeEmployee);
+
+    router.get("/me/profile", authMiddleware, getMyEmployeeProfile);
+
 
     export default router;

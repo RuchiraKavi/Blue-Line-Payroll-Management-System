@@ -1,6 +1,5 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { useAuth } from "../../hooks/useAuth.js";
 import {
   FaBuilding,
   FaCalendar,
@@ -10,14 +9,7 @@ import {
   FaUser,
 } from "react-icons/fa";
 
-const AdminSidebar = () => {
-  // 🔐 Get role from auth context (secure method)
-  const { user } = useAuth();
-  const role = user?.role;
-  // Normalize role aliases for checks
-  const isHR = role === "hr" || role === "hr_manager";
-  const isAccount = role === "account" || role === "account_manager" || role === "accountant";
-
+const EmployeeSidebar = () => {
   return (
     <div className="h-screen bg-gray-900 text-white w-64 flex flex-col shadow-lg">
 
@@ -30,9 +22,8 @@ const AdminSidebar = () => {
       <div className="flex-1 p-4 space-y-2">
 
         {/* Dashboard → Admin, HR, Account */}
-        {(role === "admin" || isHR || isAccount) && (
           <NavLink
-            to="/admin-dashboard"
+            to="/employee-dashboard"
             end
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
@@ -43,12 +34,11 @@ const AdminSidebar = () => {
             <FaTachometerAlt className="text-lg" />
             <span>Dashboard</span>
           </NavLink>
-        )}
+
 
         {/* Employees → Admin, HR */}
-        {(role === "admin" || isHR) && (
           <NavLink
-            to="/admin-dashboard/employees"
+            to="/employee-dashboard/profile"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
                hover:bg-gray-800 transition-all 
@@ -56,29 +46,12 @@ const AdminSidebar = () => {
             }
           >
             <FaUser className="text-lg" />
-            <span>Employees</span>
+            <span>My Profile</span>
           </NavLink>
-        )}
 
         {/* Departments → Admin, HR */}
-        {(role === "admin" || isHR) && (
           <NavLink
-            to="/admin-dashboard/departments"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
-               hover:bg-gray-800 transition-all 
-               ${isActive ? "bg-gray-800" : ""}`
-            }
-          >
-            <FaBuilding className="text-lg" />
-            <span>Departments</span>
-          </NavLink>
-        )}
-
-        {/* Leave → Admin, HR */}
-        {(role === "admin" || isHR) && (
-          <NavLink
-            to="/admin-leave"
+            to="/employee-dashboard/leave"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
                hover:bg-gray-800 transition-all 
@@ -86,14 +59,12 @@ const AdminSidebar = () => {
             }
           >
             <FaCalendar className="text-lg" />
-            <span>Leave</span>
+            <span>Leaves</span>
           </NavLink>
-        )}
 
         {/* Salary → Admin, HR, Account */}
-        {(role === "admin" || isHR || isAccount) && (
           <NavLink
-            to="/admin-salary"
+            to="/employee-dashboard/salary"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
                hover:bg-gray-800 transition-all 
@@ -103,11 +74,9 @@ const AdminSidebar = () => {
             <FaMoneyBillWave className="text-lg" />
             <span>Salary</span>
           </NavLink>
-        )}
-
       </div>
     </div>
   );
 };
 
-export default AdminSidebar;
+export default EmployeeSidebar;

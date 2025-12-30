@@ -15,6 +15,10 @@ import ViewEmployee from "./components/employees/ViewEmployee.jsx";
 import EditEmployee from "./components/employees/EditEmployee.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
+import Profile from "./components/employeeDashboard/profile.jsx";
+import LeaveList from "./components/leave/LeaveList.jsx";
+import RequestLeave from "./components/leave/RequestLeave.jsx";
+import ChangePassword from "./components/employeeDashboard/ChangePassword.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -147,7 +151,13 @@ function App() {
               <EmployeeDashboard />
             </PrivateRoutes>
           }
-        />
+        >
+
+        <Route path="/employee-dashboard/profile" element={<Profile />} />
+        <Route path="/employee-dashboard/leave" element={<LeaveList />} />
+        <Route path="/employee-dashboard/request-leave" element={<RequestLeave />} />
+        <Route path="/employee-dashboard/change-password" element={<ChangePassword />} />
+        </Route>
 
         {/* Catch-all */}
         <Route path="*" element={getAuthRedirect()} />

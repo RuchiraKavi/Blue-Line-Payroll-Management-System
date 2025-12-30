@@ -435,6 +435,35 @@ const updateEmployee = async (req, res) => {
   }
 };
 
+const getMyEmployeeProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // from auth middleware
+
+    const employee = await Employee.findOne({ userId })
+      .populate("userId", "name email role profileImage nic")
+      .populate("department", "dep_name");
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      employee,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
 
 /* ================= EXPORTS ================= */
 export {
@@ -444,5 +473,6 @@ export {
   removeEmployee,
   updateEmployee,
   getLastEmployeeId,
+  getMyEmployeeProfile,
   upload,
 };
