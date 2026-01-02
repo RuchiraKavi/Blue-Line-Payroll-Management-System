@@ -78,7 +78,7 @@ const AdminSidebar = () => {
         {/* Leave → Admin, HR */}
         {(role === "admin" || isHR) && (
           <NavLink
-            to="/admin-leave"
+            to="/admin-dashboard/leaves"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
                hover:bg-gray-800 transition-all 
@@ -91,7 +91,7 @@ const AdminSidebar = () => {
         )}
 
         {/* Salary → Admin, HR, Account */}
-        {(role === "admin" || isHR || isAccount) && (
+        {(role === "admin" || isAccount) && (
           <NavLink
             to="/admin-salary"
             className={({ isActive }) =>

@@ -19,6 +19,9 @@ import Profile from "./components/employeeDashboard/profile.jsx";
 import LeaveList from "./components/leave/LeaveList.jsx";
 import RequestLeave from "./components/leave/RequestLeave.jsx";
 import ChangePassword from "./components/employeeDashboard/ChangePassword.jsx";
+import LeaveManage from "./components/leave/LeaveManage.jsx";
+import LeaveDetail from "./components/leave/LeaveDetail.jsx";
+import EmployeeLeaveHistory from "./components/leave/EmployeeLeaveHistory.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -138,6 +141,31 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["admin", "hr"]}>
                 <EditEmployee />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="leaves"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <LeaveManage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="leaves/:id"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <LeaveDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="employees/leaves/:employeeId"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <EmployeeLeaveHistory />
               </ProtectedRoute>
             }
           />

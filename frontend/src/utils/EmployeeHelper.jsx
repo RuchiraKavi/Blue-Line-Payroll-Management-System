@@ -80,7 +80,9 @@ export const EmployeeButtons = ({ _id, refresh }) => {
       </button>
 
       <button className="px-3 py-1 bg-yellow-500 rounded">Salary</button>
-      <button className="px-3 py-1 bg-orange-500 rounded">Leave</button>
+      <button className="px-3 py-1 bg-orange-500 rounded"
+      onClick={() => navigate(`/admin-dashboard/employees/leaves/${_id}`)}>
+        Leave</button>
 
       <button className="px-3 py-1 bg-red-500 rounded" onClick={handleRemove}>
         Remove
