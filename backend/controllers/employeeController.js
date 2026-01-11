@@ -100,15 +100,13 @@ const addEmployee = async (req, res) => {
     const adminAllowed = [
       "admin",
       "hr",
-      "hr_manager",
       "accountant",
-      "account_manager",
       "manager",
       "employee",
       "intern",
     ];
 
-    const hrAllowed = ["hr", "hr_manager", "manager", "employee", "intern"];
+    const hrAllowed = ["hr", "manager", "employee", "intern"];
 
     if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
       return res.status(403).json({
@@ -118,7 +116,8 @@ const addEmployee = async (req, res) => {
     }
 
     const assignedRole = normalizeRole(role) || "employee";
-    const allowedForAssigner = assignerRole === "admin" ? adminAllowed : hrAllowed;
+    const allowedForAssigner =
+      assignerRole === "admin" ? adminAllowed : hrAllowed;
 
     if (!allowedForAssigner.includes(assignedRole)) {
       return res.status(403).json({
@@ -170,20 +169,14 @@ const addEmployee = async (req, res) => {
     }
 
     /* ---------------- DUPLICATE CHECKS ---------------- */
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    if (await User.findOne({ email }))
       return res.status(400).json({ success: false, message: "Email already exists" });
-    }
 
-    const existingEmployeeId = await Employee.findOne({ employee_id: finalEmployeeId });
-    if (existingEmployeeId) {
+    if (await Employee.findOne({ employee_id: finalEmployeeId }))
       return res.status(400).json({ success: false, message: "Employee ID already exists" });
-    }
 
-    const existingNIC = await Employee.findOne({ nic });
-    if (existingNIC) {
+    if (await Employee.findOne({ nic }))
       return res.status(400).json({ success: false, message: "NIC already exists" });
-    }
 
     /* ---------------- CREATE USER ---------------- */
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -197,6 +190,23 @@ const addEmployee = async (req, res) => {
     });
 
     const savedUser = await newUser.save();
+
+    /* ---------------- DEFAULT LEAVE ASSIGNMENT ---------------- */
+    let leaveBalance = {
+      casual: 0,
+      annual: 0,
+      sick: 0,
+    };
+
+    // Interns get only 7 casual leaves
+    // All other roles get 7 casual + 14 annual + 21 sick
+    if (assignedRole === "intern") {
+      leaveBalance.casual = 7;
+    } else {
+      leaveBalance.casual = 7;
+      leaveBalance.annual = 14;
+      leaveBalance.sick = 21;
+    }
 
     /* ---------------- CREATE EMPLOYEE ---------------- */
     const newEmployee = new Employee({
@@ -212,11 +222,13 @@ const addEmployee = async (req, res) => {
       designation,
       department,
       basic_salary,
+      role: assignedRole,
       bank_details: {
         bank_name,
         bank_branch,
         bank_account_number,
       },
+      leave_balance: leaveBalance,
       image: req.file ? req.file.filename : null,
     });
 
@@ -225,7 +237,7 @@ const addEmployee = async (req, res) => {
     /* ---------------- RESPONSE ---------------- */
     res.status(201).json({
       success: true,
-      message: "Employee and User created successfully",
+      message: "Employee created with default leave balances",
     });
 
   } catch (error) {
@@ -236,7 +248,6 @@ const addEmployee = async (req, res) => {
     });
   }
 };
-
 
 /* ================= GET ALL EMPLOYEES ================= */
 const getEmployee = async (req, res) => {

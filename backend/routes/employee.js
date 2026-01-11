@@ -1,6 +1,7 @@
     import express from "express";
     import authMiddleware from "../middleware/authMiddleware.js";
     import { addEmployee, upload, getEmployee, viewEmployee, removeEmployee, updateEmployee, getLastEmployeeId, getMyEmployeeProfile } from "../controllers/employeeController.js";
+    import { getEmployeeLeaveBalance } from "../controllers/leaveController.js";
     import authorizeRoles from "../middleware/roleMiddleware.js";
 
     const router = express.Router();
@@ -20,6 +21,6 @@
     router.delete('/:id', authMiddleware, authorizeRoles("admin", "hr"), removeEmployee);
 
     router.get("/me/profile", authMiddleware, getMyEmployeeProfile);
-
+    router.get("/:id/leave-balance", authMiddleware, getEmployeeLeaveBalance);
 
     export default router;

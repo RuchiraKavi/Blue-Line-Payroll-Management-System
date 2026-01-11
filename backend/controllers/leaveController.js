@@ -7,49 +7,131 @@ const requestLeave = async (req, res) => {
   try {
     const { leaveType, startDate, endDate, reason } = req.body;
 
-    // Get employee using logged-in user's ID from token
-    const employee = await Employee.findOne({ userId: req.user.id });
-    if (!employee) return res.status(404).json({ success: false, message: "Employee not found" });
+    /* ---------------- BASIC VALIDATION ---------------- */
+    if (!leaveType || !startDate || !endDate || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
 
+    const normalizedLeaveType = leaveType.toLowerCase(); // casual | annual | sick
+
+    if (!["casual", "annual", "sick"].includes(normalizedLeaveType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid leave type",
+      });
+    }
+
+    /* ---------------- FIND EMPLOYEE ---------------- */
+    const employee = await Employee.findOne({ userId: req.user.id }).populate(
+      "userId",
+      "role"
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    /* ---------------- INTERN RULE ---------------- */
+    if (
+      employee.userId.role === "intern" &&
+      normalizedLeaveType !== "casual"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Interns can apply only casual leaves",
+      });
+    }
+
+    /* ---------------- DATE VALIDATION ---------------- */
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (end < start) {
+      return res.status(400).json({
+        success: false,
+        message: "End date cannot be before start date",
+      });
+    }
+
+    const diffTime = end.getTime() - start.getTime();
+    const totalDays =
+      Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    /* ---------------- CHECK LEAVE BALANCE ---------------- */
+    const availableLeaves =
+      employee.leave_balance?.[normalizedLeaveType] ?? 0;
+
+    if (availableLeaves < totalDays) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient ${normalizedLeaveType} leave balance`,
+      });
+    }
+
+    /* ---------------- CREATE LEAVE REQUEST ---------------- */
     const newLeave = new Leave({
       employeeId: employee._id,
-      leaveType,
+      leaveType: normalizedLeaveType,
       startDate,
       endDate,
+      totalDays,
       reason,
       status: "Pending",
     });
 
     await newLeave.save();
-    res.status(201).json({ success: true, message: "Leave requested successfully", leave: newLeave });
+
+    res.status(201).json({
+      success: true,
+      message: "Leave requested successfully",
+      leave: newLeave,
+    });
   } catch (error) {
     console.error("Leave Request Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server Error",
+    });
   }
 };
 
 const getEmployeeLeaves = async (req, res) => {
   try {
-    const { userId } = req.params;
+    // Handle both /user/:userId and /employee/:employeeId routes
+    const userId = req.params.userId || req.params.employeeId;
 
-    // Try to find leaves by Employee ID first
-    let leaves = await Leave.find({ employeeId: userId }).sort({ createdAt: -1 });
-    
-    // If no leaves found, check if userId is actually a User ID and get employee
-    if (leaves.length === 0) {
-      const employee = await Employee.findOne({ userId });
-      if (employee) {
-        leaves = await Leave.find({ employeeId: employee._id }).sort({ createdAt: -1 });
-      } else {
-        // Also check if userId is a direct Employee ID
-        const employeeById = await Employee.findById(userId);
-        if (!employeeById) {
-          return res.status(404).json({ success: false, message: "Employee not found" });
-        }
-      }
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID or Employee ID is required" });
     }
 
-    res.status(200).json({ success: true, leaves });
+    // Try to find leaves by ID (could be either userId or employeeId)
+    let leaves = await Leave.find({ employeeId: userId }).sort({ createdAt: -1 });
+    
+    // If no leaves found, check if the param is a User ID and find the employee
+    if (leaves.length === 0) {
+      let employee = await Employee.findOne({ userId });
+      
+      if (!employee) {
+        // Also check if it's a direct Employee ID
+        employee = await Employee.findById(userId);
+      }
+
+      if (!employee) {
+        return res.status(404).json({ success: false, message: "Employee not found" });
+      }
+
+      // Try to find leaves by employee ID
+      leaves = await Leave.find({ employeeId: employee._id }).sort({ createdAt: -1 });
+    }
+
+    // Return empty array if no leaves found (don't throw error)
+    res.status(200).json({ success: true, leaves: leaves || [] });
 
   } catch (error) {
     console.error(error);
@@ -107,17 +189,32 @@ const getLeaveDetails = async (req, res) => {
 // Update leave status (Approve / Reject) – only admin/HR
 const updateLeaveStatus = async (req, res) => {
   try {
-    const { status } = req.body;
+    let { status } = req.body;
     const leaveId = req.params.id;
 
-    const leave = await Leave.findById(leaveId)
-      .populate({
-        path: "employeeId",
-        populate: {
-          path: "userId",
-          select: "name email",
-        },
+    if (!status) {
+      return res.status(400).json({ success: false, message: "Status is required" });
+    }
+
+    // Normalize incoming status to lowercase for validation
+    const normalizedStatus = String(status).toLowerCase().trim(); // 'approved' | 'rejected'
+
+    /* ---------------- VALIDATE STATUS ---------------- */
+    if (!["approved", "rejected"].includes(normalizedStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value",
       });
+    }
+
+    /* ---------------- FIND LEAVE ---------------- */
+    const leave = await Leave.findById(leaveId).populate({
+      path: "employeeId",
+      populate: {
+        path: "userId",
+        select: "name email role",
+      },
+    });
 
     if (!leave) {
       return res.status(404).json({
@@ -126,45 +223,94 @@ const updateLeaveStatus = async (req, res) => {
       });
     }
 
-    leave.status = status;
+    /* ---------------- PREVENT DOUBLE UPDATE ---------------- */
+    if (leave.status !== "Pending") {
+      return res.status(400).json({
+        success: false,
+        message: `Leave already ${leave.status}`,
+      });
+    }
+
+    const employee = await Employee.findById(leave.employeeId._id);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    /* ---------------- DEDUCT LEAVES ONLY IF APPROVED ---------------- */
+    if (normalizedStatus === "approved") {
+      const leaveType = leave.leaveType; // casual | annual | sick
+      const days = leave.totalDays;
+
+      const available = employee.leave_balance?.[leaveType] ?? 0;
+
+      if (available < days) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient ${leaveType} leave balance`,
+        });
+      }
+
+      // Update leave balance using findByIdAndUpdate to avoid validation issues
+      const updateObj = {};
+      updateObj[`leave_balance.${leaveType}`] = available - days;
+      
+      await Employee.findByIdAndUpdate(
+        leave.employeeId._id,
+        updateObj,
+        { new: true }
+      );
+    }
+
+    /* ---------------- UPDATE STATUS ---------------- */
+    // Store with capitalized first letter to match model enum: Pending | Approved | Rejected
+    leave.status = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
     await leave.save();
 
-    // 📧 Send Email
+    /* ---------------- SEND EMAIL ---------------- */
     const employeeEmail = leave.employeeId.userId.email;
     const employeeName = leave.employeeId.userId.name;
+
+    const displayStatus = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
 
     const emailHTML = `
       <h3>Leave Request Update</h3>
       <p>Dear ${employeeName},</p>
-      <p>Your leave request has been <b>${status}</b>.</p>
+      <p>Your leave request has been <b>${displayStatus}</b>.</p>
       <p><b>Leave Type:</b> ${leave.leaveType}</p>
+      <p><b>Days:</b> ${leave.totalDays}</p>
       <p><b>From:</b> ${leave.startDate.toDateString()}</p>
       <p><b>To:</b> ${leave.endDate.toDateString()}</p>
       <br/>
       <p>Regards,<br/>HR Department</p>
     `;
 
-    let emailSent = false;
+    let emailSent = true;
     try {
       await sendEmail({
         to: employeeEmail,
-        subject: `Leave Request ${status}`,
+        subject: `Leave Request ${displayStatus}`,
         html: emailHTML,
       });
-      emailSent = true;
     } catch (emailError) {
+      emailSent = false;
       console.error("Email send failed:", emailError);
     }
 
-    res.json({
+    res.status(200).json({
       success: true,
-      message: emailSent ? `Leave ${status} and email sent` : `Leave ${status} (email failed)`,
+      message: emailSent
+        ? `Leave ${displayStatus} successfully and email sent`
+        : `Leave ${displayStatus} successfully (email failed)`,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update Leave Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to update leave",
+      message: error.message || "Failed to update leave",
     });
   }
 };
@@ -201,5 +347,33 @@ const getLeavesByUser = async (req, res) => {
   }
 };
 
+const getEmployeeLeaveBalance = async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id).select(
+      "leave_balance role"
+    );
 
-export { requestLeave, getEmployeeLeaves, getLeaves,getLeaveDetails, updateLeaveStatus, getLeavesByUser };
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      leaveBalance: employee.leave_balance,
+      role: employee.role,
+    });
+  } catch (error) {
+    console.error("Leave Balance Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+
+export { requestLeave, getEmployeeLeaves, getLeaves,getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance };

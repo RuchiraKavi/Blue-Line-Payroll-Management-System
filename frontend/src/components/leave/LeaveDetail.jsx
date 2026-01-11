@@ -40,9 +40,12 @@ const LeaveDetail = () => {
 
     try {
       setUpdating(true);
+      // Convert to lowercase as expected by backend
+      const normalizedStatus = status.toLowerCase();
+      
       const response = await axios.put(
-        `http://localhost:5000/api/leaves/${id}`, // your backend update route
-        { status },
+        `http://localhost:5000/api/leaves/${id}`,
+        { status: normalizedStatus },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -52,13 +55,15 @@ const LeaveDetail = () => {
 
       if (response.data.success) {
         alert(`Leave ${status} successfully!`);
-        navigate("/admin-dashboard/leaves"); // redirect to leaves page
+        // Redirect with timestamp to force refresh of parent components
+        navigate("/admin-dashboard/leaves?refresh=" + Date.now());
       } else {
-        alert("Failed to update leave status.");
+        alert(response.data.message || "Failed to update leave status.");
       }
     } catch (error) {
-      console.error(error);
-      alert("Error updating leave status.");
+      console.error("Leave Status Update Error:", error);
+      const errorMessage = error.response?.data?.message || error.message || "Error updating leave status.";
+      alert(errorMessage);
     } finally {
       setUpdating(false);
     }
@@ -101,14 +106,14 @@ const LeaveDetail = () => {
             Status:{" "}
             <span
               className={`px-2 py-1 rounded ${
-                leave.status === "Approved"
+                leave.status?.toLowerCase() === "approved"
                   ? "bg-green-100 text-green-700"
-                  : leave.status === "Rejected"
+                  : leave.status?.toLowerCase() === "rejected"
                   ? "bg-red-100 text-red-700"
                   : "bg-yellow-100 text-yellow-700"
               }`}
             >
-              {leave.status}
+              {leave.status?.charAt(0).toUpperCase() + leave.status?.slice(1)}
             </span>
           </p>
         </div>
@@ -144,7 +149,7 @@ const LeaveDetail = () => {
           </div>
 
           {/* Approve / Reject Buttons */}
-          {leave.status === "Pending" && (
+          {leave.status?.toLowerCase() === "pending" && (
             <div className="flex justify-center gap-4 mt-4">
               <button
                 onClick={() => handleStatusUpdate("Approved")}
