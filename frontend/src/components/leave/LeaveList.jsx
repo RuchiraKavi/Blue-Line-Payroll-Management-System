@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import axios from "axios";
+import LeaveBalance from "./LeaveBalance";
 
 const LeaveList = ({ employeeId, isAdminView = false }) => {
   const { user } = useAuth();
@@ -99,7 +100,10 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
         </h3>
       </div>
 
-      {/* 📊 DAYS TAKEN SUMMARY */}
+      {/* � LEAVE BALANCE - Only show for employee view */}
+      {!isAdminView && !loading && <LeaveBalance />}
+
+      {/* �📊 DAYS TAKEN SUMMARY */}
       {!loading && (
         <div className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
           <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-blue-900">

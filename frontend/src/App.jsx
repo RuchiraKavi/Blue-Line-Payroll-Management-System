@@ -6,6 +6,7 @@ import AdminDashboard from "./pages/AdminDashboard.jsx";
 import EmployeeDashboard from "./pages/EmployeeDashboard.jsx";
 import PrivateRoutes from "./utils/PrivateRoutes.jsx";
 import AdminSummary from "./components/dashboard/AdminSummary.jsx";
+import EmployeeSummary from "./components/dashboard/EmployeeSummary.jsx";
 import DepartmentList from "./components/departments/DepartmentList.jsx";
 import AddDepartment from "./components/departments/AddDepartment.jsx";
 import EditDepartment from "./components/departments/EditDepartment.jsx";
@@ -22,6 +23,7 @@ import ChangePassword from "./components/employeeDashboard/ChangePassword.jsx";
 import LeaveManage from "./components/leave/LeaveManage.jsx";
 import LeaveDetail from "./components/leave/LeaveDetail.jsx";
 import EmployeeLeaveHistory from "./components/leave/EmployeeLeaveHistory.jsx";
+import AttendanceList from "./components/attendance/AttendanceList.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -169,6 +171,15 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="attendance"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AttendanceList />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* Employee Dashboard */}
@@ -180,7 +191,7 @@ function App() {
             </PrivateRoutes>
           }
         >
-
+        <Route index element={<EmployeeSummary />} />
         <Route path="/employee-dashboard/profile" element={<Profile />} />
         <Route path="/employee-dashboard/leave" element={<LeaveList />} />
         <Route path="/employee-dashboard/request-leave" element={<RequestLeave />} />

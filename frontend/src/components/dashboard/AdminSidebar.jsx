@@ -105,6 +105,21 @@ const AdminSidebar = () => {
           </NavLink>
         )}
 
+                {/* Leave → Admin, HR */}
+        {(role === "admin" || isHR) && (
+          <NavLink
+            to="/admin-dashboard/attendance"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
+               hover:bg-gray-800 transition-all 
+               ${isActive ? "bg-gray-800" : ""}`
+            }
+          >
+            <FaCalendar className="text-lg" />
+            <span>Attendance</span>
+          </NavLink>
+        )}
+
       </div>
     </div>
   );

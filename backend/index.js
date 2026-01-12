@@ -3,6 +3,7 @@ import cors from 'cors';
 import authRouter from './routes/auth.js';
 import departmentRouter from './routes/department.js';
 import employeeRouter from './routes/employee.js';
+import attendanceRouter from './routes/attendance.js';
 import connectToDatabase from './db/db.js';
 import leaveRouter from './routes/leave.js';
 import passwordRouter from './routes/password.js';
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/departments', departmentRouter);
 app.use('/api/employees', employeeRouter);
+app.use('/api/attendance', attendanceRouter);
 app.use('/api/leaves', leaveRouter);
 app.use("/api/password-change", passwordRouter);
 
