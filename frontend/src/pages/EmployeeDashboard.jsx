@@ -5,8 +5,8 @@ import Navbar from '../components/dashboard/Navbar'
 
 const EmployeeDashboard = () => {
   return (
-        <div className="flex h-screen overflow-hidden">
-      
+    <div className="flex h-screen overflow-hidden">
+
       {/* SIDEBAR */}
       <EmployeeSidebar />
 
@@ -15,7 +15,7 @@ const EmployeeDashboard = () => {
 
         {/* FIXED NAVBAR */}
         <div className="fixed left-64 right-0 top-0 z-50">
-          <Navbar />
+          <Navbar showWelcome={false} />
         </div>
 
         {/* SCROLLABLE CONTENT */}
