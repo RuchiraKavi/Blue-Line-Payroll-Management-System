@@ -105,7 +105,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
 
       {/* �📊 DAYS TAKEN SUMMARY */}
       {!loading && (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+        <div className="mb-6 rounded-xl border border-blue-200 bg-linear-to-br from-blue-50 to-white p-5 shadow-sm">
           <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-blue-900">
             📊 Leaves Taken Summary
           </h4>

@@ -28,21 +28,24 @@ const uploadAttendanceCSV = async (req, res) => {
     let skippedCount = 0;
 
     for (const row of records) {
-      // 🔑 CSV columns
-      // employeeId | name | date | inTime | outTime | workingHours | status
+      // 🔑 CSV columns (support both formats)
+      // employee_id or employeeId | employee_name or name | date | inTime | outTime | workingHours | status
 
-      if (!row.employeeId || !row.date) {
+      const empId = row.employee_id || row.employeeId;
+      const empName = row.employee_name || row.name;
+
+      if (!empId || !row.date) {
         skippedCount++;
         continue;
       }
 
       let employee = await Employee.findOne({
-        employee_id: row.employeeId,
+        employee_id: empId,
       });
 
-      // Fallback: try to find by employee name (CSV 'name' column)
-      if (!employee && row.name) {
-        const user = await User.findOne({ name: row.name });
+      // Fallback: try to find by employee name
+      if (!employee && empName) {
+        const user = await User.findOne({ name: empName });
         if (user) {
           employee = await Employee.findOne({ userId: user._id });
         }
