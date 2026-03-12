@@ -216,7 +216,7 @@ const AddEmployee = () => {
     <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
       <div className="w-full max-w-4xl mx-auto mt-10 bg-white shadow-lg rounded-xl p-8">
         <h3 className="text-center text-2xl font-bold text-gray-800 mb-2">
-          Add Employee
+          Register Employee
         </h3>
         <p className="text-center text-sm text-gray-600 mb-6">
           Next Employee ID: <span className="font-semibold text-indigo-600">{formData.employee_id}</span> | Adding as: <span className="font-semibold capitalize">{user?.role}</span>
@@ -554,7 +554,7 @@ const AddEmployee = () => {
               disabled={submitting}
               className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {submitting ? "Adding Employee..." : "Add Employee"}
+              {submitting ? "Registering Employee..." : "Register Employee"}
             </button>
           </div>
         </form>      </div>

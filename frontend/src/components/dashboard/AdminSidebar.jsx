@@ -5,6 +5,7 @@ import {
   FaBuilding,
   FaCalendar,
   FaCogs,
+  FaHandHoldingUsd,
   FaMoneyBillWave,
   FaTachometerAlt,
   FaUser,
@@ -90,7 +91,7 @@ const AdminSidebar = () => {
           </NavLink>
         )}
 
-        {/* Salary → Admin & Accountant only (payslips); HR no access */}
+        {/* Salary → Admin & Accountant only */}
         {(role === "admin" || isAccount) && (
           <NavLink
             to="/admin-dashboard/salary"
@@ -105,7 +106,22 @@ const AdminSidebar = () => {
           </NavLink>
         )}
 
-                {/* Leave → Admin, HR */}
+        {/* Advance requests → Admin, HR, Account */}
+        {(role === "admin" || isHR || isAccount) && (
+          <NavLink
+            to="/admin-dashboard/advance-requests"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
+               hover:bg-gray-800 transition-all 
+               ${isActive ? "bg-gray-800" : ""}`
+            }
+          >
+            <FaHandHoldingUsd className="text-lg" />
+            <span>Advance Requests</span>
+          </NavLink>
+        )}
+
+        {/* Attendance → Admin, HR */}
         {(role === "admin" || isHR) && (
           <NavLink
             to="/admin-dashboard/attendance"

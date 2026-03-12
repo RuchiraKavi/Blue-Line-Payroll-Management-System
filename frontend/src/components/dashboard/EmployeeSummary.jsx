@@ -90,12 +90,15 @@ const EmployeeSummary = () => {
     );
   }
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
   return (
     <div className="p-6">
       {/* Welcome Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
-          Welcome, {employee.userId?.name}! 👋
+          {greeting}, {employee.userId?.name}! 👋
         </h1>
         <p className="text-gray-600">
           {employee.designation} at {employee.department?.dep_name}

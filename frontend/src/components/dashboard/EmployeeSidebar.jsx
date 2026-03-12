@@ -1,9 +1,8 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
-  FaBuilding,
   FaCalendar,
-  FaCogs,
+  FaHandHoldingUsd,
   FaMoneyBillWave,
   FaTachometerAlt,
   FaUser,
@@ -62,7 +61,7 @@ const EmployeeSidebar = () => {
             <span>Leaves</span>
           </NavLink>
 
-        {/* Salary → Admin, HR, Account */}
+        {/* Salary */}
           <NavLink
             to="/employee-dashboard/salary"
             className={({ isActive }) =>
@@ -73,6 +72,19 @@ const EmployeeSidebar = () => {
           >
             <FaMoneyBillWave className="text-lg" />
             <span>Salary</span>
+          </NavLink>
+
+        {/* Request Advance */}
+          <NavLink
+            to="/employee-dashboard/request-advance"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
+               hover:bg-gray-800 transition-all 
+               ${isActive ? "bg-gray-800" : ""}`
+            }
+          >
+            <FaHandHoldingUsd className="text-lg" />
+            <span>Request Advance</span>
           </NavLink>
       </div>
     </div>

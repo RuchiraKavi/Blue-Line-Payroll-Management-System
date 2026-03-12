@@ -19,12 +19,15 @@ import Unauthorized from "./pages/Unauthorized.jsx";
 import Profile from "./components/employeeDashboard/profile.jsx";
 import LeaveList from "./components/leave/LeaveList.jsx";
 import RequestLeave from "./components/leave/RequestLeave.jsx";
+import RequestAdvance from "./components/advance/RequestAdvance.jsx";
+import AdvanceRequestList from "./components/advance/AdvanceRequestList.jsx";
 import ChangePassword from "./components/employeeDashboard/ChangePassword.jsx";
 import LeaveManage from "./components/leave/LeaveManage.jsx";
 import LeaveDetail from "./components/leave/LeaveDetail.jsx";
 import EmployeeLeaveHistory from "./components/leave/EmployeeLeaveHistory.jsx";
 import AttendanceList from "./components/attendance/AttendanceList.jsx";
 import SalaryPage from "./components/salary/SalaryPage.jsx";
+import EmployeeSalaryHistory from "./components/salary/EmployeeSalaryHistory.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -190,6 +193,15 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="advance-requests"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr", "account", "account_manager", "accountant"]}>
+                <AdvanceRequestList />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* Employee Dashboard */}
@@ -205,6 +217,8 @@ function App() {
         <Route path="/employee-dashboard/profile" element={<Profile />} />
         <Route path="/employee-dashboard/leave" element={<LeaveList />} />
         <Route path="/employee-dashboard/request-leave" element={<RequestLeave />} />
+        <Route path="/employee-dashboard/request-advance" element={<RequestAdvance />} />
+        <Route path="/employee-dashboard/salary" element={<EmployeeSalaryHistory />} />
         <Route path="/employee-dashboard/change-password" element={<ChangePassword />} />
         </Route>
 

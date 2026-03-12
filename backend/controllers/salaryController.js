@@ -1,6 +1,16 @@
 import Employee from "../models/Employee.js";
 import SalaryRun from "../models/SalaryRun.js";
 
+/** Normalize entry.employee to a string id (handles ObjectId, string, or BSON-style object). */
+function entryEmployeeIdString(entry) {
+  const e = entry?.employee;
+  if (e == null) return "";
+  if (typeof e === "string") return e;
+  if (typeof e?.toString === "function") return e.toString();
+  if (e?.$oid) return e.$oid;
+  return String(e);
+}
+
 /**
  * Calculate salary for one entry (allowances, service charges, EPF, ETF, gross, deductions, net).
  * All logic lives in backend.
@@ -345,6 +355,146 @@ export const getSalaryRuns = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to get salary runs",
+    });
+  }
+};
+
+const monthNames = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * GET /api/salary/my-history
+ * Returns salary history for the logged-in employee (all saved runs that include this employee).
+ */
+export const getMySalaryHistory = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(200).json({ success: true, history: [] });
+    }
+    const employee = await Employee.findOne({ userId }).lean();
+    if (!employee) {
+      return res.status(200).json({
+        success: true,
+        history: [],
+      });
+    }
+    const employeeIdStr = String(employee._id);
+    const employeeIdRef = employee.employee_id; // e.g. "BL001"
+
+    const runs = await SalaryRun.find()
+      .sort({ year: -1, month: -1 })
+      .lean();
+
+    const history = [];
+    for (const run of runs) {
+      if (!run.entries || !run.entries.length) continue;
+      const entry = run.entries.find((e) => {
+        const entryIdStr = entryEmployeeIdString(e);
+        if (entryIdStr && entryIdStr === employeeIdStr) return true;
+        if (employeeIdRef && e.employee_id && String(e.employee_id) === String(employeeIdRef)) return true;
+        return false;
+      });
+      if (entry) {
+        history.push({
+          month: run.month,
+          year: run.year,
+          monthName: monthNames[run.month - 1],
+          gross_salary: entry.gross_salary ?? 0,
+          total_deduction: entry.total_deduction ?? 0,
+          net_pay: entry.net_pay ?? 0,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      history,
+    });
+  } catch (error) {
+    console.error("Get my salary history error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get salary history",
+    });
+  }
+};
+
+/**
+ * GET /api/salary/me/payslip?month=&year=
+ * Returns payslip data for the logged-in employee for the given month/year.
+ */
+export const getMyPayslip = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+    const employee = await Employee.findOne({ userId })
+      .populate("userId", "name email role profileImage")
+      .populate("department", "dep_name");
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+
+    const month = parseInt(req.query.month, 10);
+    const year = parseInt(req.query.year, 10);
+    if (!month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "Query params month and year are required",
+      });
+    }
+
+    const run = await SalaryRun.findOne({ month, year });
+    if (!run || !run.entries || run.entries.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No salary run found for this period",
+      });
+    }
+
+    const employeeIdStr = String(employee._id);
+    const employeeIdRef = employee.employee_id;
+    const entry = run.entries.find((e) => {
+      const entryIdStr = entryEmployeeIdString(e);
+      if (entryIdStr && entryIdStr === employeeIdStr) return true;
+      if (employeeIdRef && e.employee_id && String(e.employee_id) === String(employeeIdRef)) return true;
+      return false;
+    });
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: "Payslip not found for this period",
+      });
+    }
+
+    const data = {
+      ...(entry.toObject ? entry.toObject() : entry),
+      employee,
+      epf_percent: entry.epf_percent ?? 8,
+      etf_percent: entry.etf_percent ?? 3,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data,
+      month,
+      year,
+    });
+  } catch (error) {
+    console.error("Get my payslip error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get payslip",
     });
   }
 };

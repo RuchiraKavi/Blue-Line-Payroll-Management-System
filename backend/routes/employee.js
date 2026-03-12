@@ -6,21 +6,18 @@
 
     const router = express.Router();
 
-    // Get last employee ID and generate next ID (accessible to authenticated users)
+    // Specific paths first (before /:id) to avoid 404
     router.get("/last-id", authMiddleware, authorizeRoles("admin", "hr", "manager"), getLastEmployeeId);
+    router.get("/me/profile", authMiddleware, getMyEmployeeProfile);
+    router.get("/:id/leave-balance", authMiddleware, getEmployeeLeaveBalance);
 
     // Only admin and hr can view all employees
     router.get("/", authMiddleware, authorizeRoles("admin", "hr"), getEmployee);
-    // Only admin and hr can add employees
     router.post("/add", authMiddleware, authorizeRoles("admin", "hr"), upload.single("image"), addEmployee);
-    // All authenticated users can view a single employee
-    router.get("/:id", authMiddleware, viewEmployee);
-    // Only admin and hr can update employees
-    router.put("/:id", authMiddleware, authorizeRoles("admin", "hr", "employee"), upload.single("image"), updateEmployee);
-    // Only admin and hr can delete employees
-    router.delete('/:id', authMiddleware, authorizeRoles("admin", "hr"), removeEmployee);
 
-    router.get("/me/profile", authMiddleware, getMyEmployeeProfile);
-    router.get("/:id/leave-balance", authMiddleware, getEmployeeLeaveBalance);
+    // Generic :id routes last
+    router.get("/:id", authMiddleware, viewEmployee);
+    router.put("/:id", authMiddleware, authorizeRoles("admin", "hr", "employee"), upload.single("image"), updateEmployee);
+    router.delete("/:id", authMiddleware, authorizeRoles("admin", "hr"), removeEmployee);
 
     export default router;

@@ -8,6 +8,8 @@ import connectToDatabase from './db/db.js';
 import leaveRouter from './routes/leave.js';
 import passwordRouter from './routes/password.js';
 import salaryRouter from './routes/salary.js';
+import dashboardRouter from './routes/dashboard.js';
+import advanceRouter from './routes/advance.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -28,6 +30,8 @@ app.use('/api/attendance', attendanceRouter);
 app.use('/api/leaves', leaveRouter);
 app.use("/api/password-change", passwordRouter);
 app.use("/api/salary", salaryRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/advance", advanceRouter);
 
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 

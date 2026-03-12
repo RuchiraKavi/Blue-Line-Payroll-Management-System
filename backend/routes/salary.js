@@ -7,11 +7,16 @@ import {
   saveSalaryRun,
   getPayslip,
   getSalaryRuns,
+  getMySalaryHistory,
+  getMyPayslip,
 } from "../controllers/salaryController.js";
 
 const router = express.Router();
 
 const salaryRoles = ["admin", "account", "accountant", "account_manager"];
+
+router.get("/my-history", authMiddleware, getMySalaryHistory);
+router.get("/me/payslip", authMiddleware, getMyPayslip);
 
 router.get(
   "/employees",
