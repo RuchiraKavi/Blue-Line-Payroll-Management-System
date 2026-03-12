@@ -24,6 +24,7 @@ import LeaveManage from "./components/leave/LeaveManage.jsx";
 import LeaveDetail from "./components/leave/LeaveDetail.jsx";
 import EmployeeLeaveHistory from "./components/leave/EmployeeLeaveHistory.jsx";
 import AttendanceList from "./components/attendance/AttendanceList.jsx";
+import SalaryPage from "./components/salary/SalaryPage.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -177,6 +178,15 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["admin", "hr"]}>
                 <AttendanceList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="salary"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "account", "account_manager", "accountant"]}>
+                <SalaryPage />
               </ProtectedRoute>
             }
           />

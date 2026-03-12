@@ -90,10 +90,10 @@ const AdminSidebar = () => {
           </NavLink>
         )}
 
-        {/* Salary → Admin, HR, Account */}
+        {/* Salary → Admin & Accountant only (payslips); HR no access */}
         {(role === "admin" || isAccount) && (
           <NavLink
-            to="/admin-salary"
+            to="/admin-dashboard/salary"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
                hover:bg-gray-800 transition-all 

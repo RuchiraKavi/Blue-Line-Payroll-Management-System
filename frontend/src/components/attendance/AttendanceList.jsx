@@ -1,12 +1,28 @@
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
+import { FaHistory, FaTimes, FaUser } from "react-icons/fa";
+
+const API_BASE = "http://localhost:5000/api";
+const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
 const AttendanceList = () => {
   const [file, setFile] = useState(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryMonth, setSummaryMonth] = useState("all");
+  const [historyEmployee, setHistoryEmployee] = useState(null);
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+  const [historyMonthFilter, setHistoryMonthFilter] = useState("all");
 
   /* =========================
      Fetch Attendance (MEMOIZED)
@@ -14,12 +30,8 @@ const AttendanceList = () => {
   const fetchAttendance = useCallback(async () => {
     try {
       const res = await axios.get(
-        `http://localhost:5000/api/attendance?date=${date}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        `${API_BASE}/attendance?date=${date}`,
+        { headers: getAuthHeader() }
       );
 
       if (res.data.success) {
@@ -35,6 +47,80 @@ const AttendanceList = () => {
   }, [date]);
 
   /* =========================
+     Fetch All Employees
+  ========================== */
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setEmployeesLoading(true);
+        const res = await axios.get(`${API_BASE}/employees`, { headers: getAuthHeader() });
+        if (res.data.success && res.data.employees) {
+          setEmployees(res.data.employees);
+        } else {
+          setEmployees([]);
+        }
+      } catch (err) {
+        console.error(err);
+        setEmployees([]);
+      } finally {
+        setEmployeesLoading(false);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  /* =========================
+     Fetch Attendance Summary (for All Employees table)
+  ========================== */
+  useEffect(() => {
+    let cancelled = false;
+    const fetchSummary = async () => {
+      setSummaryLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (summaryMonth && summaryMonth !== "all") {
+          params.set("month", summaryMonth);
+        }
+        const res = await axios.get(`${API_BASE}/attendance/summary?${params}`, { headers: getAuthHeader() });
+        if (cancelled) return;
+        if (res.data.success && Array.isArray(res.data.summary)) {
+          setSummaryData(res.data.summary);
+        } else {
+          setSummaryData([]);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error(err);
+          setSummaryData([]);
+        }
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    };
+    fetchSummary();
+    return () => { cancelled = true; };
+  }, [summaryMonth]);
+
+  const summaryMap = React.useMemo(() => {
+    const m = {};
+    (summaryData || []).forEach((s) => {
+      const rawId = s.employeeId ?? s._id;
+      const id = rawId != null ? String(rawId) : "";
+      if (!id) return;
+      m[id] = { workedDays: s.workedDays ?? 0, absentDays: s.absentDays ?? 0, totalHours: s.totalHours ?? 0 };
+    });
+    return m;
+  }, [summaryData]);
+
+  const employeesWithStats = React.useMemo(() => {
+    return (employees || []).map((emp) => {
+      const id = emp._id != null ? String(emp._id) : "";
+      const stats = summaryMap[id] ?? { workedDays: 0, absentDays: 0, totalHours: 0 };
+      return { ...emp, ...stats };
+    });
+  }, [employees, summaryMap]);
+
+  /* =========================
      Initial Load & Date Change
   ========================== */
   useEffect(() => {
@@ -45,6 +131,86 @@ const AttendanceList = () => {
     };
     loadAttendance();
   }, [fetchAttendance]);
+
+  /* =========================
+     Open / Fetch Employee Attendance History
+  ========================== */
+  const openHistory = useCallback(async (emp, from, to) => {
+    setHistoryEmployee(emp);
+    setHistoryRecords([]);
+    try {
+      setHistoryLoading(true);
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const res = await axios.get(
+        `${API_BASE}/attendance/employee/${emp._id}${params.toString() ? `?${params.toString()}` : ""}`,
+        { headers: getAuthHeader() }
+      );
+      if (res.data.success) {
+        setHistoryRecords(res.data.attendance || []);
+        if (res.data.from) setHistoryFrom(res.data.from);
+        if (res.data.to) setHistoryTo(res.data.to);
+      }
+    } catch (err) {
+      console.error(err);
+      setHistoryRecords([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const closeHistory = () => {
+    setHistoryEmployee(null);
+    setHistoryRecords([]);
+    setHistoryFrom("");
+    setHistoryTo("");
+    setHistoryStatusFilter("all");
+    setHistoryMonthFilter("all");
+  };
+
+  /* Per-month summary: total working hours and worked days (from current historyRecords) */
+  const monthlySummary = React.useMemo(() => {
+    const byMonth = {};
+    (historyRecords || []).forEach((r) => {
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0 };
+      if (r.status === "Present") {
+        byMonth[key].workedDays += 1;
+        byMonth[key].totalHours += parseFloat(r.workingHours) || 0;
+      }
+    });
+    return Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month));
+  }, [historyRecords]);
+
+  const availableMonths = React.useMemo(() => {
+    const set = new Set();
+    (historyRecords || []).forEach((r) => {
+      const d = new Date(r.date);
+      set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [historyRecords]);
+
+  const filteredRecords = React.useMemo(() => {
+    let list = historyRecords || [];
+    if (historyStatusFilter !== "all") {
+      list = list.filter((r) => r.status === historyStatusFilter);
+    }
+    if (historyMonthFilter !== "all") {
+      list = list.filter((r) => {
+        const d = new Date(r.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return key === historyMonthFilter;
+      });
+    }
+    return list;
+  }, [historyRecords, historyStatusFilter, historyMonthFilter]);
+
+  const refreshHistory = () => {
+    if (historyEmployee) openHistory(historyEmployee, historyFrom || undefined, historyTo || undefined);
+  };
 
   /* =========================
      Upload CSV
@@ -62,7 +228,7 @@ const AttendanceList = () => {
       setLoading(true);
 
       await axios.post(
-        "http://localhost:5000/api/attendance/upload",
+        `${API_BASE}/attendance/upload`,
         formData,
         {
           headers: {
@@ -339,6 +505,249 @@ const AttendanceList = () => {
         </div>
 
       </div>
+
+      {/* All Employees Section */}
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mt-8">
+        <div className="px-8 py-6 border-b border-gray-200 bg-gray-50">
+          <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <FaUser className="text-blue-600" />
+            All Employees
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">View attendance history and days worked per employee. Use the month filter to narrow by month.</p>
+        </div>
+        <div className="p-8">
+          {/* Filters for All Employees table */}
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <span className="text-sm font-medium text-gray-700">Month:</span>
+            <select
+              value={summaryMonth}
+              onChange={(e) => setSummaryMonth(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="all">Last month (default)</option>
+              {Array.from({ length: 12 }, (_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                return <option key={val} value={val}>{label}</option>;
+              })}
+            </select>
+            <button
+              type="button"
+              onClick={() => setSummaryMonth("all")}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Clear filter
+            </button>
+            <span className="text-sm text-gray-600">
+              {summaryMonth && summaryMonth !== "all"
+                ? `Showing: ${new Date(summaryMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}`
+                : "Showing: Last month (default)"}
+            </span>
+            {summaryLoading && (
+              <span className="text-sm text-gray-500 flex items-center gap-1">
+                <span className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+                Loading summary…
+              </span>
+            )}
+          </div>
+
+          {employeesLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+                  <tr>
+                    <th className="px-6 py-3 text-left font-semibold">S.No</th>
+                    <th className="px-6 py-3 text-left font-semibold">Employee ID</th>
+                    <th className="px-6 py-3 text-left font-semibold">Name</th>
+                    <th className="px-6 py-3 text-left font-semibold">Department</th>
+                    <th className="px-6 py-3 text-left font-semibold">Designation</th>
+                    <th className="px-6 py-3 text-center font-semibold">Days worked</th>
+                    <th className="px-6 py-3 text-center font-semibold">Total hours</th>
+                    <th className="px-6 py-3 text-center font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employeesWithStats.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No employees found</td>
+                    </tr>
+                  ) : (
+                    employeesWithStats.map((emp, i) => (
+                      <tr key={emp._id} className="border-t border-gray-100 hover:bg-blue-50">
+                        <td className="px-6 py-3 font-medium text-gray-700">{i + 1}</td>
+                        <td className="px-6 py-3 text-gray-600">{emp.employee_id}</td>
+                        <td className="px-6 py-3 font-semibold text-gray-900">{emp.userId?.name || "—"}</td>
+                        <td className="px-6 py-3 text-gray-600">{emp.department?.dep_name || "—"}</td>
+                        <td className="px-6 py-3 text-gray-600">{emp.designation || "—"}</td>
+                        <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.workedDays ?? 0}</td>
+                        <td className="px-6 py-3 text-center font-medium text-gray-900">{(emp.totalHours ?? 0).toFixed(1)}</td>
+                        <td className="px-6 py-3 text-center">
+                          <button
+                            onClick={() => openHistory(emp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium"
+                          >
+                            <FaHistory /> View history
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Attendance History Modal */}
+      {historyEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeHistory}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between bg-blue-50">
+              <h3 className="text-lg font-bold text-gray-900">
+                Attendance history — {historyEmployee.userId?.name || "Employee"} ({historyEmployee.employee_id})
+              </h3>
+              <button onClick={closeHistory} className="p-2 rounded-lg hover:bg-gray-200 text-gray-600" aria-label="Close">
+                <FaTimes className="text-xl" />
+              </button>
+            </div>
+            <div className="p-6 overflow-hidden flex flex-col flex-1 min-h-0">
+              {/* Date range */}
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <span className="text-sm font-medium text-gray-700">Date range:</span>
+                <input
+                  type="date"
+                  value={historyFrom}
+                  onChange={(e) => setHistoryFrom(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <input
+                  type="date"
+                  value={historyTo}
+                  onChange={(e) => setHistoryTo(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <button
+                  onClick={refreshHistory}
+                  disabled={historyLoading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {historyLoading ? "Loading…" : "Apply"}
+                </button>
+              </div>
+
+              {historyLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent" />
+                </div>
+              ) : (
+                <>
+                  {/* Summary by month: total working hours & worked days */}
+                  {monthlySummary.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-bold text-gray-800 mb-2">Summary by month</h4>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold">Month</th>
+                              <th className="px-4 py-2 text-right font-semibold">Worked days</th>
+                              <th className="px-4 py-2 text-right font-semibold">Total hours</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {monthlySummary.map((row) => (
+                              <tr key={row.month} className="border-t border-gray-100">
+                                <td className="px-4 py-2 font-medium text-gray-900">
+                                  {new Date(row.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                                </td>
+                                <td className="px-4 py-2 text-right">{row.workedDays}</td>
+                                <td className="px-4 py-2 text-right">{row.totalHours.toFixed(1)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filters for history table */}
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <span className="text-sm font-medium text-gray-700">Filter:</span>
+                    <select
+                      value={historyStatusFilter}
+                      onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="all">All status</option>
+                      <option value="Present">Present</option>
+                      <option value="Absent">Absent</option>
+                    </select>
+                    <select
+                      value={historyMonthFilter}
+                      onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="all">All months</option>
+                      {availableMonths.map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(m + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-gray-500">
+                      Showing {filteredRecords.length} of {historyRecords.length} records
+                    </span>
+                  </div>
+
+                  <div className="overflow-auto flex-1 border border-gray-200 rounded-xl">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-100 text-gray-700 uppercase text-xs sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Date</th>
+                          <th className="px-4 py-3 text-left font-semibold">In Time</th>
+                          <th className="px-4 py-3 text-left font-semibold">Out Time</th>
+                          <th className="px-4 py-3 text-left font-semibold">Hours</th>
+                          <th className="px-4 py-3 text-center font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRecords.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                              No records match the filter
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredRecords.map((r) => (
+                            <tr key={r._id} className="border-t border-gray-100 hover:bg-gray-50">
+                              <td className="px-4 py-2">{new Date(r.date).toLocaleDateString()}</td>
+                              <td className="px-4 py-2">{r.inTime || "—"}</td>
+                              <td className="px-4 py-2">{r.outTime || "—"}</td>
+                              <td className="px-4 py-2">{r.workingHours || "—"}</td>
+                              <td className="px-4 py-2 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${r.status === "Present" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                                  {r.status || "—"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>  
   );
 };

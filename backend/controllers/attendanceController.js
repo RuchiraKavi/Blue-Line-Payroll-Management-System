@@ -151,4 +151,102 @@ const getAttendanceByDate = async (req, res) => {
   }
 };
 
-export { uploadAttendanceCSV, getAttendanceByDate };
+/* =========================
+   Get Attendance History By Employee
+   GET /api/attendance/employee/:employeeId?from=YYYY-MM-DD&to=YYYY-MM-DD
+   Optional from/to for date range. Default: last 90 days.
+========================= */
+const getAttendanceByEmployee = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    let from = req.query.from ? new Date(req.query.from) : null;
+    let to = req.query.to ? new Date(req.query.to) : null;
+
+    if (!from || isNaN(from.getTime())) {
+      to = to && !isNaN(to.getTime()) ? to : new Date();
+      from = new Date(to);
+      from.setDate(from.getDate() - 90);
+    }
+    if (!to || isNaN(to.getTime())) {
+      to = new Date();
+    }
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+
+    const attendance = await Attendance.find({
+      employee: employeeId,
+      date: { $gte: from, $lte: to },
+    })
+      .sort({ date: -1 })
+      .limit(500)
+      .lean();
+
+    res.json({
+      success: true,
+      attendance,
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch attendance history",
+    });
+  }
+};
+
+/* =========================
+   Get Attendance Summary For All Employees
+   GET /api/attendance/summary?from=YYYY-MM-DD&to=YYYY-MM-DD&month=YYYY-MM
+   Returns per-employee: workedDays (Present), totalHours, absentDays.
+========================= */
+const getAttendanceSummary = async (req, res) => {
+  try {
+    let from = req.query.from ? new Date(req.query.from) : null;
+    let to = req.query.to ? new Date(req.query.to) : null;
+    const month = req.query.month; // YYYY-MM
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split("-").map(Number);
+      from = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+      to = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    }
+    if (!from || isNaN(from.getTime())) {
+      to = new Date();
+      from = new Date(to);
+      from.setMonth(from.getMonth() - 1);
+    }
+    if (!to || isNaN(to.getTime())) to = new Date();
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+
+    const summary = await Attendance.aggregate([
+      { $match: { date: { $gte: from, $lte: to } } },
+      {
+        $group: {
+          _id: "$employee",
+          workedDays: { $sum: { $cond: [{ $eq: ["$status", "Present"] }, 1, 0] } },
+          absentDays: { $sum: { $cond: [{ $eq: ["$status", "Absent"] }, 1, 0] } },
+          totalHours: { $sum: { $convert: { input: { $ifNull: ["$workingHours", "0"] }, to: "double", onError: 0, onNull: 0 } } },
+        },
+      },
+      { $project: { employeeId: "$_id", workedDays: 1, absentDays: 1, totalHours: { $round: ["$totalHours", 1] } } },
+    ]);
+
+    res.json({
+      success: true,
+      summary,
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch attendance summary",
+    });
+  }
+};
+
+export { uploadAttendanceCSV, getAttendanceByDate, getAttendanceByEmployee, getAttendanceSummary };

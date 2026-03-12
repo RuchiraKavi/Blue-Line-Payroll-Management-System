@@ -7,6 +7,7 @@ import attendanceRouter from './routes/attendance.js';
 import connectToDatabase from './db/db.js';
 import leaveRouter from './routes/leave.js';
 import passwordRouter from './routes/password.js';
+import salaryRouter from './routes/salary.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,6 +27,7 @@ app.use('/api/employees', employeeRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/leaves', leaveRouter);
 app.use("/api/password-change", passwordRouter);
+app.use("/api/salary", salaryRouter);
 
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
@@ -35,7 +37,7 @@ app.use(cors({
   credentials: true
 }));
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
