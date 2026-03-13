@@ -431,12 +431,12 @@ const SalaryPage = () => {
                       </div>
                     </div>
 
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50">
-                        <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3">Allowances</h3>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+                      <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1">
+                        <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Allowances</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Basic Salary <span className="text-gray-400 font-normal">(fixed)</span></span>
+                            <span className="text-gray-700">Basic Salary</span>
                             <span className="w-24 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200" title="From employee record">{(row.basic_salary ?? 0).toLocaleString()}</span>
                           </div>
                           <label className="flex justify-between items-center gap-2">
@@ -459,10 +459,6 @@ const SalaryPage = () => {
                             <span className="text-gray-700">Bonus</span>
                             <input type="number" min="0" step="1" value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
                           </label>
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">No Pay</span>
-                            <input type="number" min="0" step="1" value={row.no_pay} onChange={(e) => updateRow(idx, "no_pay", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
                           <div className="pt-2 mt-2 border-t border-amber-200 font-semibold flex justify-between">
                             <span>Total Allowances</span>
                             <span>{totalAllow.toFixed(2)}</span>
@@ -471,66 +467,85 @@ const SalaryPage = () => {
                         </div>
                       </div>
 
-                      <div className="border-2 border-slate-200 rounded-xl p-4 bg-slate-50/50">
-                        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h3>
-                        <div className="space-y-2 text-sm">
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Stamp Duty</span>
-                            <input type="number" min="0" step="1" value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Mobile Deduction</span>
-                            <input type="number" min="0" step="1" value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                          <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
-                            <span>Total Service Charges</span>
-                            <span>{totalSc.toFixed(2)}</span>
+                      <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-2">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">
+                          Deductions
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="border-2 border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
+                            <div className="space-y-2 text-sm">
+                              <label className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">Stamp Duty</span>
+                                <input type="number" min="0" step="1" value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                              <label className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">Mobile Deduction</span>
+                                <input type="number" min="0" step="1" value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                              <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
+                                <span>Total Service Charges</span>
+                                <span>{totalSc.toFixed(2)}</span>
+                              </div>
+                              <label className="flex justify-between items-center gap-2 pt-2">
+                                <span className="text-gray-700">No Pay</span>
+                                <input type="number" min="0" step="1" value={row.no_pay} onChange={(e) => updateRow(idx, "no_pay", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                              <label className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">PAYE</span>
+                                <input type="number" min="0" step="1" value={row.paye} onChange={(e) => updateRow(idx, "paye", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                              <label className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">Salary Advance</span>
+                                <input type="number" min="0" step="1" value={row.salary_advance} onChange={(e) => updateRow(idx, "salary_advance", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                            </div>
                           </div>
-                          <label className="flex justify-between items-center gap-2 pt-2">
-                            <span className="text-gray-700">PAYE</span>
-                            <input type="number" min="0" step="1" value={row.paye} onChange={(e) => updateRow(idx, "paye", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Salary Advance</span>
-                            <input type="number" min="0" step="1" value={row.salary_advance} onChange={(e) => updateRow(idx, "salary_advance", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                        </div>
-                      </div>
 
-                      <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
-                        <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-3">EPF Payment</h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Total for EPF (base)</span>
-                            <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
-                          </div>
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Employee EPF %</span>
-                            <input type="number" min="0" max="100" step="0.5" value={row.epf_percent} onChange={(e) => updateRow(idx, "epf_percent", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                          <div className="pt-2 mt-2 border-t border-blue-200 font-semibold flex justify-between">
-                            <span>EPF Payment ({row.epf_percent}%)</span>
-                            <span>{epf.toFixed(2)}</span>
+                          <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
+                            <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">EPF Payment</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">Total for EPF (base)</span>
+                                <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
+                              </div>
+                              <label className="flex justify-between items-center gap-2">
+                                <span className="text-gray-700">Employee EPF %</span>
+                                <input type="number" min="0" max="100" step="0.5" value={row.epf_percent} onChange={(e) => updateRow(idx, "epf_percent", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              </label>
+                              <div className="pt-2 mt-2 border-t border-blue-200 font-semibold flex justify-between">
+                                <span>EPF Payment ({row.epf_percent}%)</span>
+                                <span>{epf.toFixed(2)}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
-                        <h3 className="text-sm font-bold text-emerald-800 uppercase tracking-wider mb-3">ETF Payment</h3>
-                        <div className="space-y-2 text-sm">
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">ETF %</span>
-                            <input type="number" min="0" max="100" step="0.5" value={row.etf_percent} onChange={(e) => updateRow(idx, "etf_percent", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
-                          </label>
-                          <div className="pt-2 mt-2 border-t border-emerald-200 font-semibold flex justify-between">
-                            <span>ETF Payment ({row.etf_percent}%)</span>
-                            <span>{etf.toFixed(2)}</span>
-                          </div>
-                          <div className="pt-3 mt-2 border-t-2 border-emerald-300 font-bold flex justify-between text-green-800">
-                            <span>Total Deduction</span>
+                        <div className="mt-4 flex justify-end">
+                          <div className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-semibold text-sm shadow-sm">
+                            <span className="mr-2">Total Deduction:</span>
                             <span>{totalDed.toFixed(2)}</span>
                           </div>
-                          <div className="mt-8 pt-6 text-center font-bold text-lg text-green-700">Net Pay: Rs. {net.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50 lg:col-span-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">ETF Payment</h4>
+                          <div className="space-y-2 text-sm">
+                            <label className="flex justify-between items-center gap-2">
+                              <span className="text-gray-700">ETF %</span>
+                              <input type="number" min="0" max="100" step="0.5" value={row.etf_percent} onChange={(e) => updateRow(idx, "etf_percent", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                            </label>
+                            <div className="pt-2 mt-2 border-t border-emerald-200 font-semibold flex justify-between">
+                              <span>ETF Payment ({row.etf_percent}%)</span>
+                              <span>{etf.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <div className="inline-flex items-center px-4 py-2 rounded-xl bg-green-50 border-2 border-green-300 text-green-800 font-bold text-base shadow-sm">
+                            <span className="mr-2">Net Pay:</span>
+                            <span>Rs. {net.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>

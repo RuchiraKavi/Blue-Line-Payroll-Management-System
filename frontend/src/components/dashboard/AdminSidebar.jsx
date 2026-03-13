@@ -107,7 +107,7 @@ const AdminSidebar = () => {
         )}
 
         {/* Advance requests → Admin, HR, Account */}
-        {(role === "admin" || isHR || isAccount) && (
+        {(role === "admin" || isAccount) && (
           <NavLink
             to="/admin-dashboard/advance-requests"
             className={({ isActive }) =>

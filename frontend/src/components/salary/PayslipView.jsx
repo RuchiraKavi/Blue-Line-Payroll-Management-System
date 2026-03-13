@@ -149,7 +149,6 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
                   <tr><td className={tableCell}>Holiday Payment</td><td className={`${tableCell} text-right`}>{n(data.holiday_payment)}</td></tr>
                   <tr><td className={tableCell}>Allowance-NS</td><td className={`${tableCell} text-right`}>{n(data.allowance_ns)}</td></tr>
                   <tr><td className={tableCell}>Bonus</td><td className={`${tableCell} text-right`}>{n(data.bonus)}</td></tr>
-                  <tr><td className={tableCell}>No Pay (deduct)</td><td className={`${tableCell} text-right`}>-{n(data.no_pay)}</td></tr>
                   <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Allowances</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_allowances)}</td></tr>
                   <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Gross Salary</td><td className={`${tableCell} text-right font-bold`}>{n(data.gross_salary)}</td></tr>
                 </tbody>
@@ -172,6 +171,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
                   <tr><td className={tableCell}>Stamp Duty</td><td className={`${tableCell} text-right`}>{n(data.stamp_duty)}</td></tr>
                   <tr><td className={tableCell}>Mobile Deduction</td><td className={`${tableCell} text-right`}>{n(data.mobile_deduction)}</td></tr>
                   <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Service Charges</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_service_charges)}</td></tr>
+                  <tr><td className={tableCell}>No Pay (deduct)</td><td className={`${tableCell} text-right`}>-{n(data.no_pay)}</td></tr>
                   <tr><td className={tableCell}>PAYE</td><td className={`${tableCell} text-right`}>{n(data.paye)}</td></tr>
                   <tr><td className={tableCell}>Salary Advance</td><td className={`${tableCell} text-right`}>{n(data.salary_advance)}</td></tr>
                 </tbody>
