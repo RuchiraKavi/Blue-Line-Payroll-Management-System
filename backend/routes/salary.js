@@ -5,8 +5,11 @@ import {
   getEmployeesForSalary,
   calculateSalary,
   saveSalaryRun,
+  saveOneSalaryEntry,
+  savePayslipSignature,
   getPayslip,
   getSalaryRuns,
+  getContributionHistory,
   getMySalaryHistory,
   getMyPayslip,
 } from "../controllers/salaryController.js";
@@ -39,11 +42,32 @@ router.post(
   saveSalaryRun
 );
 
+router.post(
+  "/save-one",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  saveOneSalaryEntry
+);
+
+router.post(
+  "/signature",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  savePayslipSignature
+);
+
 router.get(
   "/runs",
   authMiddleware,
   authorizeRoles(...salaryRoles),
   getSalaryRuns
+);
+
+router.get(
+  "/contribution-history/:employeeId",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  getContributionHistory
 );
 
 router.get(

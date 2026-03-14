@@ -1,9 +1,9 @@
 import React, { useRef, useState } from "react";
-import { FaTimes, FaPrint, FaFileInvoiceDollar, FaPenFancy } from "react-icons/fa";
+import { FaTimes, FaPrint, FaFileInvoiceDollar, FaPenFancy, FaSave } from "react-icons/fa";
 
-const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
+const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, onSavePayslip = null, savingPayslip = false }) => {
   const printRef = useRef(null);
-  const [signatureDataUrl, setSignatureDataUrl] = useState(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState(initialSignature ?? null);
   const [signatureDate] = useState(() => new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
 
   const handleSignatureFile = (e) => {
@@ -58,8 +58,13 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
   const bankAcc = employee?.bank_details?.bank_account_number || "—";
 
   const n = (x) => Number(x || 0).toFixed(2);
-  const epfPct = Number(data.epf_percent) || 8;
+  // Payslip uses 8% for EPF payment (contribution tracking uses 12% elsewhere)
+  const epfPct = 8;
   const etfPct = Number(data.etf_percent) || 3;
+  const totalForEpf = Number(data.total_for_epf) || 0;
+  const epfPayslipAmount = totalForEpf * (epfPct / 100);
+  const totalDeductionPayslip = (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
+  const netPayPayslip = (Number(data.gross_salary) || 0) - totalDeductionPayslip;
 
   const tableHeader = "bg-linear-to-r from-gray-50 to-blue-50 text-gray-700 uppercase text-xs font-semibold border-b-2 border-gray-200";
   const tableCell = "border border-gray-200 px-4 py-3 text-sm";
@@ -71,39 +76,51 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
         className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - same style as other admin section headers */}
-        <div className="px-6 py-4 bg-linear-to-r from-gray-50 to-blue-50 border-b border-gray-200 flex items-center justify-between gap-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <FaFileInvoiceDollar className="text-blue-600" />
-            Payslip — {monthName} {year}
-          </h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer transition-colors">
-              <FaPenFancy className="text-blue-600" />
+        {/* Header: title row + actions row to avoid overflow */}
+        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-linear-to-r from-gray-50 to-blue-50 border-b border-gray-200 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2 min-w-0">
+              <FaFileInvoiceDollar className="text-blue-600 shrink-0" />
+              <span className="truncate">Payslip — {monthName} {year}</span>
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-600 hover:bg-gray-200 rounded-xl transition-colors shrink-0"
+              aria-label="Close"
+            >
+              <FaTimes className="text-xl" />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 cursor-pointer transition-colors text-sm">
+              <FaPenFancy className="text-blue-600 shrink-0" />
               <span>{signatureDataUrl ? "Change signature" : "Add signature"}</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleSignatureFile} />
             </label>
             {signatureDataUrl && (
-              <button
-                type="button"
-                onClick={() => setSignatureDataUrl(null)}
-                className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-xl font-medium"
-              >
-                Clear
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSavePayslip?.(signatureDataUrl)}
+                  disabled={savingPayslip}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  <FaSave className="shrink-0" /> {savingPayslip ? "Saving…" : "Save payslip"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSignatureDataUrl(null)}
+                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium"
+                >
+                  Clear
+                </button>
+              </>
             )}
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 shadow-lg transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
             >
-              <FaPrint /> Print
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2.5 text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
-              aria-label="Close"
-            >
-              <FaTimes className="text-lg" />
+              <FaPrint className="shrink-0" /> Print
             </button>
           </div>
         </div>
@@ -179,26 +196,16 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
             </div>
           </div>
 
-          {/* EPF Payment */}
+          {/* EPF & ETF (Sri Lanka: Employee 8% deducted; Employer 12% EPF + 3% ETF) */}
           <div className="mb-6">
-            <div className={`${sectionTitle} text-blue-800`}>EPF Payment</div>
+            <div className={`${sectionTitle} text-blue-800`}>EPF & ETF</div>
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <tbody>
-                  <tr><td className={tableCell}>Total for EPF (base)</td><td className={`${tableCell} text-right`}>{n(data.total_for_epf)}</td></tr>
-                  <tr><td className={tableCell}>Employee EPF ({epfPct}%)</td><td className={`${tableCell} text-right font-semibold`}>{n(data.epf_payment)}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ETF Payment */}
-          <div className="mb-6">
-            <div className={`${sectionTitle} text-emerald-800`}>ETF Payment</div>
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <tbody>
-                  <tr><td className={tableCell}>Employer ETF ({etfPct}%)</td><td className={`${tableCell} text-right font-semibold`}>{n(data.etf_payment)}</td></tr>
+                  <tr><td className={tableCell}>Earnings base (for EPF/ETF)</td><td className={`${tableCell} text-right`}>{n(data.total_for_epf)}</td></tr>
+                  <tr><td className={tableCell}>Employee EPF (8%) — deducted from salary</td><td className={`${tableCell} text-right font-semibold`}>{n(epfPayslipAmount)}</td></tr>
+                  <tr><td className={tableCell}>Employer EPF (12%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.employer_epf_payment)}</td></tr>
+                  <tr><td className={tableCell}>Employer ETF (3%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.etf_payment)}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -210,11 +217,11 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose }) => {
               <tbody>
                 <tr className="bg-gray-100">
                   <td className={`${tableCell} font-bold`}>Total Deduction</td>
-                  <td className={`${tableCell} text-right font-bold`}>{n(data.total_deduction)}</td>
+                  <td className={`${tableCell} text-right font-bold`}>{n(totalDeductionPayslip)}</td>
                 </tr>
                 <tr className="bg-green-50 border-t-2 border-green-200">
                   <td className="px-4 py-4 font-bold text-lg text-gray-900">Net Pay</td>
-                  <td className="px-4 py-4 text-right font-bold text-lg text-green-700">Rs. {n(data.net_pay)}</td>
+                  <td className="px-4 py-4 text-right font-bold text-lg text-green-700">Rs. {n(netPayPayslip)}</td>
                 </tr>
               </tbody>
             </table>

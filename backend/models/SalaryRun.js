@@ -25,9 +25,11 @@ const payslipEntrySchema = new Schema(
     gross_salary: { type: Number, default: 0 },
     total_for_epf: { type: Number, default: 0 },
     epf_payment: { type: Number, default: 0 },
+    employer_epf_payment: { type: Number, default: 0 },
     etf_payment: { type: Number, default: 0 },
     total_deduction: { type: Number, default: 0 },
     net_pay: { type: Number, default: 0 },
+    approval_status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     bank_details: {
       bank_name: String,
       bank_branch: String,
@@ -42,6 +44,7 @@ const salaryRunSchema = new mongoose.Schema(
     month: { type: Number, required: true, min: 1, max: 12 },
     year: { type: Number, required: true },
     entries: [payslipEntrySchema],
+    signature_data_url: { type: String, default: null },
   },
   { timestamps: true }
 );

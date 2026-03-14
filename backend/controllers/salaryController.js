@@ -12,8 +12,9 @@ function entryEmployeeIdString(entry) {
 }
 
 /**
- * Calculate salary for one entry (allowances, service charges, EPF, ETF, gross, deductions, net).
- * All logic lives in backend.
+ * Calculate salary for one entry (Sri Lanka rules).
+ * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
+ * Employee EPF: 8% (deducted from salary). Employer EPF: 12%. Employer ETF: 3%.
  */
 function calculateEntry(input) {
   const basic = Number(input.basic_salary) || 0;
@@ -27,16 +28,16 @@ function calculateEntry(input) {
   const mobileDed = Number(input.mobile_deduction) || 0;
   const paye = Number(input.paye) || 0;
   const salaryAdvance = Number(input.salary_advance) || 0;
-  const epfPercent = Number(input.epf_percent) || 8;
-  const etfPercent = Number(input.etf_percent) || 3;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
   const grossSalary = basic + totalAllowances - noPay;
-  const totalForEpf = grossSalary > 0 ? grossSalary : 0;
-  const epfPayment = (totalForEpf * epfPercent) / 100;
-  const etfPayment = (totalForEpf * etfPercent) / 100;
+  // EPF/ETF base: basic + fixed allowances only (exclude bonus per Sri Lanka practice)
+  const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
+  const employeeEpfPayment = (totalForEpf * 8) / 100;
+  const employerEpfPayment = (totalForEpf * 12) / 100;
+  const etfPayment = (totalForEpf * 3) / 100;
   const totalServiceCharges = stampDuty + mobileDed;
-  const totalDeduction = epfPayment + totalServiceCharges + paye + salaryAdvance;
+  const totalDeduction = employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
   const netPay = grossSalary - totalDeduction;
 
   return {
@@ -45,7 +46,8 @@ function calculateEntry(input) {
     total_service_charges: totalServiceCharges,
     gross_salary: grossSalary,
     total_for_epf: totalForEpf,
-    epf_payment: epfPayment,
+    epf_payment: employeeEpfPayment,
+    employer_epf_payment: employerEpfPayment,
     etf_payment: etfPayment,
     total_deduction: totalDeduction,
     net_pay: netPay,
@@ -126,7 +128,7 @@ export const calculateSalary = async (req, res) => {
         stamp_duty: Number(entry.stamp_duty) || 0,
         mobile_deduction: Number(entry.mobile_deduction) || 0,
         paye: Number(entry.paye) || 0,
-        epf_percent: Number(entry.epf_percent) || 8,
+        epf_percent: 8,
         etf_percent: Number(entry.etf_percent) || 3,
       };
 
@@ -192,17 +194,21 @@ export const saveSalaryRun = async (req, res) => {
         stamp_duty: Number(entry.stamp_duty) || 0,
         mobile_deduction: Number(entry.mobile_deduction) || 0,
         paye: Number(entry.paye) || 0,
-        epf_percent: Number(entry.epf_percent) || 8,
+        epf_percent: 8,
         etf_percent: Number(entry.etf_percent) || 3,
       };
 
       const computed = calculateEntry(input);
+      const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
+        ? entry.approval_status
+        : (entry.approvalStatus && ["pending", "approved", "rejected"].includes(entry.approvalStatus) ? entry.approvalStatus : "pending");
       storedEntries.push({
         employee: employee._id,
         employee_id: computed.employee_id,
         name: computed.name,
         designation: computed.designation,
         department: computed.department,
+        approval_status: approvalStatus,
         basic_salary: computed.basic_salary,
         travel_allowance: computed.travel_allowance,
         food_allowance: computed.food_allowance,
@@ -214,13 +220,14 @@ export const saveSalaryRun = async (req, res) => {
         stamp_duty: computed.stamp_duty,
         mobile_deduction: computed.mobile_deduction,
         paye: computed.paye,
-        epf_percent: computed.epf_percent,
+        epf_percent: 8,
         etf_percent: computed.etf_percent,
         total_allowances: computed.total_allowances,
         total_service_charges: computed.total_service_charges,
         gross_salary: computed.gross_salary,
         total_for_epf: computed.total_for_epf,
         epf_payment: computed.epf_payment,
+        employer_epf_payment: computed.employer_epf_payment,
         etf_payment: computed.etf_payment,
         total_deduction: computed.total_deduction,
         net_pay: computed.net_pay,
@@ -250,6 +257,130 @@ export const saveSalaryRun = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to save salary run",
+    });
+  }
+};
+
+/**
+ * POST /api/salary/save-one
+ * Body: { month, year, entry: { employeeId, basic_salary, ... } }
+ * Ensures one run per month; adds or updates this employee's entry in that run.
+ */
+export const saveOneSalaryEntry = async (req, res) => {
+  try {
+    const { month, year, entry } = req.body;
+    if (!month || !year || !entry) {
+      return res.status(400).json({
+        success: false,
+        message: "month, year and entry are required",
+      });
+    }
+    const rawId = entry.employeeId ?? entry._id;
+    const employeeId = rawId == null ? null : (typeof rawId === "string" ? rawId : (rawId.toString?.() ?? String(rawId)));
+    if (!employeeId) {
+      return res.status(400).json({ success: false, message: "entry.employeeId is required" });
+    }
+    const employee = await Employee.findById(employeeId)
+      .populate("userId", "name email role profileImage")
+      .populate("department", "dep_name");
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+    const depName = (employee.department && typeof employee.department === "object" && "dep_name" in employee.department)
+      ? employee.department.dep_name
+      : (employee.department?.dep_name ?? "N/A");
+    const input = {
+      _id: employee._id,
+      employeeId: employee._id,
+      employee_id: employee.employee_id,
+      name: employee.userId?.name || "N/A",
+      designation: employee.designation || "",
+      department: depName,
+      basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
+      travel_allowance: Number(entry.travel_allowance) || 0,
+      food_allowance: Number(entry.food_allowance) || 0,
+      holiday_payment: Number(entry.holiday_payment) || 0,
+      allowance_ns: Number(entry.allowance_ns) || 0,
+      bonus: Number(entry.bonus) || 0,
+      no_pay: Number(entry.no_pay) || 0,
+      salary_advance: Number(entry.salary_advance) || 0,
+      stamp_duty: Number(entry.stamp_duty) || 0,
+      mobile_deduction: Number(entry.mobile_deduction) || 0,
+      paye: Number(entry.paye) || 0,
+epf_percent: 8,
+    etf_percent: Number(entry.etf_percent) || 3,
+    };
+    const computed = calculateEntry(input);
+    const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
+      ? entry.approval_status
+      : (entry.approvalStatus && ["pending", "approved", "rejected"].includes(entry.approvalStatus) ? entry.approvalStatus : "pending");
+    const newEntry = {
+      employee: employee._id,
+      employee_id: computed.employee_id,
+      name: computed.name,
+      designation: computed.designation,
+      department: computed.department,
+      approval_status: approvalStatus,
+      basic_salary: computed.basic_salary,
+      travel_allowance: computed.travel_allowance,
+      food_allowance: computed.food_allowance,
+      holiday_payment: computed.holiday_payment,
+      allowance_ns: computed.allowance_ns,
+      bonus: computed.bonus,
+      no_pay: computed.no_pay,
+      salary_advance: computed.salary_advance,
+      stamp_duty: computed.stamp_duty,
+      mobile_deduction: computed.mobile_deduction,
+      paye: computed.paye,
+      epf_percent: 8,
+      etf_percent: computed.etf_percent,
+      total_allowances: computed.total_allowances,
+      total_service_charges: computed.total_service_charges,
+      gross_salary: computed.gross_salary,
+      total_for_epf: computed.total_for_epf,
+      epf_payment: computed.epf_payment,
+      employer_epf_payment: computed.employer_epf_payment,
+      etf_payment: computed.etf_payment,
+      total_deduction: computed.total_deduction,
+      net_pay: computed.net_pay,
+      bank_details: employee.bank_details
+        ? {
+            bank_name: employee.bank_details.bank_name,
+            bank_branch: employee.bank_details.bank_branch,
+            bank_account_number: employee.bank_details.bank_account_number,
+          }
+        : undefined,
+    };
+    const run = await SalaryRun.findOne({ month, year });
+    const employeeIdStr = String(employee._id);
+    if (!run) {
+      const created = await SalaryRun.create({ month, year, entries: [newEntry] });
+      return res.status(200).json({
+        success: true,
+        message: "Salary entry saved",
+        run: { _id: created._id, month: created.month, year: created.year, entriesCount: 1 },
+      });
+    }
+    const entries = run.entries || [];
+    const idx = entries.findIndex((e) => entryEmployeeIdString(e) === employeeIdStr);
+    if (idx >= 0) {
+      entries[idx] = newEntry;
+    } else {
+      entries.push(newEntry);
+    }
+    run.entries = entries;
+    run.markModified("entries");
+    await run.save();
+    return res.status(200).json({
+      success: true,
+      message: "Salary entry saved",
+      run: { _id: run._id, month: run.month, year: run.year, entriesCount: run.entries.length },
+    });
+  } catch (error) {
+    console.error("Save one salary entry error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save salary entry",
     });
   }
 };
@@ -296,7 +427,7 @@ export const getPayslip = async (req, res) => {
     const data = {
       ...entry.toObject ? entry.toObject() : entry,
       employee,
-      epf_percent: entry.epf_percent ?? 8,
+      epf_percent: entry.epf_percent ?? 12,
       etf_percent: entry.etf_percent ?? 3,
     };
 
@@ -321,18 +452,18 @@ export const getPayslip = async (req, res) => {
  */
 export const getSalaryRuns = async (req, res) => {
   try {
-    const month = req.query.month ? parseInt(req.query.month, 10) : null;
-    const year = req.query.year ? parseInt(req.query.year, 10) : null;
+    const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+    const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
 
-    if (month && year) {
-      const run = await SalaryRun.findOne({ month, year }).lean();
+    if (month != null && !isNaN(month) && month >= 1 && month <= 12 && year != null && !isNaN(year)) {
+      const run = await SalaryRun.findOne({ month: Number(month), year: Number(year) }).lean();
       if (!run) {
         return res.status(404).json({
           success: false,
           message: "Salary run not found",
         });
       }
-      return res.status(200).json({ success: true, run });
+      return res.status(200).json({ success: true, run: { ...run, month: run.month, year: run.year } });
     }
 
     const runs = await SalaryRun.find()
@@ -359,10 +490,109 @@ export const getSalaryRuns = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/salary/signature
+ * Body: { month, year, signature_data_url }
+ * Saves payslip signature for the given period (creates run with empty entries if needed).
+ */
+export const savePayslipSignature = async (req, res) => {
+  try {
+    const { month, year, signature_data_url } = req.body;
+    const m = month != null ? parseInt(month, 10) : null;
+    const y = year != null ? parseInt(year, 10) : null;
+    if (m == null || isNaN(m) || m < 1 || m > 12 || y == null || isNaN(y)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+    const dataUrl =
+      typeof signature_data_url === "string" && signature_data_url.length > 0
+        ? signature_data_url
+        : null;
+    const run = await SalaryRun.findOneAndUpdate(
+      { month: m, year: y },
+      {
+        $set: { signature_data_url: dataUrl },
+        $setOnInsert: { month: m, year: y, entries: [] },
+      },
+      { upsert: true, new: true }
+    ).lean();
+    return res.status(200).json({
+      success: true,
+      message: "Payslip signature saved",
+      signature_data_url: run.signature_data_url || null,
+    });
+  } catch (error) {
+    console.error("Save payslip signature error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to save payslip signature",
+    });
+  }
+};
+
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+/**
+ * GET /api/salary/contribution-history/:employeeId
+ * Returns EPF and ETF contribution history for an employee (all saved runs).
+ */
+export const getContributionHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    if (!employeeId) {
+      return res.status(400).json({ success: false, message: "Employee ID is required" });
+    }
+    const employee = await Employee.findById(employeeId).populate("userId", "name").lean();
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+    const employeeIdStr = String(employee._id);
+    const employeeIdRef = employee.employee_id;
+
+    const runs = await SalaryRun.find()
+      .sort({ year: -1, month: -1 })
+      .lean();
+
+    const history = [];
+    for (const run of runs) {
+      if (!run.entries || !run.entries.length) continue;
+      const entry = run.entries.find((e) => {
+        const idStr = entryEmployeeIdString(e);
+        if (idStr && idStr === employeeIdStr) return true;
+        if (employeeIdRef && e.employee_id && String(e.employee_id) === String(employeeIdRef)) return true;
+        return false;
+      });
+      if (entry) {
+        history.push({
+          month: run.month,
+          year: run.year,
+          monthName: monthNames[run.month - 1],
+          total_for_epf: entry.total_for_epf ?? 0,
+          epf_employee_percent: 8,
+          epf_employer_percent: 12,
+          etf_percent: entry.etf_percent ?? 3,
+          epf_payment: entry.epf_payment ?? 0,
+          employer_epf_payment: entry.employer_epf_payment ?? 0,
+          etf_payment: entry.etf_payment ?? 0,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      employee: { _id: employee._id, employee_id: employee.employee_id, name: employee.userId?.name || "N/A" },
+      history,
+    });
+  } catch (error) {
+    console.error("Get contribution history error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get contribution history",
+    });
+  }
+};
 
 /**
  * GET /api/salary/my-history
@@ -480,7 +710,7 @@ export const getMyPayslip = async (req, res) => {
     const data = {
       ...(entry.toObject ? entry.toObject() : entry),
       employee,
-      epf_percent: entry.epf_percent ?? 8,
+      epf_percent: entry.epf_percent ?? 12,
       etf_percent: entry.etf_percent ?? 3,
     };
 
