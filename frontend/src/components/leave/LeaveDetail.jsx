@@ -140,7 +140,7 @@ const LeaveDetail = () => {
           <div className="flex flex-col gap-3 text-left pl-6">
             <p><b>Employee Name:</b> {leave.employeeId?.userId?.name || "N/A"}</p>
             <p><b>Department:</b> {leave.employeeId?.department?.dep_name || "N/A"}</p>
-            <p><b>Leave Type:</b> {leave.leaveType}</p>
+            <p><b>Leave Type:</b> {({ casual: "Casual Leave", annual: "Annual Leave", sick: "Sick Leave", nopay: "No Pay" }[leave.leaveType] || leave.leaveType)}</p>
             <p><b>Days:</b> {days}</p>
             <p><b>Start Date:</b> {leave.startDate?.slice(0, 10)}</p>
             <p><b>End Date:</b> {leave.endDate?.slice(0, 10)}</p>

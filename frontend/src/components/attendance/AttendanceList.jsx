@@ -27,8 +27,10 @@ const AttendanceList = () => {
   const [summaryData, setSummaryData] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryMonth, setSummaryMonth] = useState("all");
+  const [leaveTotalsMap, setLeaveTotalsMap] = useState({});
   const [historyEmployee, setHistoryEmployee] = useState(null);
   const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyLeaves, setHistoryLeaves] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyFrom, setHistoryFrom] = useState("");
   const [historyTo, setHistoryTo] = useState("");
@@ -113,6 +115,34 @@ const AttendanceList = () => {
     return () => { cancelled = true; };
   }, [summaryMonth]);
 
+  /* Fetch total leave days per employee (for All Employees table) */
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLeaveTotals = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (summaryMonth && summaryMonth !== "all") {
+          params.set("month", summaryMonth);
+        }
+        const res = await axios.get(`${API_BASE}/leaves/total-days-by-employee?${params}`, { headers: getAuthHeader() });
+        if (cancelled) return;
+        if (res.data.success && Array.isArray(res.data.data)) {
+          const map = {};
+          (res.data.data || []).forEach((o) => {
+            map[o.employeeId] = o.totalLeaveDays ?? 0;
+          });
+          setLeaveTotalsMap(map);
+        } else {
+          setLeaveTotalsMap({});
+        }
+      } catch (err) {
+        if (!cancelled) setLeaveTotalsMap({});
+      }
+    };
+    fetchLeaveTotals();
+    return () => { cancelled = true; };
+  }, [summaryMonth]);
+
   const summaryMap = React.useMemo(() => {
     const m = {};
     (summaryData || []).forEach((s) => {
@@ -128,9 +158,10 @@ const AttendanceList = () => {
     return (employees || []).map((emp) => {
       const id = emp._id != null ? String(emp._id) : "";
       const stats = summaryMap[id] ?? { workedDays: 0, absentDays: 0, totalHours: 0 };
-      return { ...emp, ...stats };
+      const totalLeave = leaveTotalsMap[id] ?? 0;
+      return { ...emp, ...stats, totalLeave };
     });
-  }, [employees, summaryMap]);
+  }, [employees, summaryMap, leaveTotalsMap]);
 
   /* =========================
      Initial Load & Date Change
@@ -150,23 +181,34 @@ const AttendanceList = () => {
   const openHistory = useCallback(async (emp, from, to) => {
     setHistoryEmployee(emp);
     setHistoryRecords([]);
+    setHistoryLeaves([]);
     try {
       setHistoryLoading(true);
       const params = new URLSearchParams();
       if (from) params.set("from", from);
       if (to) params.set("to", to);
-      const res = await axios.get(
-        `${API_BASE}/attendance/employee/${emp._id}${params.toString() ? `?${params.toString()}` : ""}`,
-        { headers: getAuthHeader() }
-      );
-      if (res.data.success) {
-        setHistoryRecords(res.data.attendance || []);
-        if (res.data.from) setHistoryFrom(res.data.from);
-        if (res.data.to) setHistoryTo(res.data.to);
+      const [attendanceRes, leavesRes] = await Promise.all([
+        axios.get(
+          `${API_BASE}/attendance/employee/${emp._id}${params.toString() ? `?${params.toString()}` : ""}`,
+          { headers: getAuthHeader() }
+        ),
+        axios.get(`${API_BASE}/leaves/employee/${emp._id}`, { headers: getAuthHeader() }),
+      ]);
+      if (attendanceRes.data.success) {
+        setHistoryRecords(attendanceRes.data.attendance || []);
+        if (attendanceRes.data.from) setHistoryFrom(attendanceRes.data.from);
+        if (attendanceRes.data.to) setHistoryTo(attendanceRes.data.to);
+      }
+      if (leavesRes.data.success && Array.isArray(leavesRes.data.leaves)) {
+        const approved = (leavesRes.data.leaves || []).filter(
+          (l) => (l.status || "").toLowerCase() === "approved"
+        );
+        setHistoryLeaves(approved);
       }
     } catch (err) {
       console.error(err);
       setHistoryRecords([]);
+      setHistoryLeaves([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -175,26 +217,59 @@ const AttendanceList = () => {
   const closeHistory = () => {
     setHistoryEmployee(null);
     setHistoryRecords([]);
+    setHistoryLeaves([]);
     setHistoryFrom("");
     setHistoryTo("");
     setHistoryStatusFilter("all");
     setHistoryMonthFilter("all");
   };
 
-  /* Per-month summary: total working hours and worked days (from current historyRecords) */
+  /* Days of a leave that fall within a given month (YYYY-MM) */
+  const leaveDaysInMonth = (leave, monthKey) => {
+    const [y, m] = monthKey.split("-").map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const monthEnd = new Date(y, m, 0);
+    const start = new Date(leave.startDate);
+    const end = new Date(leave.endDate);
+    if (end < monthStart || start > monthEnd) return 0;
+    const overlapStart = new Date(Math.max(start.getTime(), monthStart.getTime()));
+    const overlapEnd = new Date(Math.min(end.getTime(), monthEnd.getTime()));
+    return Math.max(0, Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1);
+  };
+
+  /* Per-month summary: worked days/hours from attendance; total leave from approved Leave requests */
   const monthlySummary = React.useMemo(() => {
     const byMonth = {};
     (historyRecords || []).forEach((r) => {
       const d = new Date(r.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0 };
+      if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0, totalLeave: 0 };
       if (r.status === "Present") {
         byMonth[key].workedDays += 1;
         byMonth[key].totalHours += parseWorkingHours(r.workingHours);
       }
     });
+    (historyLeaves || []).forEach((leave) => {
+      const start = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      let year = start.getFullYear();
+      let month = start.getMonth();
+      const endYear = end.getFullYear();
+      const endMonth = end.getMonth();
+      while (year < endYear || (year === endYear && month <= endMonth)) {
+        const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+        if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0, totalLeave: 0 };
+        byMonth[key].totalLeave += leaveDaysInMonth(leave, key);
+        if (month === 11) {
+          year += 1;
+          month = 0;
+        } else {
+          month += 1;
+        }
+      }
+    });
     return Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month));
-  }, [historyRecords]);
+  }, [historyRecords, historyLeaves]);
 
   const availableMonths = React.useMemo(() => {
     const set = new Set();
@@ -459,7 +534,7 @@ const AttendanceList = () => {
                     onChange={(e) => setShowExtraColumns(e.target.checked)}
                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Show extra columns (Holidays, Day off, Leave, No Pay)</span>
+                  <span className="text-sm font-medium text-gray-700">Show extra columns (Holidays, Day off, Leave)</span>
                 </label>
               </div>
 
@@ -480,7 +555,6 @@ const AttendanceList = () => {
                           <th className="px-6 py-4 text-right font-semibold">Holidays</th>
                           <th className="px-6 py-4 text-right font-semibold">Day off</th>
                           <th className="px-6 py-4 text-right font-semibold">Leave</th>
-                          <th className="px-6 py-4 text-right font-semibold">No Pay</th>
                         </>
                       )}
                     </tr>
@@ -516,14 +590,13 @@ const AttendanceList = () => {
                               <td className="px-6 py-4 text-right text-gray-600">{a.holidays != null ? a.holidays : 0}</td>
                               <td className="px-6 py-4 text-right text-gray-600">{a.dayOff != null ? a.dayOff : 0}</td>
                               <td className="px-6 py-4 text-right text-gray-600">{a.leave != null ? a.leave : 0}</td>
-                              <td className="px-6 py-4 text-right text-gray-600">{a.noPay != null ? a.noPay : 0}</td>
                             </>
                           )}
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={showExtraColumns ? 12 : 8} className="px-6 py-20 text-center">
+                        <td colSpan={showExtraColumns ? 11 : 8} className="px-6 py-20 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <svg className="w-24 h-24 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -606,13 +679,14 @@ const AttendanceList = () => {
                     <th className="px-6 py-3 text-left font-semibold">Designation</th>
                     <th className="px-6 py-3 text-center font-semibold">Days worked</th>
                     <th className="px-6 py-3 text-center font-semibold">Total hours</th>
+                    <th className="px-6 py-3 text-center font-semibold">Total leave</th>
                     <th className="px-6 py-3 text-center font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {employeesWithStats.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No employees found</td>
+                      <td colSpan={9} className="px-6 py-8 text-center text-gray-500">No employees found</td>
                     </tr>
                   ) : (
                     employeesWithStats.map((emp, i) => (
@@ -624,6 +698,7 @@ const AttendanceList = () => {
                         <td className="px-6 py-3 text-gray-600">{emp.designation || "—"}</td>
                         <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.workedDays ?? 0}</td>
                         <td className="px-6 py-3 text-center font-medium text-gray-900">{(emp.totalHours ?? 0).toFixed(1)}</td>
+                        <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.totalLeave ?? 0}</td>
                         <td className="px-6 py-3 text-center">
                           <button
                             onClick={() => openHistory(emp)}
@@ -696,6 +771,7 @@ const AttendanceList = () => {
                               <th className="px-4 py-2 text-left font-semibold">Month</th>
                               <th className="px-4 py-2 text-right font-semibold">Worked days</th>
                               <th className="px-4 py-2 text-right font-semibold">Total hours</th>
+                              <th className="px-4 py-2 text-right font-semibold">Total leave</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -706,6 +782,7 @@ const AttendanceList = () => {
                                 </td>
                                 <td className="px-4 py-2 text-right">{row.workedDays}</td>
                                 <td className="px-4 py-2 text-right">{(Number(row.totalHours) || 0).toFixed(1)}</td>
+                                <td className="px-4 py-2 text-right">{row.totalLeave ?? 0}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -717,6 +794,9 @@ const AttendanceList = () => {
                               </td>
                               <td className="px-4 py-2 text-right">
                                 {monthlySummary.reduce((s, row) => s + (Number(row.totalHours) || 0), 0).toFixed(1)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (Number(row.totalLeave) || 0), 0)}
                               </td>
                             </tr>
                           </tfoot>
@@ -768,7 +848,6 @@ const AttendanceList = () => {
                               <th className="px-4 py-3 text-right font-semibold">Holidays</th>
                               <th className="px-4 py-3 text-right font-semibold">Day off</th>
                               <th className="px-4 py-3 text-right font-semibold">Leave</th>
-                              <th className="px-4 py-3 text-right font-semibold">No Pay</th>
                             </>
                           )}
                         </tr>
@@ -776,7 +855,7 @@ const AttendanceList = () => {
                       <tbody>
                         {filteredRecords.length === 0 ? (
                           <tr>
-                            <td colSpan={showExtraColumns ? 9 : 5} className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan={showExtraColumns ? 8 : 5} className="px-4 py-8 text-center text-gray-500">
                               No records match the filter
                             </td>
                           </tr>
@@ -797,7 +876,6 @@ const AttendanceList = () => {
                                   <td className="px-4 py-2 text-right">{r.holidays != null ? r.holidays : 0}</td>
                                   <td className="px-4 py-2 text-right">{r.dayOff != null ? r.dayOff : 0}</td>
                                   <td className="px-4 py-2 text-right">{r.leave != null ? r.leave : 0}</td>
-                                  <td className="px-4 py-2 text-right">{r.noPay != null ? r.noPay : 0}</td>
                                 </>
                               )}
                             </tr>

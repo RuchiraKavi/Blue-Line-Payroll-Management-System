@@ -51,7 +51,6 @@ const attendanceSchema = new Schema(
     holidays: { type: Number, default: null },
     dayOff: { type: Number, default: null },
     leave: { type: Number, default: null },
-    noPay: { type: Number, default: null },
 
     // 🧾 Optional: who uploaded the attendance
     uploadedBy: {

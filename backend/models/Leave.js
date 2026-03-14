@@ -10,7 +10,7 @@ const leaveSchema = new Schema(
 
     leaveType: {
       type: String,
-      enum: ["casual", "annual", "sick"],
+      enum: ["casual", "annual", "sick", "nopay"],
       required: true,
     },
 

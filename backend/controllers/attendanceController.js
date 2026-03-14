@@ -28,7 +28,7 @@ const uploadAttendanceCSV = async (req, res) => {
     let skippedCount = 0;
 
     for (const row of records) {
-      // 🔑 CSV columns: employee_id | date | employee_name | inTime | outTime | workingHc status | Holidays | Day off | Leave | No Pay
+      // 🔑 CSV columns: employee_id | date | employee_name | inTime | outTime | workingHc status | Holidays | Day off | Leave
       // workingHc status = working hours status (maps to workingHours and/or status)
 
       const empId = row.employee_id || row.employeeId;
@@ -89,7 +89,6 @@ const uploadAttendanceCSV = async (req, res) => {
       const holidaysVal = num(row.Holidays);
       const dayOffNum = num(row["Day off"]);
       const leaveNum = num(row.Leave);
-      const noPayNum = num(row["No Pay"]);
 
       await Attendance.create({
         employee: employee._id,
@@ -102,7 +101,6 @@ const uploadAttendanceCSV = async (req, res) => {
         holidays: holidaysVal,
         dayOff: dayOffNum,
         leave: leaveNum,
-        noPay: noPayNum,
       });
 
       insertedCount++;
@@ -159,7 +157,6 @@ const getAttendanceByDate = async (req, res) => {
       holidays: record.holidays,
       dayOff: record.dayOff,
       leave: record.leave,
-      noPay: record.noPay,
     }));
 
     res.json({

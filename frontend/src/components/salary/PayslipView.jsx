@@ -253,9 +253,9 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
             </div>
           </div>
 
-          {/* Service Charges */}
+          {/* Deductions */}
           <div className="mb-6">
-            <div className={`${sectionTitle} text-slate-800`}>Service Charges</div>
+            <div className={`${sectionTitle} text-slate-800`}>Deductions</div>
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -267,8 +267,8 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                 <tbody>
                   <tr><td className={tableCell}>Stamp Duty</td><td className={`${tableCell} text-right`}>{n(data.stamp_duty)}</td></tr>
                   <tr><td className={tableCell}>Mobile Deduction</td><td className={`${tableCell} text-right`}>{n(data.mobile_deduction)}</td></tr>
-                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Service Charges</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_service_charges)}</td></tr>
-                  <tr><td className={tableCell}>No Pay (deduct)</td><td className={`${tableCell} text-right`}>-{n(data.no_pay)}</td></tr>
+                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Deductions</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_service_charges)}</td></tr>
+                  <tr><td className={tableCell}>No Pay</td><td className={`${tableCell} text-right`}>{n(data.no_pay)}</td></tr>
                   <tr><td className={tableCell}>PAYE</td><td className={`${tableCell} text-right`}>{n(data.paye)}</td></tr>
                   <tr><td className={tableCell}>Salary Advance</td><td className={`${tableCell} text-right`}>{n(data.salary_advance)}</td></tr>
                 </tbody>
@@ -283,7 +283,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
               <table className="w-full text-sm">
                 <tbody>
                   <tr><td className={tableCell}>Earnings base (for EPF/ETF)</td><td className={`${tableCell} text-right`}>{n(data.total_for_epf)}</td></tr>
-                  <tr><td className={tableCell}>Employee EPF (8%) — deducted from salary</td><td className={`${tableCell} text-right font-semibold`}>{n(epfPayslipAmount)}</td></tr>
+                  <tr><td className={tableCell}>Employee EPF (8%)</td><td className={`${tableCell} text-right font-semibold`}>{n(epfPayslipAmount)}</td></tr>
                   <tr><td className={tableCell}>Employer EPF (12%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.employer_epf_payment)}</td></tr>
                   <tr><td className={tableCell}>Employer ETF (3%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.etf_payment)}</td></tr>
                 </tbody>

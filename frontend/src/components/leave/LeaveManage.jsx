@@ -29,12 +29,13 @@ const LeaveManage = () => {
             days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
           }
 
+          const leaveTypeLabels = { casual: "Casual Leave", annual: "Annual Leave", sick: "Sick Leave", nopay: "No Pay" };
           return {
             _id: leave._id,
             sno: index + 1,
             name: leave.employeeId?.userId?.name || "N/A",
             dep_name: leave.employeeId?.department?.dep_name || "N/A",
-            leave_type: leave.leaveType,
+            leave_type: leaveTypeLabels[leave.leaveType] || leave.leaveType,
             days,
             reason: leave.reason,
             status: leave.status,

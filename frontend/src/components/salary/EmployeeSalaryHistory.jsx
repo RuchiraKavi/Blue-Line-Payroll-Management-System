@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FaMoneyBillWave, FaFileInvoiceDollar } from "react-icons/fa";
-import PayslipView from "./PayslipView.jsx";
+import { FaMoneyBillWave, FaFileInvoiceDollar, FaFilePdf } from "react-icons/fa";
+import { downloadPayslipPdf } from "./PayslipView.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -15,9 +15,6 @@ const EmployeeSalaryHistory = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [payslipData, setPayslipData] = useState(null);
-  const [payslipMonth, setPayslipMonth] = useState(null);
-  const [payslipYear, setPayslipYear] = useState(null);
   const [loadingPayslipFor, setLoadingPayslipFor] = useState(null);
 
   useEffect(() => {
@@ -47,7 +44,7 @@ const EmployeeSalaryHistory = () => {
     fetchHistory();
   }, []);
 
-  const openPayslip = async (month, year) => {
+  const downloadPayslipPdfForPeriod = async (month, year) => {
     const key = `${year}-${month}`;
     try {
       setLoadingPayslipFor(key);
@@ -55,9 +52,10 @@ const EmployeeSalaryHistory = () => {
         headers: getAuthHeader(),
       });
       if (res.data.success && res.data.data) {
-        setPayslipData(res.data.data);
-        setPayslipMonth(res.data.month);
-        setPayslipYear(res.data.year);
+        const data = res.data.data;
+        const employee = data.employee || {};
+        const monthName = monthNames[Number(month) - 1] || "";
+        downloadPayslipPdf(employee, data, month, year, monthName);
       } else {
         alert("Payslip not found for this period.");
       }
@@ -67,12 +65,6 @@ const EmployeeSalaryHistory = () => {
     } finally {
       setLoadingPayslipFor(null);
     }
-  };
-
-  const closePayslip = () => {
-    setPayslipData(null);
-    setPayslipMonth(null);
-    setPayslipYear(null);
   };
 
   if (loading) {
@@ -113,7 +105,7 @@ const EmployeeSalaryHistory = () => {
             <FaFileInvoiceDollar className="text-blue-600" />
             Salary Records
           </h3>
-          <p className="text-sm text-gray-600 mt-1">Saved payroll runs in which you are included. Click View Payslip to open or print.</p>
+          <p className="text-sm text-gray-600 mt-1">Saved payroll runs in which you are included. Download PDF for your payslip.</p>
         </div>
         <div className="p-8">
           {history.length === 0 ? (
@@ -144,11 +136,11 @@ const EmployeeSalaryHistory = () => {
                       <td className="px-6 py-4 text-center">
                         <button
                           type="button"
-                          onClick={() => openPayslip(row.month, row.year)}
+                          onClick={() => downloadPayslipPdfForPeriod(row.month, row.year)}
                           disabled={loadingPayslipFor !== null}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white text-sm rounded-xl font-medium hover:bg-red-700 disabled:opacity-50"
                         >
-                          <FaFileInvoiceDollar /> {loadingPayslipFor === `${row.year}-${row.month}` ? "Loading…" : "View Payslip"}
+                          <FaFilePdf /> {loadingPayslipFor === `${row.year}-${row.month}` ? "Loading…" : "Download PDF"}
                         </button>
                       </td>
                     </tr>
@@ -160,16 +152,6 @@ const EmployeeSalaryHistory = () => {
         </div>
       </div>
 
-      {payslipData && payslipMonth && payslipYear && (
-        <PayslipView
-          employee={payslipData.employee}
-          data={payslipData}
-          month={payslipMonth}
-          year={payslipYear}
-          monthName={monthNames[payslipMonth - 1]}
-          onClose={closePayslip}
-        />
-      )}
     </div>
   );
 };

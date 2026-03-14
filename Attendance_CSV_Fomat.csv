@@ -1,3 +1,3 @@
-employee_id,date,employee_name,inTime,outTime,workingHours,status,Holidays,Day off,Leave,No Pay
-BL001,3/13/2026,Ruchira Kavinda,-,-,-,Present,0,0,0,1
-BL002,3/13/2026,Bhagya,9:05,17:10,8:05,Present,0,0,0,0
+employee_id,date,employee_name,inTime,outTime,workingHours,status,Holidays,Day off,Leave
+BL001,3/13/2026,Ruchira Kavinda,-,-,-,Present,0,0,0
+BL002,3/13/2026,Bhagya,9:05,17:10,8:05,Present,0,0,0

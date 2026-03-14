@@ -2,10 +2,11 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/roleMiddleware.js";
-import { requestLeave, getEmployeeLeaves, getLeaves, getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance } from "../controllers/leaveController.js";
+import { requestLeave, getEmployeeLeaves, getLeaves, getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance, getTotalLeaveDaysByEmployee } from "../controllers/leaveController.js";
 
 const router = express.Router();
 
+router.get("/total-days-by-employee", authMiddleware, getTotalLeaveDaysByEmployee);
 router.post("/request-leave", authMiddleware, requestLeave);
 router.get("/", authMiddleware, authorizeRoles("admin", "hr"), getLeaves);
 router.get("/user/:userId", authMiddleware, getEmployeeLeaves);

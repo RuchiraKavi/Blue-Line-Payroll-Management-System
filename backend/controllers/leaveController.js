@@ -15,9 +15,9 @@ const requestLeave = async (req, res) => {
       });
     }
 
-    const normalizedLeaveType = leaveType.toLowerCase(); // casual | annual | sick
+    const normalizedLeaveType = leaveType.toLowerCase(); // casual | annual | sick | nopay
 
-    if (!["casual", "annual", "sick"].includes(normalizedLeaveType)) {
+    if (!["casual", "annual", "sick", "nopay"].includes(normalizedLeaveType)) {
       return res.status(400).json({
         success: false,
         message: "Invalid leave type",
@@ -37,14 +37,15 @@ const requestLeave = async (req, res) => {
       });
     }
 
-    /* ---------------- INTERN RULE ---------------- */
+    /* ---------------- INTERN RULE (nopay allowed when no balance) ---------------- */
     if (
       employee.userId.role === "intern" &&
-      normalizedLeaveType !== "casual"
+      normalizedLeaveType !== "casual" &&
+      normalizedLeaveType !== "nopay"
     ) {
       return res.status(403).json({
         success: false,
-        message: "Interns can apply only casual leaves",
+        message: "Interns can apply only casual or no-pay leaves",
       });
     }
 
@@ -63,15 +64,17 @@ const requestLeave = async (req, res) => {
     const totalDays =
       Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-    /* ---------------- CHECK LEAVE BALANCE ---------------- */
-    const availableLeaves =
-      employee.leave_balance?.[normalizedLeaveType] ?? 0;
+    /* ---------------- CHECK LEAVE BALANCE (skip for nopay) ---------------- */
+    if (normalizedLeaveType !== "nopay") {
+      const availableLeaves =
+        employee.leave_balance?.[normalizedLeaveType] ?? 0;
 
-    if (availableLeaves < totalDays) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient ${normalizedLeaveType} leave balance`,
-      });
+      if (availableLeaves < totalDays) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient ${normalizedLeaveType} leave balance`,
+        });
+      }
     }
 
     /* ---------------- CREATE LEAVE REQUEST ---------------- */
@@ -240,8 +243,8 @@ const updateLeaveStatus = async (req, res) => {
       });
     }
 
-    /* ---------------- DEDUCT LEAVES ONLY IF APPROVED ---------------- */
-    if (normalizedStatus === "approved") {
+    /* ---------------- DEDUCT LEAVES ONLY IF APPROVED (not for nopay) ---------------- */
+    if (normalizedStatus === "approved" && leave.leaveType !== "nopay") {
       const leaveType = leave.leaveType; // casual | annual | sick
       const days = leave.totalDays;
 
@@ -280,7 +283,7 @@ const updateLeaveStatus = async (req, res) => {
       <h3>Leave Request Update</h3>
       <p>Dear ${employeeName},</p>
       <p>Your leave request has been <b>${displayStatus}</b>.</p>
-      <p><b>Leave Type:</b> ${leave.leaveType}</p>
+      <p><b>Leave Type:</b> ${leave.leaveType === "nopay" ? "No Pay" : leave.leaveType}</p>
       <p><b>Days:</b> ${leave.totalDays}</p>
       <p><b>From:</b> ${leave.startDate.toDateString()}</p>
       <p><b>To:</b> ${leave.endDate.toDateString()}</p>
@@ -376,4 +379,37 @@ const getEmployeeLeaveBalance = async (req, res) => {
 
 
 
-export { requestLeave, getEmployeeLeaves, getLeaves,getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance };
+/**
+ * GET /api/leaves/total-days-by-employee?month=YYYY-MM
+ * Returns total approved leave days per employee. Optional month (YYYY-MM) filters to that month.
+ */
+const getTotalLeaveDaysByEmployee = async (req, res) => {
+  try {
+    const month = req.query.month; // YYYY-MM or empty for all time
+    let match = { status: "Approved" };
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split("-").map(Number);
+      const monthStart = new Date(y, m - 1, 1);
+      const monthEnd = new Date(y, m, 0);
+      match.startDate = { $lte: monthEnd };
+      match.endDate = { $gte: monthStart };
+    }
+    const agg = await Leave.aggregate([
+      { $match: match },
+      { $group: { _id: "$employeeId", totalLeaveDays: { $sum: "$totalDays" } } },
+    ]);
+    const data = agg.map((r) => ({
+      employeeId: String(r._id),
+      totalLeaveDays: r.totalLeaveDays || 0,
+    }));
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Total leave days by employee error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch total leave days",
+    });
+  }
+};
+
+export { requestLeave, getEmployeeLeaves, getLeaves, getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance, getTotalLeaveDaysByEmployee };

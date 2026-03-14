@@ -1,5 +1,6 @@
 import Employee from "../models/Employee.js";
 import SalaryRun from "../models/SalaryRun.js";
+import Leave from "../models/Leave.js";
 
 /** Normalize entry.employee to a string id (handles ObjectId, string, or BSON-style object). */
 function entryEmployeeIdString(entry) {
@@ -30,14 +31,14 @@ function calculateEntry(input) {
   const salaryAdvance = Number(input.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
-  const grossSalary = basic + totalAllowances - noPay;
-  // EPF/ETF base: basic + fixed allowances only (exclude bonus per Sri Lanka practice)
+  const grossSalary = basic + totalAllowances;
+  // EPF/ETF base: basic + fixed allowances only (exclude bonus per Sri Lanka practice, after no-pay)
   const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
   const employeeEpfPayment = (totalForEpf * 8) / 100;
   const employerEpfPayment = (totalForEpf * 12) / 100;
   const etfPayment = (totalForEpf * 3) / 100;
   const totalServiceCharges = stampDuty + mobileDed;
-  const totalDeduction = employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
+  const totalDeduction = noPay + employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
   const netPay = grossSalary - totalDeduction;
 
   return {
@@ -55,8 +56,74 @@ function calculateEntry(input) {
 }
 
 /**
+ * Get number of no-pay days per employee for a given month from Leave collection.
+ * Returns Map<employeeIdString, number> (days count).
+ */
+async function getNoPayDaysByEmployeeForMonth(month, year) {
+  const monthNum = Number(month) || new Date().getMonth() + 1;
+  const yearNum = Number(year) || new Date().getFullYear();
+  const monthStart = new Date(yearNum, monthNum - 1, 1);
+  const monthEnd = new Date(yearNum, monthNum, 0); // last day of month
+
+  const leaves = await Leave.find({
+    leaveType: "nopay",
+    status: "Approved",
+    startDate: { $lte: monthEnd },
+    endDate: { $gte: monthStart },
+  }).lean();
+
+  const daysByEmployee = new Map();
+  for (const leave of leaves) {
+    const leaveStart = new Date(leave.startDate);
+    const leaveEnd = new Date(leave.endDate);
+    const start = new Date(Math.max(leaveStart.getTime(), monthStart.getTime()));
+    const end = new Date(Math.min(leaveEnd.getTime(), monthEnd.getTime()));
+    const days = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
+    const eid = String(leave.employeeId);
+    daysByEmployee.set(eid, (daysByEmployee.get(eid) || 0) + days);
+  }
+  return daysByEmployee;
+}
+
+/**
+ * GET /api/salary/no-pay?month=&year=
+ * Returns calculated no-pay days and amount per employee for the given month.
+ * Used so the salary page always shows no_pay from DB (approved nopay leave count).
+ */
+export const getNoPayForPeriod = async (req, res) => {
+  try {
+    const month = req.query.month != null ? Number(req.query.month) : null;
+    const year = req.query.year != null ? Number(req.query.year) : null;
+    if (month == null || year == null || Number.isNaN(month) || Number.isNaN(year)) {
+      return res.status(400).json({ success: false, message: "month and year are required" });
+    }
+    const noPayDaysMap = await getNoPayDaysByEmployeeForMonth(month, year);
+    const employees = await Employee.find().select("_id role basic_salary").lean();
+    const data = employees.map((emp) => {
+      const employeeId = String(emp._id);
+      const noPayDays = noPayDaysMap.get(employeeId) || 0;
+      const basicSalary = Number(emp.basic_salary) || 0;
+      const role = (emp.role || "").toLowerCase();
+      const divisor = role === "intern" ? 30 : 24;
+      const noPayAmount = noPayDays > 0 ? (basicSalary / divisor) * noPayDays : 0;
+      return {
+        employeeId,
+        no_pay_days: noPayDays,
+        no_pay: Math.round(noPayAmount * 100) / 100,
+      };
+    });
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Get no-pay for period error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load no-pay data" });
+  }
+};
+
+/**
  * GET /api/salary/employees
  * List employees with basic_salary for the salary page (admin/hr/account).
+ * Query: month, year (optional). When provided, includes no_pay_days and no_pay (calculated:
+ * no_pay = (basic_salary / divisor) * no_pay_days, divisor = 30 for intern, 24 otherwise).
  */
 export const getEmployeesForSalary = async (req, res) => {
   try {
@@ -65,6 +132,29 @@ export const getEmployeesForSalary = async (req, res) => {
       .populate("department", "dep_name");
 
     const withUser = employees.filter((emp) => emp.userId);
+    const month = req.query.month != null ? Number(req.query.month) : null;
+    const year = req.query.year != null ? Number(req.query.year) : null;
+
+    if (month != null && year != null && !Number.isNaN(month) && !Number.isNaN(year)) {
+      const noPayDaysMap = await getNoPayDaysByEmployeeForMonth(month, year);
+      const employeesWithNoPay = withUser.map((emp) => {
+        const empId = String(emp._id);
+        const noPayDays = noPayDaysMap.get(empId) || 0;
+        const basicSalary = Number(emp.basic_salary) || 0;
+        const role = (emp.role || "").toLowerCase();
+        const divisor = role === "intern" ? 30 : 24;
+        const noPayAmount = noPayDays > 0 ? (basicSalary / divisor) * noPayDays : 0;
+        return {
+          ...emp.toObject ? emp.toObject() : emp,
+          no_pay_days: noPayDays,
+          no_pay: Math.round(noPayAmount * 100) / 100,
+        };
+      });
+      return res.status(200).json({
+        success: true,
+        employees: employeesWithNoPay,
+      });
+    }
 
     return res.status(200).json({
       success: true,

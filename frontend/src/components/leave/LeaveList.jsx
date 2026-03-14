@@ -58,7 +58,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
   const calculateDaysTaken = () => {
     const taken = { casual: 0, annual: 0, sick: 0 };
     leaves.forEach((leave) => {
-      if (leave.status === "Approved" && leave.leaveType in taken) {
+      if (leave.status === "Approved" && leave.leaveType in taken && leave.leaveType !== "nopay") {
         taken[leave.leaveType] += leave.totalDays;
       }
     });
@@ -72,6 +72,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
       casual: "Casual Leave",
       annual: "Annual Leave",
       sick: "Sick Leave",
+      nopay: "No Pay",
     };
     return map[type] || type;
   };

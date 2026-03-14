@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { jsPDF } from "jspdf";
 import { FaMoneyBillWave, FaFileInvoiceDollar, FaListUl, FaCheck, FaTimes, FaSave, FaPiggyBank, FaUsers, FaFilePdf } from "react-icons/fa";
-import PayslipView, { downloadPayslipPdf } from "./PayslipView.jsx";
+import PayslipView from "./PayslipView.jsx";
 import ContributionModal from "./ContributionModal.jsx";
 import AllContributionsModal from "./AllContributionsModal.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
@@ -27,7 +27,8 @@ const defaultRow = (emp) => ({
   holiday_payment: 0,
   allowance_ns: 0,
   bonus: 0,
-  no_pay: 0,
+  no_pay: Number(emp.no_pay) ?? 0,
+  no_pay_days: emp.no_pay_days != null ? emp.no_pay_days : 0,
   salary_advance: 0,
   stamp_duty: 0,
   mobile_deduction: 0,
@@ -53,14 +54,14 @@ function computeRow(row) {
   const salaryAdvance = Number(row.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
-  const grossSalary = basic + totalAllowances - noPay;
-  // EPF/ETF base: basic + fixed allowances only (exclude bonus)
+  const grossSalary = basic + totalAllowances;
+  // EPF/ETF base: basic + fixed allowances only (exclude bonus, after no-pay)
   const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
   const employeeEpfPayment = (totalForEpf * 8) / 100;
   const employerEpfPayment = (totalForEpf * 12) / 100;
   const etfPayment = (totalForEpf * 3) / 100;
   const totalServiceCharges = stampDuty + mobileDed;
-  const totalDeduction = employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
+  const totalDeduction = noPay + employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
   const netPay = grossSalary - totalDeduction;
 
   return {
@@ -132,7 +133,8 @@ const SalaryPage = () => {
         holiday_payment: entry.holiday_payment ?? 0,
         allowance_ns: entry.allowance_ns ?? 0,
         bonus: entry.bonus ?? 0,
-        no_pay: entry.no_pay ?? 0,
+        // Keep no_pay from row (calculated from DB nopay leave count); do not overwrite with saved entry
+        no_pay: row.no_pay ?? 0,
         // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
         stamp_duty: entry.stamp_duty ?? 0,
         mobile_deduction: entry.mobile_deduction ?? 0,
@@ -148,7 +150,9 @@ const SalaryPage = () => {
       setError("");
       let res;
       try {
+        const { month: m, year: y } = monthYearRef.current;
         res = await axios.get(`${API_BASE}/salary/employees`, {
+          params: { month: m, year: y },
           headers: getAuthHeader(),
         });
       } catch (salaryErr) {
@@ -164,6 +168,20 @@ const SalaryPage = () => {
         const employees = res.data.employees;
         employeesRef.current = employees;
         setRows(employees.map((emp) => defaultRow(emp)));
+        // Fetch no-pay from DB (approved nopay leave count) and merge into rows so no pay field is never zero by mistake
+        const { month: m, year: y } = monthYearRef.current;
+        axios.get(`${API_BASE}/salary/no-pay`, { params: { month: m, year: y }, headers: getAuthHeader() })
+          .then((noPayRes) => {
+            if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
+              const byId = {};
+              noPayRes.data.data.forEach((o) => { byId[o.employeeId] = { no_pay: o.no_pay, no_pay_days: o.no_pay_days }; });
+              setRows((prev) => prev.map((r) => {
+                const np = byId[r._id] || byId[String(r._id)];
+                return np ? { ...r, no_pay: np.no_pay, no_pay_days: np.no_pay_days } : r;
+              }));
+            }
+          })
+          .catch(() => {});
         // Pre-fill salary advance from accepted advance requests
         try {
           const advRes = await axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() });
@@ -174,9 +192,8 @@ const SalaryPage = () => {
           }
         } catch (_) { /* ignore */ }
         // Load current month run so saved salary details show on first load (rows already set above)
-        const { month: m, year: y } = monthYearRef.current;
-        const currentMonth = Number(m);
-        const currentYear = Number(y);
+        const currentMonth = Number(monthYearRef.current.month);
+        const currentYear = Number(monthYearRef.current.year);
         try {
           const runRes = await axios.get(`${API_BASE}/salary/runs`, {
             params: { month: currentMonth, year: currentYear },
@@ -215,6 +232,7 @@ const SalaryPage = () => {
     const prev = prevPeriodRef.current;
     const periodChanged = prev.month !== null && (prev.month !== currentMonth || prev.year !== currentYear);
     prevPeriodRef.current = { month: currentMonth, year: currentYear };
+    let cancelled = false;
 
     // Only clear, reset rows, and fetch run when user actually changes period (not on first load)
     if (periodChanged) {
@@ -222,10 +240,38 @@ const SalaryPage = () => {
       setSavedForPeriod(null);
       setPayslipSignature(null);
       if (employeesRef.current?.length) {
-        setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+        axios.get(`${API_BASE}/salary/employees`, {
+          params: { month: currentMonth, year: currentYear },
+          headers: getAuthHeader(),
+        }).then((res) => {
+          if (cancelled) return;
+          if (res.data?.success && res.data.employees?.length) {
+            employeesRef.current = res.data.employees;
+            setRows(res.data.employees.map((emp) => defaultRow(emp)));
+          } else {
+            setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+          }
+          // Merge no-pay from DB for selected period
+          axios.get(`${API_BASE}/salary/no-pay`, { params: { month: currentMonth, year: currentYear }, headers: getAuthHeader() })
+            .then((noPayRes) => {
+              if (cancelled) return;
+              if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
+                const byId = {};
+                noPayRes.data.data.forEach((o) => { byId[o.employeeId] = { no_pay: o.no_pay, no_pay_days: o.no_pay_days }; });
+                setRows((prev) => prev.map((r) => {
+                  const np = byId[r._id] || byId[String(r._id)];
+                  return np ? { ...r, no_pay: np.no_pay, no_pay_days: np.no_pay_days } : r;
+                }));
+              }
+            })
+            .catch(() => {});
+        }).catch(() => {
+          if (!cancelled && employeesRef.current?.length) {
+            setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+          }
+        });
       }
     }
-    let cancelled = false;
     if (periodChanged) {
       axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() }).then((advRes) => {
         if (cancelled) return;
@@ -942,14 +988,6 @@ const SalaryPage = () => {
                           <FaSave /> {savingEmployeeId === row._id ? "Saving…" : "Save"}
                         </button>
                         <button
-                          onClick={() => downloadPayslipPdf(row.employee, computed, month, year, monthNames[month - 1])}
-                          disabled={row.approvalStatus !== APPROVAL.APPROVED}
-                          title={row.approvalStatus !== APPROVAL.APPROVED ? "Approve first to download PDF" : "Download payslip as PDF"}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm rounded-xl font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <FaFilePdf /> PDF
-                        </button>
-                        <button
                           onClick={() => openPayslip(row)}
                           disabled={row.approvalStatus !== APPROVAL.APPROVED}
                           title={row.approvalStatus !== APPROVAL.APPROVED ? "Approve first to get payslip" : ""}
@@ -1014,7 +1052,7 @@ const SalaryPage = () => {
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="1" value={row.no_pay} onChange={(e) => updateRow(idx, "no_pay", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                                <input type="number" min="0" step="0.01" readOnly value={row.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated from no-pay days (read-only)" />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">PAYE</span>
@@ -1022,7 +1060,7 @@ const SalaryPage = () => {
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Salary Advance</span>
-                                <input type="number" min="0" step="1" value={row.salary_advance} onChange={(e) => updateRow(idx, "salary_advance", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                                <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="From approved advance requests (read-only)" />
                               </label>
                             </div>
                           </div>

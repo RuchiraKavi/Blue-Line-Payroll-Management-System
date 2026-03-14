@@ -89,17 +89,18 @@ const RequestLeave = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Check if leave type has balance
-    const selectedLeaveBalance = leaveBalance[leave.leaveType] || 0;
-    
     if (!leave.leaveType) {
       setError("Please select a leave type");
       return;
     }
 
-    if (selectedLeaveBalance <= 0) {
-      setError(`You do not have remaining balance for ${leave.leaveType} leave`);
-      return;
+    // nopay has no balance check; paid types require balance
+    if (leave.leaveType !== "nopay") {
+      const selectedLeaveBalance = leaveBalance[leave.leaveType] || 0;
+      if (selectedLeaveBalance <= 0) {
+        setError(`You do not have remaining balance for ${leave.leaveType} leave`);
+        return;
+      }
     }
 
     if (leave.startDate < today) {
@@ -204,30 +205,32 @@ const RequestLeave = () => {
 
                 <option
                   value="casual"
-                  disabled={leaveBalance.casual === 0}
+                  disabled={(leaveBalance.casual ?? 0) === 0}
                 >
                   Casual Leave ({leaveBalance.casual ?? 0} days left)
-                  {leaveBalance.casual === 0 && " - No Balance"}
+                  {(leaveBalance.casual ?? 0) === 0 && " - No Balance"}
                 </option>
 
                 <option
                   value="annual"
-                  disabled={leaveBalance.annual === 0}
+                  disabled={(leaveBalance.annual ?? 0) === 0}
                 >
                   Annual Leave ({leaveBalance.annual ?? 0} days left)
-                  {leaveBalance.annual === 0 && " - No Balance"}
+                  {(leaveBalance.annual ?? 0) === 0 && " - No Balance"}
                 </option>
 
                 <option
                   value="sick"
-                  disabled={leaveBalance.sick === 0}
+                  disabled={(leaveBalance.sick ?? 0) === 0}
                 >
                   Sick Leave ({leaveBalance.sick ?? 0} days left)
-                  {leaveBalance.sick === 0 && " - No Balance"}
+                  {(leaveBalance.sick ?? 0) === 0 && " - No Balance"}
                 </option>
+
+                <option value="nopay">No Pay</option>
               </select>
 
-              {leave.leaveType && leaveBalance[leave.leaveType] === 0 && (
+              {leave.leaveType && leave.leaveType !== "nopay" && (leaveBalance[leave.leaveType] ?? 0) === 0 && (
                 <p className="text-sm text-red-600 mt-2 font-medium">
                   ⚠️ No remaining balance for {leave.leaveType} leave
                 </p>
@@ -284,23 +287,24 @@ const RequestLeave = () => {
             </div>
 
             {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading || (Object.values(leaveBalance).every(val => val === 0))}
-              className={`w-full font-medium py-2 rounded-lg transition ${
-                loading || (Object.values(leaveBalance).every(val => val === 0))
-                  ? "bg-gray-400 text-white cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              {loading ? "Submitting..." : "Request Leave"}
-            </button>
-
-            {Object.values(leaveBalance).every(val => val === 0) && (
-              <p className="text-center text-red-600 font-medium text-sm">
-                ❌ You have no leave balance to request
-              </p>
-            )}
+            {(() => {
+              const canSubmit =
+                leave.leaveType &&
+                (leave.leaveType === "nopay" || (leaveBalance[leave.leaveType] ?? 0) > 0);
+              return (
+                <button
+                  type="submit"
+                  disabled={loading || !canSubmit}
+                  className={`w-full font-medium py-2 rounded-lg transition ${
+                    loading || !canSubmit
+                      ? "bg-gray-400 text-white cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {loading ? "Submitting..." : "Request Leave"}
+                </button>
+              );
+            })()}
           </form>
         </>
       )}

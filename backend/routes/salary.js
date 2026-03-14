@@ -3,6 +3,7 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/roleMiddleware.js";
 import {
   getEmployeesForSalary,
+  getNoPayForPeriod,
   calculateSalary,
   saveSalaryRun,
   saveOneSalaryEntry,
@@ -26,6 +27,13 @@ router.get(
   authMiddleware,
   authorizeRoles(...salaryRoles),
   getEmployeesForSalary
+);
+
+router.get(
+  "/no-pay",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  getNoPayForPeriod
 );
 
 router.post(
