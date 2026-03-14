@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FaHandHoldingUsd, FaCheck, FaTimes } from "react-icons/fa";
+import { FaHandHoldingUsd, FaCheck, FaTimes, FaUndo } from "react-icons/fa";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -66,6 +66,7 @@ const AdvanceRequestList = () => {
   const statusBadge = (status) => {
     if (status === "Approved") return "bg-green-100 text-green-700";
     if (status === "Rejected") return "bg-red-100 text-red-700";
+    if (status === "Revoked") return "bg-gray-100 text-gray-700";
     return "bg-amber-100 text-amber-800";
   };
 
@@ -156,6 +157,17 @@ const AdvanceRequestList = () => {
                               <FaTimes /> Reject
                             </button>
                           </div>
+                        )}
+                        {r.status === "Approved" && (
+                          <button
+                            type="button"
+                            onClick={() => updateStatus(r._id, "Revoked")}
+                            disabled={updatingId === r._id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white text-xs rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                            title="Revoke this approved advance"
+                          >
+                            <FaUndo /> Revoke
+                          </button>
                         )}
                       </td>
                     </tr>

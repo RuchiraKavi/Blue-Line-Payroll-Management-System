@@ -47,6 +47,12 @@ const attendanceSchema = new Schema(
       default: "Present",
     },
 
+    // Optional columns from CSV (shown when "extra columns" is enabled)
+    holidays: { type: Number, default: null },
+    dayOff: { type: Number, default: null },
+    leave: { type: Number, default: null },
+    noPay: { type: Number, default: null },
+
     // 🧾 Optional: who uploaded the attendance
     uploadedBy: {
       type: Schema.Types.ObjectId,

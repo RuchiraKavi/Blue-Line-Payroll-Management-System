@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { FaMoneyBillWave, FaFileInvoiceDollar, FaListUl, FaCheck, FaTimes, FaSave, FaPiggyBank, FaUsers } from "react-icons/fa";
-import PayslipView from "./PayslipView.jsx";
+import { jsPDF } from "jspdf";
+import { FaMoneyBillWave, FaFileInvoiceDollar, FaListUl, FaCheck, FaTimes, FaSave, FaPiggyBank, FaUsers, FaFilePdf } from "react-icons/fa";
+import PayslipView, { downloadPayslipPdf } from "./PayslipView.jsx";
 import ContributionModal from "./ContributionModal.jsx";
 import AllContributionsModal from "./AllContributionsModal.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
@@ -91,6 +92,11 @@ const SalaryPage = () => {
   const [showAllContributions, setShowAllContributions] = useState(false);
   const [error, setError] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [summarySearch, setSummarySearch] = useState("");
+  const [summaryDepartment, setSummaryDepartment] = useState("");
+  const [summaryMonth, setSummaryMonth] = useState(month);
+  const [summaryYear, setSummaryYear] = useState(year);
+  const [summaryRun, setSummaryRun] = useState(null); // { month, year, run } when viewing summary for a different period
   const [saving, setSaving] = useState(false);
   const [savedForPeriod, setSavedForPeriod] = useState(null); // { month, year } when run exists for that period
   const [runForPeriod, setRunForPeriod] = useState(null); // { month, year, run } to merge saved data into rows
@@ -98,6 +104,9 @@ const SalaryPage = () => {
   const [payslipSignature, setPayslipSignature] = useState(null); // data URL; required to enable Save All Salaries
   const [savingSignature, setSavingSignature] = useState(false);
   const employeesRef = useRef([]); // base employee list to reset rows when month/year changes
+  const prevPeriodRef = useRef({ month: null, year: null }); // so we only reset rows when period actually changes, not on first load
+  const monthYearRef = useRef({ month, year }); // current period for use inside fetchEmployees
+  monthYearRef.current = { month, year };
 
   /** Match run entry to row by employee id. */
   const entryMatchesRow = (entry, row) => {
@@ -124,7 +133,7 @@ const SalaryPage = () => {
         allowance_ns: entry.allowance_ns ?? 0,
         bonus: entry.bonus ?? 0,
         no_pay: entry.no_pay ?? 0,
-        salary_advance: entry.salary_advance ?? 0,
+        // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
         stamp_duty: entry.stamp_duty ?? 0,
         mobile_deduction: entry.mobile_deduction ?? 0,
         paye: entry.paye ?? 0,
@@ -155,6 +164,31 @@ const SalaryPage = () => {
         const employees = res.data.employees;
         employeesRef.current = employees;
         setRows(employees.map((emp) => defaultRow(emp)));
+        // Pre-fill salary advance from accepted advance requests
+        try {
+          const advRes = await axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() });
+          if (advRes.data?.success && Array.isArray(advRes.data.totals)) {
+            const map = {};
+            advRes.data.totals.forEach((t) => { map[t.employeeId] = Number(t.totalAmount) || 0; });
+            setRows((prev) => prev.map((r) => ({ ...r, salary_advance: map[r._id] ?? r.salary_advance })));
+          }
+        } catch (_) { /* ignore */ }
+        // Load current month run so saved salary details show on first load (rows already set above)
+        const { month: m, year: y } = monthYearRef.current;
+        const currentMonth = Number(m);
+        const currentYear = Number(y);
+        try {
+          const runRes = await axios.get(`${API_BASE}/salary/runs`, {
+            params: { month: currentMonth, year: currentYear },
+            headers: getAuthHeader(),
+          });
+          const run = runRes.data?.run;
+          if (runRes.data?.success && run && Number(run.month) === currentMonth && Number(run.year) === currentYear) {
+            setSavedForPeriod({ month: currentMonth, year: currentYear });
+            setRunForPeriod({ month: currentMonth, year: currentYear, run });
+            setPayslipSignature(run.signature_data_url ?? null);
+          }
+        } catch (_) { /* ignore */ }
       } else {
         employeesRef.current = [];
         setRows([]);
@@ -178,21 +212,40 @@ const SalaryPage = () => {
   useEffect(() => {
     const currentMonth = Number(month);
     const currentYear = Number(year);
-    // Clear previous run immediately so we never merge another month's data
-    setRunForPeriod(null);
-    setSavedForPeriod(null);
-    setPayslipSignature(null);
-    // Reset rows to employee defaults so we don't show previous month's data
-    if (employeesRef.current?.length) {
-      setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+    const prev = prevPeriodRef.current;
+    const periodChanged = prev.month !== null && (prev.month !== currentMonth || prev.year !== currentYear);
+    prevPeriodRef.current = { month: currentMonth, year: currentYear };
+
+    // Only clear, reset rows, and fetch run when user actually changes period (not on first load)
+    if (periodChanged) {
+      setRunForPeriod(null);
+      setSavedForPeriod(null);
+      setPayslipSignature(null);
+      if (employeesRef.current?.length) {
+        setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+      }
     }
     let cancelled = false;
+    if (periodChanged) {
+      axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() }).then((advRes) => {
+        if (cancelled) return;
+        if (advRes.data?.success && Array.isArray(advRes.data.totals)) {
+          const map = {};
+          advRes.data.totals.forEach((t) => { map[t.employeeId] = Number(t.totalAmount) || 0; });
+          setRows((prevRows) => prevRows.map((r) => ({ ...r, salary_advance: map[r._id] ?? r.salary_advance })));
+        }
+      }).catch(() => {});
+    }
+    // On first load we don't fetch run here (fetchEmployees does it after rows are set). When period changes we fetch.
+    if (!periodChanged) {
+      return () => { cancelled = true; };
+    }
     axios
       .get(`${API_BASE}/salary/runs`, { params: { month: currentMonth, year: currentYear }, headers: getAuthHeader() })
       .then((res) => {
         if (cancelled) return;
         const run = res.data?.run;
-        if (res.data?.success && run && run.month === currentMonth && run.year === currentYear) {
+        if (res.data?.success && run && Number(run.month) === currentMonth && Number(run.year) === currentYear) {
           setSavedForPeriod({ month: currentMonth, year: currentYear });
           setRunForPeriod({ month: currentMonth, year: currentYear, run });
           setPayslipSignature(run.signature_data_url ?? null);
@@ -216,12 +269,53 @@ const SalaryPage = () => {
   useEffect(() => {
     const currentMonth = Number(month);
     const currentYear = Number(year);
-    if (!runForPeriod?.run || runForPeriod.month !== currentMonth || runForPeriod.year !== currentYear) return;
+    if (!runForPeriod?.run || Number(runForPeriod.month) !== currentMonth || Number(runForPeriod.year) !== currentYear) return;
     setRows((prev) => {
       if (!prev.length) return prev;
       return mergeRunIntoRows(prev, runForPeriod.run);
     });
   }, [runForPeriod, month, year, rows.length]);
+
+  // Always apply total approved salary advance per employee so each card shows and uses it in calculations (every month)
+  useEffect(() => {
+    if (rows.length === 0) return;
+    let cancelled = false;
+    axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() }).then((res) => {
+      if (cancelled) return;
+      if (res.data?.success && Array.isArray(res.data.totals)) {
+        const map = {};
+        res.data.totals.forEach((t) => { map[t.employeeId] = Number(t.totalAmount) || 0; });
+        setRows((prev) => prev.map((r) => ({ ...r, salary_advance: map[r._id] ?? r.salary_advance })));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [month, year, rows.length, runForPeriod]);
+
+  // When summary is shown for a different period, fetch that run for the paysheet table
+  useEffect(() => {
+    const sm = Number(summaryMonth);
+    const sy = Number(summaryYear);
+    const samePeriod = sm === Number(month) && sy === Number(year);
+    if (samePeriod || !showSummary) {
+      setSummaryRun(null);
+      return;
+    }
+    let cancelled = false;
+    axios.get(`${API_BASE}/salary/runs`, { params: { month: sm, year: sy }, headers: getAuthHeader() })
+      .then((res) => {
+        if (cancelled) return;
+        const run = res.data?.run;
+        if (res.data?.success && run && Number(run.month) === sm && Number(run.year) === sy) {
+          setSummaryRun({ month: sm, year: sy, run });
+        } else {
+          setSummaryRun({ month: sm, year: sy, run: null });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSummaryRun({ month: sm, year: sy, run: null });
+      });
+    return () => { cancelled = true; };
+  }, [showSummary, summaryMonth, summaryYear, month, year]);
 
   const updateRow = (idx, field, value) => {
     setRows((prev) => {
@@ -271,6 +365,86 @@ const SalaryPage = () => {
     const computed = computeRow(row);
     setPayslipData(computed);
     setPayslipEmployee(row.employee);
+  };
+
+  /** Get amounts for a summary row (full row → computeRow; entry-like row → use stored amounts). */
+  const getSummaryAmounts = (row) => {
+    if (row.gross_salary != null && row.total_deduction != null && row.net_pay != null) {
+      return { gross_salary: row.gross_salary, total_deduction: row.total_deduction, net_pay: row.net_pay };
+    }
+    return computeRow(row);
+  };
+
+  /** Download salary summary as PDF; uses provided rows (filtered or all approved). */
+  const downloadSummaryPdf = (filteredRows, approvedRows, periodMonth, periodYear, monthNamesArr) => {
+    if (filteredRows.length === 0) return;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 12;
+    let y = 14;
+    doc.setFontSize(14);
+    doc.setTextColor(30, 64, 175);
+    doc.text("Salary Summary", pageW / 2, y, { align: "center" });
+    y += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    const periodLabel = `${monthNamesArr[periodMonth - 1]} ${periodYear}`;
+    doc.text(periodLabel, pageW / 2, y, { align: "center" });
+    if (filteredRows.length < approvedRows.length) {
+      y += 5;
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Filtered: ${filteredRows.length} of ${approvedRows.length} employees`, pageW / 2, y, { align: "center" });
+    }
+    y += 10;
+    const totalTableW = pageW - 2 * margin;
+    const colEmployee = totalTableW * 0.32;
+    const colDept = totalTableW * 0.18;
+    const colGross = totalTableW * 0.15;
+    const colDed = totalTableW * 0.15;
+    const colNet = totalTableW * 0.2;
+    const rowH = 7;
+    doc.setFillColor(240, 247, 255);
+    doc.rect(margin, y, totalTableW, rowH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("Employee", margin + 2, y + 4.5);
+    doc.text("Department", margin + colEmployee + 2, y + 4.5);
+    doc.text("Gross Salary", margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
+    doc.text("Total Deduction", margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+    doc.text("Net Pay", margin + totalTableW - 2, y + 4.5, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    y += rowH;
+    filteredRows.forEach((row) => {
+      if (y + rowH > doc.internal.pageSize.getHeight() - 18) {
+        doc.addPage("landscape");
+        y = 14;
+      }
+      const c = getSummaryAmounts(row);
+      doc.setFontSize(8);
+      doc.text((row.name || "—").slice(0, 28), margin + 2, y + 4.5);
+      doc.text((row.department || "—").slice(0, 14), margin + colEmployee + 2, y + 4.5);
+      doc.text(Number(c.gross_salary).toFixed(2), margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
+      doc.text(Number(c.total_deduction).toFixed(2), margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+      doc.text(Number(c.net_pay).toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
+      y += rowH;
+    });
+    y += 2;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, y, margin + totalTableW, y);
+    y += rowH;
+    const totGross = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).gross_salary), 0);
+    const totDed = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).total_deduction), 0);
+    const totNet = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).net_pay), 0);
+    doc.setFont("helvetica", "bold");
+    doc.text(filteredRows.length < approvedRows.length ? `Total (${filteredRows.length} shown)` : "Total", margin + 2, y + 4.5);
+    doc.text(totGross.toFixed(2), margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
+    doc.text(totDed.toFixed(2), margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+    doc.setTextColor(21, 128, 61);
+    doc.text(totNet.toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    const safeName = `Salary_Summary_${periodLabel.replace(/\s+/g, "_")}${filteredRows.length < approvedRows.length ? `_${filteredRows.length}_of_${approvedRows.length}` : ""}.pdf`;
+    doc.save(safeName);
   };
 
   const closePayslip = () => {
@@ -528,7 +702,29 @@ const SalaryPage = () => {
           </p>
 
           {showSummary && rows.length > 0 && (() => {
-            const approvedRows = rows.filter((r) => r.approvalStatus === APPROVAL.APPROVED);
+            const isSummaryCurrentPeriod = summaryMonth === month && summaryYear === year;
+            const summaryLoading = !isSummaryCurrentPeriod && (!summaryRun || summaryRun.month !== summaryMonth || summaryRun.year !== summaryYear);
+            const approvedRows = isSummaryCurrentPeriod
+              ? rows.filter((r) => r.approvalStatus === APPROVAL.APPROVED)
+              : (summaryRun?.run?.entries || [])
+                  .filter((e) => e.approval_status === "approved")
+                  .map((e) => ({
+                    _id: e.employee,
+                    name: e.name,
+                    employee_id: e.employee_id,
+                    department: e.department,
+                    gross_salary: e.gross_salary,
+                    total_deduction: e.total_deduction,
+                    net_pay: e.net_pay,
+                  }));
+            const searchLower = (summarySearch || "").trim().toLowerCase();
+            const departments = [...new Set(approvedRows.map((r) => r.department).filter(Boolean))].sort();
+            const filteredRows = approvedRows.filter((r) => {
+              const matchSearch = !searchLower || (r.name || "").toLowerCase().includes(searchLower) || (r.employee_id || "").toLowerCase().includes(searchLower) || (r.department || "").toLowerCase().includes(searchLower);
+              const matchDept = !summaryDepartment || (r.department || "") === summaryDepartment;
+              return matchSearch && matchDept;
+            });
+            const totalRowsLabel = isSummaryCurrentPeriod ? rows.length : (summaryRun?.run?.entries?.length ?? 0);
             return (
               <div className="mb-8 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                 <div className="px-8 py-6 border-b border-gray-200 bg-gray-50">
@@ -536,7 +732,69 @@ const SalaryPage = () => {
                     <FaListUl className="text-blue-600" />
                     Salary Summary
                   </h3>
-                  <p className="text-sm text-gray-600 mt-1">{monthNames[month - 1]} {year} — Only approved employees ({approvedRows.length} of {rows.length})</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {monthNames[summaryMonth - 1]} {summaryYear} — Only approved employees ({approvedRows.length} of {totalRowsLabel})
+                    {!isSummaryCurrentPeriod && " (other period)"}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-medium text-gray-700">Month:</span>
+                    <select
+                      value={summaryMonth}
+                      onChange={(e) => setSummaryMonth(Number(e.target.value))}
+                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
+                    >
+                      {monthNames.map((m, i) => (
+                        <option key={i} value={i + 1}>{m}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm font-medium text-gray-700">Year:</span>
+                    <select
+                      value={summaryYear}
+                      onChange={(e) => setSummaryYear(Number(e.target.value))}
+                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
+                    >
+                      {[year, year + 1, year - 1, year - 2].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Search by name, ID or department..."
+                      value={summarySearch}
+                      onChange={(e) => setSummarySearch(e.target.value)}
+                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm min-w-[200px]"
+                    />
+                    <select
+                      value={summaryDepartment}
+                      onChange={(e) => setSummaryDepartment(e.target.value)}
+                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
+                    >
+                      <option value="">All departments</option>
+                      {departments.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    {(summarySearch || summaryDepartment) && (
+                      <button
+                        type="button"
+                        onClick={() => { setSummarySearch(""); setSummaryDepartment(""); }}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                    <span className="text-sm text-gray-500">
+                      Showing {filteredRows.length} of {approvedRows.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => downloadSummaryPdf(filteredRows, approvedRows, summaryMonth, summaryYear, monthNames)}
+                      disabled={filteredRows.length === 0 || summaryLoading}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-xl font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <FaFilePdf /> Get Paysheet
+                    </button>
+                  </div>
                 </div>
                 <div className="p-8 overflow-x-auto">
                   <div className="rounded-xl border border-gray-200 overflow-hidden">
@@ -548,54 +806,52 @@ const SalaryPage = () => {
                           <th className="px-6 py-4 text-right font-semibold">Gross Salary</th>
                           <th className="px-6 py-4 text-right font-semibold">Total Deduction</th>
                           <th className="px-6 py-4 text-right font-semibold">Net Pay</th>
-                          <th className="px-6 py-4 text-center font-semibold">Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {approvedRows.length === 0 ? (
+                        {summaryLoading ? (
                           <tr>
-                            <td colSpan={6} className="px-6 py-12 text-center text-gray-500">No approved employees. Approve salary entries below to include them in the summary.</td>
+                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                              Loading {monthNames[summaryMonth - 1]} {summaryYear}…
+                            </td>
+                          </tr>
+                        ) : filteredRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                              {approvedRows.length === 0 ? (!isSummaryCurrentPeriod ? `No saved run for ${monthNames[summaryMonth - 1]} ${summaryYear}.` : "Approve salary entries below to include them in the summary.") : "No employees match the filter."}
+                            </td>
                           </tr>
                         ) : (
-                          approvedRows.map((row) => {
-                            const c = computeRow(row);
+                          filteredRows.map((row) => {
+                            const c = getSummaryAmounts(row);
                             return (
-                              <tr key={row._id} className="border-t border-gray-100 hover:bg-blue-50 transition-colors duration-150">
+                              <tr key={row._id || row.employee} className="border-t border-gray-100 hover:bg-blue-50 transition-colors duration-150">
                                 <td className="px-6 py-4">
                                   <div className="font-semibold text-gray-900">{row.name}</div>
-                                  <div className="text-xs text-gray-500">{row.employee_id} · {row.designation}</div>
+                                  <div className="text-xs text-gray-500">{row.employee_id}{row.designation ? ` · ${row.designation}` : ""}</div>
                                 </td>
                                 <td className="px-6 py-4 text-gray-700">{row.department}</td>
-                                <td className="px-6 py-4 text-right font-medium">{c.gross_salary.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right">{c.total_deduction.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right font-semibold text-green-700">{c.net_pay.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-center">
-                                  <button
-                                    onClick={() => openPayslip(row)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded-xl font-medium hover:bg-blue-700 transition-colors"
-                                  >
-                                    <FaFileInvoiceDollar /> Payslip
-                                  </button>
-                                </td>
+                                <td className="px-6 py-4 text-right font-medium">{Number(c.gross_salary).toFixed(2)}</td>
+                                <td className="px-6 py-4 text-right">{Number(c.total_deduction).toFixed(2)}</td>
+                                <td className="px-6 py-4 text-right font-semibold text-green-700">{Number(c.net_pay).toFixed(2)}</td>
                               </tr>
                             );
                           })
                         )}
                       </tbody>
-                      {approvedRows.length > 0 && (
+                      {!summaryLoading && filteredRows.length > 0 && (
                         <tfoot>
                           <tr className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-200">
-                            <td className="px-6 py-4" colSpan={2}>Total</td>
+                            <td className="px-6 py-4" colSpan={2}>Total{filteredRows.length < approvedRows.length ? ` (${filteredRows.length} shown)` : ""}</td>
                             <td className="px-6 py-4 text-right">
-                              {approvedRows.reduce((sum, r) => sum + computeRow(r).gross_salary, 0).toFixed(2)}
+                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).gross_salary), 0).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 text-right">
-                              {approvedRows.reduce((sum, r) => sum + computeRow(r).total_deduction, 0).toFixed(2)}
+                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).total_deduction), 0).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 text-right text-green-700">
-                              {approvedRows.reduce((sum, r) => sum + computeRow(r).net_pay, 0).toFixed(2)}
+                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).net_pay), 0).toFixed(2)}
                             </td>
-                            <td className="px-6 py-4" />
                           </tr>
                         </tfoot>
                       )}
@@ -686,6 +942,14 @@ const SalaryPage = () => {
                           <FaSave /> {savingEmployeeId === row._id ? "Saving…" : "Save"}
                         </button>
                         <button
+                          onClick={() => downloadPayslipPdf(row.employee, computed, month, year, monthNames[month - 1])}
+                          disabled={row.approvalStatus !== APPROVAL.APPROVED}
+                          title={row.approvalStatus !== APPROVAL.APPROVED ? "Approve first to download PDF" : "Download payslip as PDF"}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm rounded-xl font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <FaFilePdf /> PDF
+                        </button>
+                        <button
                           onClick={() => openPayslip(row)}
                           disabled={row.approvalStatus !== APPROVAL.APPROVED}
                           title={row.approvalStatus !== APPROVAL.APPROVED ? "Approve first to get payslip" : ""}
@@ -698,7 +962,7 @@ const SalaryPage = () => {
 
                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto items-stretch">
                       <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1">
-                        <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Allowances</h3>
+                        <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Earnings</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Basic Salary</span>
@@ -764,7 +1028,7 @@ const SalaryPage = () => {
                           </div>
 
                           <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
-                            <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">EPF (Sri Lanka)</h4>
+                            <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">EPF & ETF Payment</h4>
                             <div className="space-y-2 text-sm">
                               <div className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Earnings base (excl. bonus)</span>
@@ -797,7 +1061,7 @@ const SalaryPage = () => {
                           <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">Summary</h4>
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-700">Total Allowances</span>
+                              <span className="text-gray-700">Total Earnings</span>
                               <span className="font-semibold">{totalAllow.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-2 border-t border-emerald-200">

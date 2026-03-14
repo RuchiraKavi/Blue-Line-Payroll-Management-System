@@ -13,6 +13,16 @@ const RequestAdvance = () => {
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [basicSalary, setBasicSalary] = useState(null);
+
+  const fetchMyProfile = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/employees/me/profile`, { headers: getAuthHeader() });
+      if (res.data?.success && res.data?.employee?.basic_salary != null) {
+        setBasicSalary(Number(res.data.employee.basic_salary) || 0);
+      }
+    } catch (_) {}
+  };
 
   const fetchMyRequests = async () => {
     try {
@@ -32,6 +42,7 @@ const RequestAdvance = () => {
   };
 
   useEffect(() => {
+    fetchMyProfile();
     fetchMyRequests();
   }, []);
 
@@ -40,6 +51,11 @@ const RequestAdvance = () => {
     const num = Number(amount);
     if (!Number.isFinite(num) || num <= 0) {
       setError("Please enter a valid amount");
+      return;
+    }
+    const maxAllowed = basicSalary != null ? Number(basicSalary) : null;
+    if (maxAllowed != null && num > maxAllowed) {
+      setError(`Advance cannot exceed your basic salary (Rs. ${maxAllowed.toLocaleString()})`);
       return;
     }
     setError("");
@@ -70,6 +86,7 @@ const RequestAdvance = () => {
   const statusClass = (status) => {
     if (status === "Approved") return "bg-green-100 text-green-700";
     if (status === "Rejected") return "bg-red-100 text-red-700";
+    if (status === "Revoked") return "bg-gray-100 text-gray-700";
     return "bg-amber-100 text-amber-800";
   };
 
@@ -112,10 +129,14 @@ const RequestAdvance = () => {
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Rs.) <span className="text-red-500">*</span></label>
+              {basicSalary != null && basicSalary > 0 && (
+                <p className="text-xs text-gray-500 mb-1">Maximum: Rs. {basicSalary.toLocaleString()} (your basic salary)</p>
+              )}
               <input
                 type="number"
                 min="1"
                 step="1"
+                max={basicSalary != null && basicSalary > 0 ? basicSalary : undefined}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500"

@@ -6,6 +6,7 @@ import {
   getMyAdvanceRequests,
   getAdvanceRequests,
   updateAdvanceStatus,
+  getAcceptedTotals,
 } from "../controllers/advanceController.js";
 
 const router = express.Router();
@@ -18,6 +19,12 @@ router.get(
   authMiddleware,
   authorizeRoles("admin", "hr", "account", "accountant", "account_manager"),
   getAdvanceRequests
+);
+router.get(
+  "/accepted-totals",
+  authMiddleware,
+  authorizeRoles("admin", "hr", "account", "accountant", "account_manager"),
+  getAcceptedTotals
 );
 router.put(
   "/:id/status",

@@ -6,6 +6,17 @@ import { FaHistory, FaTimes, FaUser } from "react-icons/fa";
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
+/** Parse workingHours string to decimal hours: "8.5" → 8.5, "8:30" → 8.5 */
+function parseWorkingHours(value) {
+  if (value == null || value === "") return 0;
+  const s = String(value).trim();
+  if (s.includes(":")) {
+    const [h, m] = s.split(":");
+    return (parseFloat(h) || 0) + (parseFloat(m) || 0) / 60;
+  }
+  return parseFloat(s) || 0;
+}
+
 const AttendanceList = () => {
   const [file, setFile] = useState(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -23,6 +34,7 @@ const AttendanceList = () => {
   const [historyTo, setHistoryTo] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [historyMonthFilter, setHistoryMonthFilter] = useState("all");
+  const [showExtraColumns, setShowExtraColumns] = useState(false);
 
   /* =========================
      Fetch Attendance (MEMOIZED)
@@ -178,7 +190,7 @@ const AttendanceList = () => {
       if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0 };
       if (r.status === "Present") {
         byMonth[key].workedDays += 1;
-        byMonth[key].totalHours += parseFloat(r.workingHours) || 0;
+        byMonth[key].totalHours += parseWorkingHours(r.workingHours);
       }
     });
     return Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month));
@@ -419,6 +431,9 @@ const AttendanceList = () => {
                   {file.name}
                 </p>
               )}
+              <p className="mt-1.5 text-xs text-gray-500">
+                CSV columns: employee_id, date, employee_name, inTime, outTime, workingHc status, Holidays, Day off, Leave, No Pay
+              </p>
             </div>
 
           </div>
@@ -440,6 +455,15 @@ const AttendanceList = () => {
                 <div className="text-sm text-gray-600">
                   Showing <span className="font-semibold text-gray-900">{attendance.length}</span> attendance records
                 </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showExtraColumns}
+                    onChange={(e) => setShowExtraColumns(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Show extra columns (Holidays, Day off, Leave, No Pay)</span>
+                </label>
               </div>
 
               <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
@@ -454,6 +478,14 @@ const AttendanceList = () => {
                       <th className="px-6 py-4 text-left font-semibold">Out Time</th>
                       <th className="px-6 py-4 text-left font-semibold">Hours</th>
                       <th className="px-6 py-4 text-center font-semibold">Status</th>
+                      {showExtraColumns && (
+                        <>
+                          <th className="px-6 py-4 text-right font-semibold">Holidays</th>
+                          <th className="px-6 py-4 text-right font-semibold">Day off</th>
+                          <th className="px-6 py-4 text-right font-semibold">Leave</th>
+                          <th className="px-6 py-4 text-right font-semibold">No Pay</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -482,11 +514,19 @@ const AttendanceList = () => {
                                 : "Present"}
                             </span>
                           </td>
+                          {showExtraColumns && (
+                            <>
+                              <td className="px-6 py-4 text-right text-gray-600">{a.holidays != null ? a.holidays : 0}</td>
+                              <td className="px-6 py-4 text-right text-gray-600">{a.dayOff != null ? a.dayOff : 0}</td>
+                              <td className="px-6 py-4 text-right text-gray-600">{a.leave != null ? a.leave : 0}</td>
+                              <td className="px-6 py-4 text-right text-gray-600">{a.noPay != null ? a.noPay : 0}</td>
+                            </>
+                          )}
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="8" className="px-6 py-20 text-center">
+                        <td colSpan={showExtraColumns ? 12 : 8} className="px-6 py-20 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <svg className="w-24 h-24 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -648,7 +688,7 @@ const AttendanceList = () => {
                 </div>
               ) : (
                 <>
-                  {/* Summary by month: total working hours & worked days */}
+                  {/* Summary by month: total working hours & worked days (parsed from workingHours e.g. "8:30" → 8.5) */}
                   {monthlySummary.length > 0 && (
                     <div className="mb-6">
                       <h4 className="text-sm font-bold text-gray-800 mb-2">Summary by month</h4>
@@ -668,10 +708,21 @@ const AttendanceList = () => {
                                   {new Date(row.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                                 </td>
                                 <td className="px-4 py-2 text-right">{row.workedDays}</td>
-                                <td className="px-4 py-2 text-right">{row.totalHours.toFixed(1)}</td>
+                                <td className="px-4 py-2 text-right">{(Number(row.totalHours) || 0).toFixed(1)}</td>
                               </tr>
                             ))}
                           </tbody>
+                          <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                            <tr className="font-bold text-gray-900">
+                              <td className="px-4 py-2">Total</td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (row.workedDays || 0), 0)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (Number(row.totalHours) || 0), 0).toFixed(1)}
+                              </td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     </div>
@@ -715,12 +766,20 @@ const AttendanceList = () => {
                           <th className="px-4 py-3 text-left font-semibold">Out Time</th>
                           <th className="px-4 py-3 text-left font-semibold">Hours</th>
                           <th className="px-4 py-3 text-center font-semibold">Status</th>
+                          {showExtraColumns && (
+                            <>
+                              <th className="px-4 py-3 text-right font-semibold">Holidays</th>
+                              <th className="px-4 py-3 text-right font-semibold">Day off</th>
+                              <th className="px-4 py-3 text-right font-semibold">Leave</th>
+                              <th className="px-4 py-3 text-right font-semibold">No Pay</th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
                         {filteredRecords.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan={showExtraColumns ? 9 : 5} className="px-4 py-8 text-center text-gray-500">
                               No records match the filter
                             </td>
                           </tr>
@@ -736,6 +795,14 @@ const AttendanceList = () => {
                                   {r.status || "—"}
                                 </span>
                               </td>
+                              {showExtraColumns && (
+                                <>
+                                  <td className="px-4 py-2 text-right">{r.holidays != null ? r.holidays : 0}</td>
+                                  <td className="px-4 py-2 text-right">{r.dayOff != null ? r.dayOff : 0}</td>
+                                  <td className="px-4 py-2 text-right">{r.leave != null ? r.leave : 0}</td>
+                                  <td className="px-4 py-2 text-right">{r.noPay != null ? r.noPay : 0}</td>
+                                </>
+                              )}
                             </tr>
                           ))
                         )}

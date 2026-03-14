@@ -28,8 +28,8 @@ const uploadAttendanceCSV = async (req, res) => {
     let skippedCount = 0;
 
     for (const row of records) {
-      // 🔑 CSV columns (support both formats)
-      // employee_id or employeeId | employee_name or name | date | inTime | outTime | workingHours | status
+      // 🔑 CSV columns: employee_id | date | employee_name | inTime | outTime | workingHc status | Holidays | Day off | Leave | No Pay
+      // workingHc status = working hours status (maps to workingHours and/or status)
 
       const empId = row.employee_id || row.employeeId;
       const empName = row.employee_name || row.name;
@@ -71,18 +71,38 @@ const uploadAttendanceCSV = async (req, res) => {
         continue;
       }
 
+      // workingHc status = "working hours status" column (may contain hours or status text)
+      const workingHcStatus = row["workingHc status"] != null ? String(row["workingHc status"]).trim() : null;
+      const workingHours = row.workingHours ?? workingHcStatus ?? null;
+      const statusRaw = (row.status ?? workingHcStatus ?? "").toString().toLowerCase();
+      const dayOffVal = row["Day off"];
+      const leaveVal = row.Leave;
+      const isDayOff = dayOffVal !== undefined && dayOffVal !== null && dayOffVal !== "" && String(dayOffVal).toLowerCase() !== "0";
+      const isOnLeave = leaveVal !== undefined && leaveVal !== null && leaveVal !== "" && String(leaveVal).toLowerCase() !== "0";
       const isAbsent =
-        row.status?.toLowerCase() === "day off" ||
-        row.status?.toLowerCase() === "absent";
+        statusRaw === "day off" ||
+        statusRaw === "absent" ||
+        isDayOff ||
+        isOnLeave;
+
+      const num = (v) => (v !== undefined && v !== null && v !== "" ? Number(v) : null);
+      const holidaysVal = num(row.Holidays);
+      const dayOffNum = num(row["Day off"]);
+      const leaveNum = num(row.Leave);
+      const noPayNum = num(row["No Pay"]);
 
       await Attendance.create({
         employee: employee._id,
         employee_id: employee.employee_id,
         date,
-        inTime: isAbsent ? null : row.inTime,
-        outTime: isAbsent ? null : row.outTime,
-        workingHours: isAbsent ? null : row.workingHours,
+        inTime: isAbsent ? null : (row.inTime ?? null),
+        outTime: isAbsent ? null : (row.outTime ?? null),
+        workingHours: isAbsent ? null : workingHours,
         status: isAbsent ? "Absent" : "Present",
+        holidays: holidaysVal,
+        dayOff: dayOffNum,
+        leave: leaveNum,
+        noPay: noPayNum,
       });
 
       insertedCount++;
@@ -136,6 +156,10 @@ const getAttendanceByDate = async (req, res) => {
       outTime: record.outTime,
       workingHours: record.workingHours,
       status: record.status,
+      holidays: record.holidays,
+      dayOff: record.dayOff,
+      leave: record.leave,
+      noPay: record.noPay,
     }));
 
     res.json({
@@ -221,14 +245,36 @@ const getAttendanceSummary = async (req, res) => {
     from.setHours(0, 0, 0, 0);
     to.setHours(23, 59, 59, 999);
 
+    // Parse workingHours to numeric: supports "8.5", "8", "8:30" (H:MM), "08:30" (HH:MM)
     const summary = await Attendance.aggregate([
       { $match: { date: { $gte: from, $lte: to } } },
+      {
+        $addFields: {
+          hoursValue: {
+            $cond: {
+              if: {
+                $and: [
+                  { $eq: [{ $type: "$workingHours" }, "string"] },
+                  { $gte: [{ $size: { $split: [{ $ifNull: ["$workingHours", ""] }, ":"] } }, 2] },
+                ],
+              },
+              then: {
+                $add: [
+                  { $convert: { input: { $arrayElemAt: [{ $split: ["$workingHours", ":"] }, 0] }, to: "double", onError: 0, onNull: 0 } },
+                  { $divide: [{ $convert: { input: { $arrayElemAt: [{ $split: ["$workingHours", ":"] }, 1] }, to: "double", onError: 0, onNull: 0 } }, 60] },
+                ],
+              },
+              else: { $convert: { input: { $ifNull: ["$workingHours", "0"] }, to: "double", onError: 0, onNull: 0 } },
+            },
+          },
+        },
+      },
       {
         $group: {
           _id: "$employee",
           workedDays: { $sum: { $cond: [{ $eq: ["$status", "Present"] }, 1, 0] } },
           absentDays: { $sum: { $cond: [{ $eq: ["$status", "Absent"] }, 1, 0] } },
-          totalHours: { $sum: { $convert: { input: { $ifNull: ["$workingHours", "0"] }, to: "double", onError: 0, onNull: 0 } } },
+          totalHours: { $sum: "$hoursValue" },
         },
       },
       { $project: { employeeId: "$_id", workedDays: 1, absentDays: 1, totalHours: { $round: ["$totalHours", 1] } } },

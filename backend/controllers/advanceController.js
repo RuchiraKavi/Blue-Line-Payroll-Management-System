@@ -23,6 +23,13 @@ export const requestAdvance = async (req, res) => {
         message: "Valid amount is required",
       });
     }
+    const basicSalary = Number(employee.basic_salary) || 0;
+    if (numAmount > basicSalary) {
+      return res.status(400).json({
+        success: false,
+        message: `Advance amount cannot exceed your basic salary (Rs. ${basicSalary.toLocaleString()})`,
+      });
+    }
 
     const doc = new AdvanceRequest({
       employeeId: employee._id,
@@ -107,10 +114,10 @@ export const updateAdvanceStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, remarks } = req.body;
-    if (!["Approved", "Rejected"].includes(status)) {
+    if (!["Approved", "Rejected", "Revoked"].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Status must be Approved or Rejected",
+        message: "Status must be Approved, Rejected, or Revoked",
       });
     }
 
@@ -121,6 +128,24 @@ export const updateAdvanceStatus = async (req, res) => {
         message: "Advance request not found",
       });
     }
+
+    if (status === "Revoked") {
+      if (doc.status !== "Approved") {
+        return res.status(400).json({
+          success: false,
+          message: "Only approved advances can be revoked",
+        });
+      }
+      doc.status = "Revoked";
+      doc.remarks = remarks != null ? String(remarks).trim() : doc.remarks;
+      await doc.save();
+      return res.status(200).json({
+        success: true,
+        message: "Advance revoked successfully",
+        request: doc,
+      });
+    }
+
     if (doc.status !== "Pending") {
       return res.status(400).json({
         success: false,
@@ -143,6 +168,33 @@ export const updateAdvanceStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update advance request",
+    });
+  }
+};
+
+/**
+ * GET /api/advance/accepted-totals
+ * Returns sum of approved advance amounts per employee (for salary page to pre-fill salary advance).
+ */
+export const getAcceptedTotals = async (req, res) => {
+  try {
+    const totals = await AdvanceRequest.aggregate([
+      { $match: { status: "Approved" } },
+      { $group: { _id: "$employeeId", totalAmount: { $sum: "$amount" } } },
+    ]);
+    const list = totals.map((t) => ({
+      employeeId: t._id?.toString?.() ?? t._id,
+      totalAmount: Number(t.totalAmount) || 0,
+    }));
+    return res.status(200).json({
+      success: true,
+      totals: list,
+    });
+  } catch (error) {
+    console.error("Get accepted totals error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get accepted advance totals",
     });
   }
 };
