@@ -431,9 +431,6 @@ const AttendanceList = () => {
                   {file.name}
                 </p>
               )}
-              <p className="mt-1.5 text-xs text-gray-500">
-                CSV columns: employee_id, date, employee_name, inTime, outTime, workingHc status, Holidays, Day off, Leave, No Pay
-              </p>
             </div>
 
           </div>

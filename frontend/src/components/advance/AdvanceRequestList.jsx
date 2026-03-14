@@ -131,8 +131,8 @@ const AdvanceRequestList = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        {r.status === "Pending" && (
-                          <div className="flex flex-wrap items-center gap-2 justify-center">
+                        <div className="flex flex-wrap items-center gap-2 justify-center">
+                          {r.status === "Pending" && (
                             <input
                               type="text"
                               placeholder="Remarks (optional)"
@@ -140,35 +140,35 @@ const AdvanceRequestList = () => {
                               onChange={(e) => setRemarks((prev) => ({ ...prev, [r._id]: e.target.value }))}
                               className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-28"
                             />
-                            <button
-                              type="button"
-                              onClick={() => updateStatus(r._id, "Approved")}
-                              disabled={updatingId === r._id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50"
-                            >
-                              <FaCheck /> Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => updateStatus(r._id, "Rejected")}
-                              disabled={updatingId === r._id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50"
-                            >
-                              <FaTimes /> Reject
-                            </button>
-                          </div>
-                        )}
-                        {r.status === "Approved" && (
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => updateStatus(r._id, "Approved")}
+                            disabled={updatingId === r._id || r.status !== "Pending"}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={r.status !== "Pending" ? "Already processed" : "Approve"}
+                          >
+                            <FaCheck /> Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateStatus(r._id, "Rejected")}
+                            disabled={updatingId === r._id || r.status !== "Pending"}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={r.status !== "Pending" ? "Already processed" : "Reject"}
+                          >
+                            <FaTimes /> Reject
+                          </button>
                           <button
                             type="button"
                             onClick={() => updateStatus(r._id, "Revoked")}
-                            disabled={updatingId === r._id}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white text-xs rounded-lg hover:bg-gray-700 disabled:opacity-50"
-                            title="Revoke this approved advance"
+                            disabled={updatingId === r._id || r.status !== "Approved"}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white text-xs rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={r.status === "Approved" ? "Revoke this advance" : "Only approved advances can be revoked"}
                           >
                             <FaUndo /> Revoke
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
