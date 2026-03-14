@@ -11,12 +11,58 @@ function payslipPdfAmounts(data) {
   return { epfPayslipAmount, totalDeductionPayslip, netPayPayslip };
 }
 
-/** Export: generate and download payslip PDF for an employee (e.g. from Salary Summary). */
-export function downloadPayslipPdf(employee, data, month, year, monthName) {
+const CELL_PAD = 2;
+
+/** Draw a 2-column table. options.rowHeight overrides default. Returns y after table. */
+function pdfTable(doc, y, left, width, rows, options = {}) {
+  const { headerFill = null, totalFill = [248, 250, 252], labelColumnFill = null, border = [229, 231, 235], rowHeight = 5 } = options;
+  const col2 = left + width;
+  const labelW = width * 0.35;
+  const valueW = width * 0.65;
+  doc.setDrawColor(...border);
+  doc.setLineWidth(0.2);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const isHeader = row.header;
+    const isTotal = row.bold && row.totalRow;
+    const useLabelBg = row.labelBg && labelColumnFill;
+    let fill = null;
+    if (isHeader && headerFill) fill = headerFill;
+    else if (isTotal && totalFill) fill = totalFill;
+    else if (useLabelBg) fill = labelColumnFill;
+    if (fill && (isHeader || isTotal)) {
+      doc.setFillColor(...fill);
+      doc.rect(left, y, labelW, rowHeight, "F");
+      doc.rect(left + labelW, y, valueW, rowHeight, "F");
+    } else if (useLabelBg) {
+      doc.setFillColor(...labelColumnFill);
+      doc.rect(left, y, labelW, rowHeight, "F");
+    }
+    doc.setFont("helvetica", row.bold ? "bold" : "normal");
+    doc.setFontSize(row.fontSize || 8);
+    doc.setTextColor(...(row.color || [0, 0, 0]));
+    doc.text(String(row.label || ""), left + CELL_PAD, y + rowHeight - 1.5);
+    if (row.value !== undefined) doc.text(String(row.value), col2 - CELL_PAD, y + rowHeight - 1.5, { align: "right" });
+    doc.rect(left, y, width, rowHeight);
+    y += rowHeight;
+  }
+  return y;
+}
+
+/** Export: generate and download payslip PDF — single page, scaled to fit A4. */
+export function downloadPayslipPdf(employee, data, month, year, monthName, signatureDataUrl = null, signatureDate = null) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  let y = 14;
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const tableWidth = pageW - margin * 2;
+  const usableH = pageH - margin * 2; // A4 height 297mm
+  // Scale so entire payslip fits on one page with small bottom margin
+  const totalLogicalH = margin + 22 + (6+5+4*6+5) + (6+5+9*6+5) + (6+5+6*6+5) + (6+5+4*6+5) + (6+6+6+5) + (5+5+5+4) + (6+5+5+3+10);
+  const v = Math.min(1, (usableH * 0.97) / totalLogicalH);
+  const rowH = 6 * v;
+  const gap = (x) => x * v;
+  let y = margin;
   const { epfPayslipAmount, totalDeductionPayslip, netPayPayslip } = payslipPdfAmounts(data);
   const empName = employee?.userId?.name || data?.name || "N/A";
   const empId = employee?.employee_id || data?.employee_id || "—";
@@ -26,60 +72,202 @@ export function downloadPayslipPdf(employee, data, month, year, monthName) {
   const bankBranch = employee?.bank_details?.bank_branch || "—";
   const bankAcc = employee?.bank_details?.bank_account_number || "—";
 
-  doc.setFontSize(16);
+  const fontTitle = Math.max(7, Math.round(10 * v));
+  const opts = (o) => ({ ...o, rowHeight: rowH });
+
+  // —— Company header ——
+  doc.setFontSize(Math.round(14 * v));
   doc.setTextColor(30, 64, 175);
   doc.text("Blue Line MS", pageW / 2, y, { align: "center" });
-  y += 6;
-  doc.setFontSize(12);
+  y += gap(6);
+  doc.setFontSize(Math.round(11 * v));
   doc.setTextColor(55, 65, 81);
   doc.text("Salary Payslip", pageW / 2, y, { align: "center" });
-  y += 5;
-  doc.setFontSize(10);
+  y += gap(5);
+  doc.setFontSize(9);
+  doc.setTextColor(107, 114, 128);
   doc.text(`${monthName} ${year}`, pageW / 2, y, { align: "center" });
-  y += 10;
+  y += gap(5);
+  doc.setDrawColor(191, 219, 254);
+  doc.setLineWidth(0.35);
+  doc.line(margin, y, pageW - margin, y);
+  y += gap(6);
 
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0);
-  const col1 = margin;
-  const col2 = pageW - margin;
+  // —— Employee Details ——
   doc.setFont("helvetica", "bold");
-  doc.text("Employee Details", margin, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Name: ${empName}`, col1, y); y += 5;
-  doc.text(`Employee ID: ${empId}`, col1, y); y += 5;
-  doc.text(`Designation: ${designation}`, col1, y); y += 5;
-  doc.text(`Department: ${department}`, col1, y); y += 8;
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(31, 41, 55);
+  doc.text("Employee Details", margin, y);
+  y += gap(6);
+  y = pdfTable(doc, y, margin, tableWidth, [
+    { label: "Name", value: empName, labelBg: true },
+    { label: "Employee ID", value: empId, labelBg: true },
+    { label: "Designation", value: designation, labelBg: true },
+    { label: "Department", value: department, labelBg: true },
+  ], opts({ labelColumnFill: [249, 250, 251] }));
+  y += gap(5);
 
+  // —— Earnings ——
   doc.setFont("helvetica", "bold");
-  doc.text("Earnings", margin, y); y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Basic Salary: ${n(data.basic_salary)}`, col1, y); doc.text(n(data.basic_salary), col2, y, { align: "right" }); y += 5;
-  doc.text(`Gross Salary: ${n(data.gross_salary)}`, col1, y); doc.text(n(data.gross_salary), col2, y, { align: "right" }); y += 8;
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(146, 64, 14);
+  doc.text("Earnings", margin, y);
+  y += gap(6);
+  y = pdfTable(doc, y, margin, tableWidth, [
+    { label: "Description", value: "Amount (Rs.)", header: true },
+    { label: "Basic Salary", value: n(data.basic_salary) },
+    { label: "Travel Allowance", value: n(data.travel_allowance) },
+    { label: "Food Allowance", value: n(data.food_allowance) },
+    { label: "Holiday Payment", value: n(data.holiday_payment) },
+    { label: "Allowance-NS", value: n(data.allowance_ns) },
+    { label: "Bonus", value: n(data.bonus) },
+    { label: "Total Earnings", value: n(data.total_allowances), bold: true, totalRow: true },
+    { label: "Gross Salary", value: n(data.gross_salary), bold: true, totalRow: true },
+  ], opts({ headerFill: [239, 246, 255] }));
+  y += gap(5);
 
+  // —— Deductions ——
   doc.setFont("helvetica", "bold");
-  doc.text("Deductions", margin, y); y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Employee EPF (8%): ${n(epfPayslipAmount)}`, col1, y); doc.text(n(epfPayslipAmount), col2, y, { align: "right" }); y += 5;
-  doc.text(`Salary Advance: ${n(data.salary_advance)}`, col1, y); doc.text(n(data.salary_advance), col2, y, { align: "right" }); y += 5;
-  doc.text(`Total Deduction: ${n(totalDeductionPayslip)}`, col1, y); doc.text(n(totalDeductionPayslip), col2, y, { align: "right" }); y += 8;
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(51, 65, 85);
+  doc.text("Deductions", margin, y);
+  y += gap(6);
+  y = pdfTable(doc, y, margin, tableWidth, [
+    { label: "Description", value: "Amount (Rs.)", header: true },
+    { label: "Stamp Duty", value: n(data.stamp_duty) },
+    { label: "Mobile Deduction", value: n(data.mobile_deduction) },
+    { label: "No Pay", value: n(data.no_pay) },
+    { label: "PAYE", value: n(data.paye) },
+    { label: "Salary Advance", value: n(data.salary_advance) },
+  ], opts({ headerFill: [239, 246, 255] }));
+  y += gap(5);
 
+  // —— EPF & ETF ——
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(30, 64, 175);
+  doc.text("EPF & ETF", margin, y);
+  y += gap(6);
+  y = pdfTable(doc, y, margin, tableWidth, [
+    { label: "Earnings base (for EPF/ETF)", value: n(data.total_for_epf) },
+    { label: "Employee EPF (8%)", value: n(epfPayslipAmount), bold: true },
+    { label: "Employer EPF (12%)", value: n(data.employer_epf_payment) },
+    { label: "Employer ETF (3%)", value: n(data.etf_payment) },
+  ], opts());
+  y += gap(5);
+
+  // —— Total Deduction & Net Pay ——
+  y = pdfTable(doc, y, margin, tableWidth, [
+    { label: "Total Deduction", value: n(totalDeductionPayslip), bold: true, totalRow: true },
+  ], opts());
+  doc.setFillColor(240, 253, 244);
+  doc.rect(margin, y, tableWidth * 0.35, rowH, "F");
+  doc.rect(margin + tableWidth * 0.35, y, tableWidth * 0.65, rowH, "F");
+  doc.setDrawColor(187, 247, 208);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, tableWidth, rowH);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(Math.round(11 * v));
   doc.setTextColor(21, 128, 61);
-  doc.text(`Net Pay: Rs. ${n(netPayPayslip)}`, col1, y); doc.text(`Rs. ${n(netPayPayslip)}`, col2, y, { align: "right" }); y += 10;
+  doc.text("Net Pay", margin + CELL_PAD, y + rowH - 1.5);
+  doc.text(`Rs. ${n(netPayPayslip)}`, margin + tableWidth - CELL_PAD, y + rowH - 1.5, { align: "right" });
+  y += rowH + gap(6);
 
+  // —— Bank Details ——
+  doc.setDrawColor(229, 231, 235);
+  doc.line(margin, y, pageW - margin, y);
+  y += gap(5);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(31, 41, 55);
+  doc.text("Bank Details (for credit)", margin, y);
+  y += gap(5);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(75, 85, 99);
+  doc.text(`Bank: ${bankName} | Branch: ${bankBranch} | Account: ${bankAcc}`, margin, y);
+
+  // —— Authorized by ——
+  const authTopBorderY = y + gap(6);
+  doc.setDrawColor(229, 231, 235);
+  doc.setLineWidth(0.3);
+  doc.line(margin, authTopBorderY, pageW - margin, authTopBorderY);
+  y = authTopBorderY + gap(5);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(fontTitle);
+  doc.setTextColor(31, 41, 55);
+  doc.text("Authorized by", margin, y);
+  y += gap(5);
+  const sigLabelY = y;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(107, 114, 128);
+  doc.text("Accountant Signature", margin, sigLabelY);
+  doc.text("Date", margin + tableWidth * 0.5, sigLabelY);
+  y += gap(3);
+  const sigBoxW = 40;
+  const sigBoxH = 10 * v;
+  const dateX = margin + tableWidth * 0.5;
+  const dateBoxW = 30;
+  const sigY = y;
+
+  const dateStr = (signatureDate != null && String(signatureDate).trim() !== "")
+    ? String(signatureDate)
+    : new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+  doc.setDrawColor(209, 213, 219);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, sigY, sigBoxW, sigBoxH);
+  doc.rect(dateX, sigY, dateBoxW, sigBoxH);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
-  doc.text(`Bank: ${bankName} | Branch: ${bankBranch} | Account: ${bankAcc}`, margin, y);
+  doc.text(dateStr, dateX + 2, sigY + sigBoxH / 2 + 1.5);
+
   const safeName = `${String(empName).replace(/[^a-zA-Z0-9-_]/g, "_")}_Payslip_${monthName}_${year}.pdf`;
-  doc.save(safeName);
+
+  const addSignatureAndSave = () => {
+    if (signatureDataUrl && typeof signatureDataUrl === "string" && signatureDataUrl.startsWith("data:image")) {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          // Draw image to canvas and get PNG data URL so jsPDF gets a consistent format
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL("image/png");
+            doc.addImage(dataUrl, "PNG", margin, sigY, sigBoxW, sigBoxH);
+          } else {
+            doc.addImage(img, "PNG", margin, sigY, sigBoxW, sigBoxH);
+          }
+        } catch (_) {
+          try {
+            doc.addImage(signatureDataUrl, /image\/png/i.test(signatureDataUrl) ? "PNG" : "JPEG", margin, sigY, sigBoxW, sigBoxH);
+          } catch (_) {}
+        }
+        doc.save(safeName);
+      };
+      img.onerror = () => doc.save(safeName);
+      img.src = signatureDataUrl;
+    } else {
+      doc.save(safeName);
+    }
+  };
+
+  addSignatureAndSave();
 }
 
 const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, onSavePayslip = null, savingPayslip = false }) => {
   const printRef = useRef(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState(initialSignature ?? null);
   const [signatureDate] = useState(() => new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
+  const pdfSignatureRef = useRef({ signatureDataUrl: null, signatureDate: null });
+  pdfSignatureRef.current = { signatureDataUrl, signatureDate };
 
   const handleSignatureFile = (e) => {
     const file = e.target.files?.[0];
@@ -191,7 +379,10 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
               </>
             )}
             <button
-              onClick={() => downloadPayslipPdf(employee, data, month, year, monthName)}
+              onClick={() => {
+                const { signatureDataUrl: sig, signatureDate: dt } = pdfSignatureRef.current;
+                downloadPayslipPdf(employee, data, month, year, monthName, sig, dt);
+              }}
               className="inline-flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors text-sm"
             >
               <FaFilePdf className="shrink-0" /> Download PDF
@@ -267,7 +458,6 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                 <tbody>
                   <tr><td className={tableCell}>Stamp Duty</td><td className={`${tableCell} text-right`}>{n(data.stamp_duty)}</td></tr>
                   <tr><td className={tableCell}>Mobile Deduction</td><td className={`${tableCell} text-right`}>{n(data.mobile_deduction)}</td></tr>
-                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Deductions</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_service_charges)}</td></tr>
                   <tr><td className={tableCell}>No Pay</td><td className={`${tableCell} text-right`}>{n(data.no_pay)}</td></tr>
                   <tr><td className={tableCell}>PAYE</td><td className={`${tableCell} text-right`}>{n(data.paye)}</td></tr>
                   <tr><td className={tableCell}>Salary Advance</td><td className={`${tableCell} text-right`}>{n(data.salary_advance)}</td></tr>
