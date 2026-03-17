@@ -8,6 +8,7 @@ import {
   saveSalaryRun,
   saveOneSalaryEntry,
   savePayslipSignature,
+  unfinalizeSalaryRun,
   getPayslip,
   getSalaryRuns,
   getContributionHistory,
@@ -62,6 +63,13 @@ router.post(
   authMiddleware,
   authorizeRoles(...salaryRoles),
   savePayslipSignature
+);
+
+router.post(
+  "/unfinalize",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  unfinalizeSalaryRun
 );
 
 router.get(

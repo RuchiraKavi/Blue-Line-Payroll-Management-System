@@ -30,6 +30,8 @@ const payslipEntrySchema = new Schema(
     total_deduction: { type: Number, default: 0 },
     net_pay: { type: Number, default: 0 },
     approval_status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+    signature_data_url: { type: String, default: null },
+    signature_date: { type: String, default: null },
     bank_details: {
       bank_name: String,
       bank_branch: String,
@@ -45,6 +47,8 @@ const salaryRunSchema = new mongoose.Schema(
     year: { type: Number, required: true },
     entries: [payslipEntrySchema],
     signature_data_url: { type: String, default: null },
+    signature_date: { type: String, default: null },
+    finalized: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -262,10 +262,10 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   addSignatureAndSave();
 }
 
-const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, onSavePayslip = null, savingPayslip = false }) => {
+const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, initialSignatureDate = null, onSavePayslip = null, savingPayslip = false }) => {
   const printRef = useRef(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState(initialSignature ?? null);
-  const [signatureDate] = useState(() => new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
+  const [signatureDate] = useState(() => (initialSignatureDate && String(initialSignatureDate).trim()) ? String(initialSignatureDate).trim() : new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
   const pdfSignatureRef = useRef({ signatureDataUrl: null, signatureDate: null });
   pdfSignatureRef.current = { signatureDataUrl, signatureDate };
 

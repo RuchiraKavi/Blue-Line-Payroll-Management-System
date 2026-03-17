@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Employee from "../models/Employee.js";
 import SalaryRun from "../models/SalaryRun.js";
 import Leave from "../models/Leave.js";
@@ -333,14 +334,14 @@ export const saveSalaryRun = async (req, res) => {
 
     const run = await SalaryRun.findOneAndUpdate(
       { month, year },
-      { month, year, entries: storedEntries },
+      { month, year, entries: storedEntries, finalized: true },
       { new: true, upsert: true }
-    );
+    ).lean();
 
     return res.status(200).json({
       success: true,
       message: "Salary run saved",
-      run: { _id: run._id, month: run.month, year: run.year, entriesCount: run.entries.length },
+      run: { _id: run._id, month: run.month, year: run.year, entriesCount: run.entries.length, finalized: run.finalized },
     });
   } catch (error) {
     console.error("Save salary run error:", error);
@@ -441,31 +442,46 @@ epf_percent: 8,
           }
         : undefined,
     };
-    const run = await SalaryRun.findOne({ month, year });
+    const sigUrl =
+      typeof entry.signature_data_url === "string" && entry.signature_data_url.length > 0
+        ? entry.signature_data_url
+        : null;
+    const sigDate =
+      typeof entry.signature_date === "string" ? (entry.signature_date.trim() || null) : null;
+
+    const m = Number(month);
+    const y = Number(year);
     const employeeIdStr = String(employee._id);
-    if (!run) {
-      const created = await SalaryRun.create({ month, year, entries: [newEntry] });
-      return res.status(200).json({
+    const employeeObjectId = employee._id instanceof mongoose.Types.ObjectId ? employee._id : new mongoose.Types.ObjectId(employeeIdStr);
+
+    let existingRun = await SalaryRun.findOne({ month: m, year: y }).lean();
+    const existingEntry = existingRun?.entries?.find((e) => entryEmployeeIdString(e) === employeeIdStr);
+    newEntry.signature_data_url = sigUrl ?? existingEntry?.signature_data_url ?? null;
+    newEntry.signature_date = sigDate ?? existingEntry?.signature_date ?? null;
+
+    const successResponse = (run) =>
+      res.status(200).json({
         success: true,
         message: "Salary entry saved",
-        run: { _id: created._id, month: created.month, year: created.year, entriesCount: 1 },
+        run: { _id: run._id, month: run.month, year: run.year, entriesCount: (run.entries && run.entries.length) || 0 },
       });
-    }
-    const entries = run.entries || [];
-    const idx = entries.findIndex((e) => entryEmployeeIdString(e) === employeeIdStr);
-    if (idx >= 0) {
-      entries[idx] = newEntry;
-    } else {
-      entries.push(newEntry);
-    }
-    run.entries = entries;
-    run.markModified("entries");
-    await run.save();
-    return res.status(200).json({
-      success: true,
-      message: "Salary entry saved",
-      run: { _id: run._id, month: run.month, year: run.year, entriesCount: run.entries.length },
-    });
+
+    let run = await SalaryRun.findOneAndUpdate(
+      { month: m, year: y, "entries.employee": employeeObjectId },
+      { $set: { "entries.$": newEntry } },
+      { new: true }
+    );
+    if (run) return successResponse(run);
+
+    run = await SalaryRun.findOneAndUpdate(
+      { month: m, year: y },
+      { $push: { entries: newEntry } },
+      { new: true }
+    );
+    if (run) return successResponse(run);
+
+    const created = await SalaryRun.create({ month: m, year: y, entries: [newEntry] });
+    return successResponse(created);
   } catch (error) {
     console.error("Save one salary entry error:", error);
     return res.status(500).json({
@@ -582,12 +598,12 @@ export const getSalaryRuns = async (req, res) => {
 
 /**
  * POST /api/salary/signature
- * Body: { month, year, signature_data_url }
- * Saves payslip signature for the given period (creates run with empty entries if needed).
+ * Body: { month, year, signature_data_url, signature_date }
+ * Saves payslip signature and optional date for the given period (creates run with empty entries if needed).
  */
 export const savePayslipSignature = async (req, res) => {
   try {
-    const { month, year, signature_data_url } = req.body;
+    const { month, year, signature_data_url, signature_date } = req.body;
     const m = month != null ? parseInt(month, 10) : null;
     const y = year != null ? parseInt(year, 10) : null;
     if (m == null || isNaN(m) || m < 1 || m > 12 || y == null || isNaN(y)) {
@@ -597,10 +613,15 @@ export const savePayslipSignature = async (req, res) => {
       typeof signature_data_url === "string" && signature_data_url.length > 0
         ? signature_data_url
         : null;
+    const dateStr =
+      typeof signature_date === "string" ? signature_date.trim() || null : null;
+    const setFields = {};
+    if (signature_data_url !== undefined) setFields.signature_data_url = dataUrl;
+    if (signature_date !== undefined) setFields.signature_date = dateStr;
     const run = await SalaryRun.findOneAndUpdate(
       { month: m, year: y },
       {
-        $set: { signature_data_url: dataUrl },
+        ...(Object.keys(setFields).length > 0 && { $set: setFields }),
         $setOnInsert: { month: m, year: y, entries: [] },
       },
       { upsert: true, new: true }
@@ -609,12 +630,48 @@ export const savePayslipSignature = async (req, res) => {
       success: true,
       message: "Payslip signature saved",
       signature_data_url: run.signature_data_url || null,
+      signature_date: run.signature_date || null,
     });
   } catch (error) {
     console.error("Save payslip signature error:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to save payslip signature",
+    });
+  }
+};
+
+/**
+ * POST /api/salary/unfinalize
+ * Body: { month, year }
+ * Sets finalized: false for the run so the period can be edited again (e.g. after Revoke All).
+ */
+export const unfinalizeSalaryRun = async (req, res) => {
+  try {
+    const { month, year } = req.body;
+    const m = month != null ? parseInt(month, 10) : null;
+    const y = year != null ? parseInt(year, 10) : null;
+    if (m == null || isNaN(m) || m < 1 || m > 12 || y == null || isNaN(y)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+    const run = await SalaryRun.findOneAndUpdate(
+      { month: m, year: y },
+      { $set: { finalized: false } },
+      { new: true }
+    ).lean();
+    if (!run) {
+      return res.status(404).json({ success: false, message: "Salary run not found" });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Run unfinalized; period can be edited again",
+      run: { _id: run._id, month: run.month, year: run.year, finalized: run.finalized },
+    });
+  } catch (error) {
+    console.error("Unfinalize salary run error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to unfinalize",
     });
   }
 };
