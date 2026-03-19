@@ -392,6 +392,69 @@ const updateEmployee = async (req, res) => {
       });
     }
 
+    /* ================= IMAGE HANDLING ================= */
+    let imagePath = employee.image;
+    if (req.file) {
+      imagePath = req.file.filename;
+    }
+
+    /* ================= ROLE-SAFE UPDATE ================= */
+    const callerRole = String(req.user?.role || "").toLowerCase();
+    const callerUserId = req.user?.id ? String(req.user.id) : String(req.user?._id);
+
+    // Employees are allowed to edit: personal info + bank details only (and optional profile image).
+    // They must also be editing their own record.
+    if (callerRole === "employee") {
+      if (String(employee.userId) !== callerUserId) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: you can only edit your own profile",
+        });
+      }
+
+      const updateUser = {};
+      if (typeof name === "string" && name.trim() !== "") updateUser.name = name.trim();
+      if (typeof email === "string" && email.trim() !== "") updateUser.email = email.trim();
+      if (req.file) updateUser.profileImage = imagePath;
+
+      if (Object.keys(updateUser).length > 0) {
+        await User.findByIdAndUpdate(employee.userId, updateUser, { new: true });
+      }
+
+      const updateEmployee = {};
+      if (typeof nic === "string" && nic.trim() !== "") updateEmployee.nic = nic.trim();
+      if (typeof email === "string" && email.trim() !== "") updateEmployee.email = email.trim();
+      if (dob !== undefined) {
+        const parsedDob = new Date(dob);
+        if (Number.isNaN(parsedDob.getTime())) {
+          return res.status(400).json({ success: false, message: "Invalid DOB" });
+        }
+        updateEmployee.dob = parsedDob;
+      }
+      if (typeof gender === "string" && gender.trim() !== "") updateEmployee.gender = gender.trim();
+      if (typeof marital_status === "string" && marital_status.trim() !== "") updateEmployee.marital_status = marital_status.trim();
+
+      const hasAnyBankField =
+        bank_name !== undefined || bank_branch !== undefined || bank_account_number !== undefined;
+      if (hasAnyBankField) {
+        updateEmployee.bank_details = {
+          bank_name: bank_name ?? employee.bank_details?.bank_name,
+          bank_branch: bank_branch ?? employee.bank_details?.bank_branch,
+          bank_account_number: bank_account_number ?? employee.bank_details?.bank_account_number,
+        };
+      }
+
+      if (req.file) updateEmployee.image = imagePath;
+
+      await Employee.findByIdAndUpdate(id, updateEmployee, { new: true });
+
+      return res.status(200).json({
+        success: true,
+        message: "Employee profile updated successfully",
+      });
+    }
+
+    // Admin/HR/etc: keep existing behavior
     /* ================= UPDATE USER ================= */
     await User.findByIdAndUpdate(
       employee.userId,
@@ -402,12 +465,6 @@ const updateEmployee = async (req, res) => {
       },
       { new: true }
     );
-
-    /* ================= IMAGE HANDLING ================= */
-    let imagePath = employee.image;
-    if (req.file) {
-      imagePath = req.file.filename;
-    }
 
     /* ================= UPDATE EMPLOYEE ================= */
     await Employee.findByIdAndUpdate(
@@ -476,6 +533,130 @@ const getMyEmployeeProfile = async (req, res) => {
 
 
 
+/* ================= UPDATE MY EMPLOYEE PROFILE ================= */
+const updateMyEmployeeProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // from auth middleware
+
+    const employee = await Employee.findOne({ userId });
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+
+    const {
+      name,
+      email,
+      nic,
+      dob,
+      gender,
+      marital_status,
+      bank_name,
+      bank_branch,
+      bank_account_number,
+    } = req.body;
+
+    const updateUser = {};
+    if (typeof name === "string") {
+      const v = name.trim();
+      if (!v) return res.status(400).json({ success: false, message: "Name is required" });
+      updateUser.name = v;
+    }
+    if (typeof email === "string") {
+      const v = email.trim();
+      if (!v) return res.status(400).json({ success: false, message: "Email is required" });
+      updateUser.email = v;
+    }
+    if (req.file) {
+      updateUser.profileImage = req.file.filename;
+    }
+
+    const updateEmployee = {};
+    if (typeof nic === "string") {
+      const v = nic.trim();
+      if (!v) return res.status(400).json({ success: false, message: "NIC is required" });
+      updateEmployee.nic = v;
+    }
+
+    if (typeof email === "string") {
+      const v = email.trim();
+      if (!v) return res.status(400).json({ success: false, message: "Email is required" });
+      updateEmployee.email = v;
+    }
+
+    if (dob !== undefined) {
+      const parsedDob = new Date(dob);
+      if (Number.isNaN(parsedDob.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid DOB" });
+      }
+      updateEmployee.dob = parsedDob;
+    }
+
+    if (typeof gender === "string") {
+      const v = gender.trim();
+      if (!v) return res.status(400).json({ success: false, message: "Gender is required" });
+      updateEmployee.gender = v;
+    }
+
+    if (typeof marital_status === "string") {
+      const v = marital_status.trim();
+      if (!v) return res.status(400).json({ success: false, message: "Marital status is required" });
+      updateEmployee.marital_status = v;
+    }
+
+    const hasAnyBankField =
+      bank_name !== undefined || bank_branch !== undefined || bank_account_number !== undefined;
+    if (hasAnyBankField) {
+      if (typeof bank_name === "string" && !bank_name.trim()) {
+        return res.status(400).json({ success: false, message: "Bank name is required" });
+      }
+      if (typeof bank_branch === "string" && !bank_branch.trim()) {
+        return res.status(400).json({ success: false, message: "Bank branch is required" });
+      }
+      if (typeof bank_account_number === "string" && !bank_account_number.trim()) {
+        return res.status(400).json({ success: false, message: "Account number is required" });
+      }
+
+      updateEmployee.bank_details = {
+        bank_name: bank_name ?? employee.bank_details?.bank_name,
+        bank_branch: bank_branch ?? employee.bank_details?.bank_branch,
+        bank_account_number: bank_account_number ?? employee.bank_details?.bank_account_number,
+      };
+    }
+
+    if (req.file) {
+      updateEmployee.image = req.file.filename;
+    }
+
+    if (Object.keys(updateUser).length > 0) {
+      await User.findByIdAndUpdate(userId, updateUser, { new: true });
+    }
+    if (Object.keys(updateEmployee).length > 0) {
+      await Employee.findByIdAndUpdate(employee._id, updateEmployee, { new: true });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Update my employee profile error:", error);
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Email or NIC already exists",
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: "Edit profile server error",
+    });
+  }
+};
+
+
 /* ================= EXPORTS ================= */
 export {
   addEmployee,
@@ -485,5 +666,6 @@ export {
   updateEmployee,
   getLastEmployeeId,
   getMyEmployeeProfile,
+  updateMyEmployeeProfile,
   upload,
 };

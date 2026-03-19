@@ -17,6 +17,7 @@ import EditEmployee from "./components/employees/EditEmployee.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
 import Profile from "./components/employeeDashboard/profile.jsx";
+import EditProfile from "./components/employeeDashboard/editProfile.jsx";
 import LeaveList from "./components/leave/LeaveList.jsx";
 import RequestLeave from "./components/leave/RequestLeave.jsx";
 import RequestAdvance from "./components/advance/RequestAdvance.jsx";
@@ -215,6 +216,7 @@ function App() {
         >
         <Route index element={<EmployeeSummary />} />
         <Route path="/employee-dashboard/profile" element={<Profile />} />
+        <Route path="/employee-dashboard/edit-profile" element={<EditProfile />} />
         <Route path="/employee-dashboard/leave" element={<LeaveList />} />
         <Route path="/employee-dashboard/request-leave" element={<RequestLeave />} />
         <Route path="/employee-dashboard/request-advance" element={<RequestAdvance />} />
