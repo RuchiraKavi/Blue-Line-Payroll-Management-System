@@ -237,7 +237,7 @@ const addEmployee = async (req, res) => {
     /* ---------------- RESPONSE ---------------- */
     res.status(201).json({
       success: true,
-      message: "Employee created with default leave balances",
+      message: "Employee created successfully",
     });
 
   } catch (error) {
@@ -339,7 +339,7 @@ const removeEmployee = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Employee and user deleted successfully",
+      message: "Employee deleted successfully",
     });
   } catch (error) {
     console.error("Delete employee error:", error);

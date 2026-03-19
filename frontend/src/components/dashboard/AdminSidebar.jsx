@@ -9,6 +9,7 @@ import {
   FaMoneyBillWave,
   FaTachometerAlt,
   FaUser,
+  FaFileAlt,
 } from "react-icons/fa";
 
 const AdminSidebar = () => {
@@ -87,7 +88,22 @@ const AdminSidebar = () => {
             }
           >
             <FaCalendar className="text-lg" />
-            <span>Leave</span>
+            <span>Leave Requests</span>
+          </NavLink>
+        )}
+
+        {/* Leave Reports → Admin, HR */}
+        {(role === "admin" || isHR) && (
+          <NavLink
+            to="/admin-dashboard/leaves-report"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
+               hover:bg-gray-800 transition-all 
+               ${isActive ? "bg-gray-800" : ""}`
+            }
+          >
+            <FaFileAlt className="text-lg" />
+            <span>Leave Reports</span>
           </NavLink>
         )}
 
@@ -133,6 +149,21 @@ const AdminSidebar = () => {
           >
             <FaCalendar className="text-lg" />
             <span>Attendance</span>
+          </NavLink>
+        )}
+
+        {/* Attendance Reports → Admin, HR */}
+        {(role === "admin" || isHR) && (
+          <NavLink
+            to="/admin-dashboard/attendance-report"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer 
+               hover:bg-gray-800 transition-all 
+               ${isActive ? "bg-gray-800" : ""}`
+            }
+          >
+            <FaFileAlt className="text-lg" />
+            <span>Attendance Reports</span>
           </NavLink>
         )}
 

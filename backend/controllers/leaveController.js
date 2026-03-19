@@ -381,11 +381,58 @@ const getEmployeeLeaveBalance = async (req, res) => {
 
 /**
  * GET /api/leaves/total-days-by-employee?month=YYYY-MM
- * Returns total approved leave days per employee. Optional month (YYYY-MM) filters to that month.
+ * Returns total approved leave days per employee.
+ * Optional filters:
+ * - month=YYYY-MM: limits to that month (current behavior)
+ * - from=YYYY-MM-DD&to=YYYY-MM-DD: limits to that date range (more accurate overlap days)
  */
 const getTotalLeaveDaysByEmployee = async (req, res) => {
   try {
     const month = req.query.month; // YYYY-MM or empty for all time
+    const fromQ = req.query.from;
+    const toQ = req.query.to;
+
+    const hasFromTo = Boolean(fromQ && toQ);
+    const fromDate = hasFromTo ? new Date(fromQ) : null;
+    const toDate = hasFromTo ? new Date(toQ) : null;
+
+    const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
+
+    if (isValidDate(fromDate) && isValidDate(toDate)) {
+      // Normalize to inclusive date range
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(23, 59, 59, 999);
+
+      const leaves = await Leave.find({
+        status: "Approved",
+        startDate: { $lte: toDate },
+        endDate: { $gte: fromDate },
+      })
+        .select("employeeId startDate endDate")
+        .lean();
+
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const totalsByEmployee = {};
+
+      for (const leave of leaves) {
+        const overlapStart = new Date(Math.max(new Date(leave.startDate).getTime(), fromDate.getTime()));
+        const overlapEnd = new Date(Math.min(new Date(leave.endDate).getTime(), toDate.getTime()));
+
+        if (overlapEnd < overlapStart) continue;
+
+        const diffDays = Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / msPerDay) + 1;
+        const eid = String(leave.employeeId);
+        totalsByEmployee[eid] = (totalsByEmployee[eid] || 0) + Math.max(0, diffDays);
+      }
+
+      const data = Object.entries(totalsByEmployee).map(([employeeId, totalLeaveDays]) => ({
+        employeeId,
+        totalLeaveDays: totalLeaveDays || 0,
+      }));
+
+      return res.status(200).json({ success: true, data });
+    }
+
     let match = { status: "Approved" };
     if (month && /^\d{4}-\d{2}$/.test(month)) {
       const [y, m] = month.split("-").map(Number);

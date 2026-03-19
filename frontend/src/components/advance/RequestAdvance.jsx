@@ -21,7 +21,10 @@ const RequestAdvance = () => {
       if (res.data?.success && res.data?.employee?.basic_salary != null) {
         setBasicSalary(Number(res.data.employee.basic_salary) || 0);
       }
-    } catch (_) {}
+    } catch (err) {
+      // Ignore profile fetch errors; UI will still render with no salary cap.
+      console.error(err);
+    }
   };
 
   const fetchMyRequests = async () => {
@@ -53,9 +56,9 @@ const RequestAdvance = () => {
       setError("Please enter a valid amount");
       return;
     }
-    const maxAllowed = basicSalary != null ? Number(basicSalary) : null;
+    const maxAllowed = basicSalary != null ? Number(basicSalary) * 0.5 : null;
     if (maxAllowed != null && num > maxAllowed) {
-      setError(`Advance cannot exceed your basic salary (Rs. ${maxAllowed.toLocaleString()})`);
+      setError(`Advance cannot exceed 50% of your salary (Rs. ${maxAllowed.toLocaleString()})`);
       return;
     }
     setError("");
@@ -130,13 +133,15 @@ const RequestAdvance = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Rs.) <span className="text-red-500">*</span></label>
               {basicSalary != null && basicSalary > 0 && (
-                <p className="text-xs text-gray-500 mb-1">Maximum: Rs. {basicSalary.toLocaleString()} (your basic salary)</p>
+                <p className="text-xs text-gray-500 mb-1">
+                  Maximum: Rs. {(basicSalary * 0.5).toLocaleString()}
+                </p>
               )}
               <input
                 type="number"
                 min="1"
                 step="1"
-                max={basicSalary != null && basicSalary > 0 ? basicSalary : undefined}
+                max={basicSalary != null && basicSalary > 0 ? basicSalary * 0.5 : undefined}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500"

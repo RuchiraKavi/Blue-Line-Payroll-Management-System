@@ -18,6 +18,11 @@ function parseWorkingHours(value) {
 }
 
 const AttendanceList = () => {
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonthFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const currentMonthTo = now.toISOString().slice(0, 10);
+
   const [file, setFile] = useState(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [attendance, setAttendance] = useState([]);
@@ -26,7 +31,8 @@ const AttendanceList = () => {
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [summaryData, setSummaryData] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryMonth, setSummaryMonth] = useState("all");
+  // Default: current month (to-date). Backend will use from/to when month matches currentMonthKey.
+  const [summaryMonth, setSummaryMonth] = useState(currentMonthKey);
   const [leaveTotalsMap, setLeaveTotalsMap] = useState({});
   const [historyEmployee, setHistoryEmployee] = useState(null);
   const [historyRecords, setHistoryRecords] = useState([]);
@@ -92,8 +98,13 @@ const AttendanceList = () => {
       setSummaryLoading(true);
       try {
         const params = new URLSearchParams();
-        if (summaryMonth && summaryMonth !== "all") {
-          params.set("month", summaryMonth);
+        if (summaryMonth) {
+          if (summaryMonth === currentMonthKey) {
+            params.set("from", currentMonthFrom);
+            params.set("to", currentMonthTo);
+          } else {
+            params.set("month", summaryMonth);
+          }
         }
         const res = await axios.get(`${API_BASE}/attendance/summary?${params}`, { headers: getAuthHeader() });
         if (cancelled) return;
@@ -121,8 +132,13 @@ const AttendanceList = () => {
     const fetchLeaveTotals = async () => {
       try {
         const params = new URLSearchParams();
-        if (summaryMonth && summaryMonth !== "all") {
-          params.set("month", summaryMonth);
+        if (summaryMonth) {
+          if (summaryMonth === currentMonthKey) {
+            params.set("from", currentMonthFrom);
+            params.set("to", currentMonthTo);
+          } else {
+            params.set("month", summaryMonth);
+          }
         }
         const res = await axios.get(`${API_BASE}/leaves/total-days-by-employee?${params}`, { headers: getAuthHeader() });
         if (cancelled) return;
@@ -634,7 +650,6 @@ const AttendanceList = () => {
               onChange={(e) => setSummaryMonth(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="all">Last month (default)</option>
               {Array.from({ length: 12 }, (_, i) => {
                 const d = new Date();
                 d.setMonth(d.getMonth() - i);
@@ -645,15 +660,15 @@ const AttendanceList = () => {
             </select>
             <button
               type="button"
-              onClick={() => setSummaryMonth("all")}
+              onClick={() => setSummaryMonth(currentMonthKey)}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
             >
-              Clear filter
+              Reset to current month
             </button>
             <span className="text-sm text-gray-600">
-              {summaryMonth && summaryMonth !== "all"
-                ? `Showing: ${new Date(summaryMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}`
-                : "Showing: Last month (default)"}
+              {summaryMonth === currentMonthKey
+                ? `Showing: ${new Date(summaryMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })} (to date)`
+                : `Showing: ${new Date(summaryMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}`}
             </span>
             {summaryLoading && (
               <span className="text-sm text-gray-500 flex items-center gap-1">

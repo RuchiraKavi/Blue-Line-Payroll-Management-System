@@ -24,10 +24,11 @@ export const requestAdvance = async (req, res) => {
       });
     }
     const basicSalary = Number(employee.basic_salary) || 0;
-    if (numAmount > basicSalary) {
+    const maxAdvance = basicSalary * 0.5;
+    if (numAmount > maxAdvance) {
       return res.status(400).json({
         success: false,
-        message: `Advance amount cannot exceed your basic salary (Rs. ${basicSalary.toLocaleString()})`,
+        message: `Advance amount cannot exceed 50% of your basic salary (Rs. ${maxAdvance.toLocaleString()})`,
       });
     }
 

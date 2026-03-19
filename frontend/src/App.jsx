@@ -26,7 +26,9 @@ import ChangePassword from "./components/employeeDashboard/ChangePassword.jsx";
 import LeaveManage from "./components/leave/LeaveManage.jsx";
 import LeaveDetail from "./components/leave/LeaveDetail.jsx";
 import EmployeeLeaveHistory from "./components/leave/EmployeeLeaveHistory.jsx";
+import LeaveHistoryReport from "./components/leave/LeaveHistoryReport.jsx";
 import AttendanceList from "./components/attendance/AttendanceList.jsx";
+import AttendanceHistoryReport from "./components/attendance/AttendanceHistoryReport.jsx";
 import SalaryPage from "./components/salary/SalaryPage.jsx";
 import EmployeeSalaryHistory from "./components/salary/EmployeeSalaryHistory.jsx";
 
@@ -178,10 +180,28 @@ function App() {
           />
 
           <Route
+            path="leaves-report"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <LeaveHistoryReport />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="attendance"
             element={
               <ProtectedRoute allowedRoles={["admin", "hr"]}>
                 <AttendanceList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="attendance-report"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AttendanceHistoryReport />
               </ProtectedRoute>
             }
           />
