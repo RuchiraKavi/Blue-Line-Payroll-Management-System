@@ -1118,6 +1118,7 @@ const SalaryPage = () => {
                   const computed = computeRow(row);
                   const gross = computed.gross_salary;
                   const totalAllow = computed.total_allowances;
+                  const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
                   const totalSc = computed.total_service_charges;
                   const epf = computed.epf_payment;
                   const etf = computed.etf_payment;
@@ -1291,7 +1292,7 @@ const SalaryPage = () => {
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-center">
                               <span className="text-gray-700">Total Earnings</span>
-                              <span className="font-semibold">{totalAllow.toFixed(2)}</span>
+                              <span className="font-semibold">{totalEarnings.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                               <span className="text-gray-700">Total Deduction</span>
@@ -1525,6 +1526,7 @@ const SalaryPage = () => {
         const computed = computeRow(row);
         const gross = computed.gross_salary;
         const totalAllow = computed.total_allowances;
+        const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
         const totalSc = computed.total_service_charges;
         const epf = computed.epf_payment;
         const etf = computed.etf_payment;
@@ -1693,7 +1695,7 @@ const SalaryPage = () => {
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between items-center">
                             <span className="text-gray-700">Total Earnings</span>
-                            <span className="font-semibold">{totalAllow.toFixed(2)}</span>
+                            <span className="font-semibold">{totalEarnings.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                             <span className="text-gray-700">Total Deduction</span>

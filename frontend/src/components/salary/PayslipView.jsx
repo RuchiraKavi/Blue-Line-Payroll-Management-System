@@ -64,6 +64,8 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const gap = (x) => x * v;
   let y = margin;
   const { epfPayslipAmount, totalDeductionPayslip, netPayPayslip } = payslipPdfAmounts(data);
+  // "Total Earnings" should include basic salary as well as allowances.
+  const totalEarningsPayslip = (Number(data.basic_salary) || 0) + (Number(data.total_allowances) || 0);
   const empName = employee?.userId?.name || data?.name || "N/A";
   const empId = employee?.employee_id || data?.employee_id || "—";
   const designation = employee?.designation || data?.designation || "—";
@@ -121,7 +123,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
     { label: "Holiday Payment", value: n(data.holiday_payment) },
     { label: "Allowance-NS", value: n(data.allowance_ns) },
     { label: "Bonus", value: n(data.bonus) },
-    { label: "Total Earnings", value: n(data.total_allowances), bold: true, totalRow: true },
+    { label: "Total Earnings", value: n(totalEarningsPayslip), bold: true, totalRow: true },
     { label: "Gross Salary", value: n(data.gross_salary), bold: true, totalRow: true },
   ], opts({ headerFill: [239, 246, 255] }));
   y += gap(5);
@@ -139,6 +141,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
     { label: "No Pay", value: n(data.no_pay) },
     { label: "PAYE", value: n(data.paye) },
     { label: "Salary Advance", value: n(data.salary_advance) },
+    { label: "Employee EPF (8%)", value: n(epfPayslipAmount) },
   ], opts({ headerFill: [239, 246, 255] }));
   y += gap(5);
 
@@ -150,7 +153,6 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   y += gap(6);
   y = pdfTable(doc, y, margin, tableWidth, [
     { label: "Earnings base (for EPF/ETF)", value: n(data.total_for_epf) },
-    { label: "Employee EPF (8%)", value: n(epfPayslipAmount), bold: true },
     { label: "Employer EPF (12%)", value: n(data.employer_epf_payment) },
     { label: "Employer ETF (3%)", value: n(data.etf_payment) },
   ], opts());
@@ -326,6 +328,8 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
   const totalForEpf = Number(data.total_for_epf) || 0;
   const epfPayslipAmount = totalForEpf * (epfPct / 100);
   const totalDeductionPayslip = (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
+  // "Total Earnings" should include basic salary as well as allowances.
+  const totalEarningsPayslip = (Number(data.basic_salary) || 0) + (Number(data.total_allowances) || 0);
   const netPayPayslip = (Number(data.gross_salary) || 0) - totalDeductionPayslip;
 
   const tableHeader = "bg-linear-to-r from-gray-50 to-blue-50 text-gray-700 uppercase text-xs font-semibold border-b-2 border-gray-200";
@@ -437,7 +441,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                   <tr><td className={tableCell}>Holiday Payment</td><td className={`${tableCell} text-right`}>{n(data.holiday_payment)}</td></tr>
                   <tr><td className={tableCell}>Allowance-NS</td><td className={`${tableCell} text-right`}>{n(data.allowance_ns)}</td></tr>
                   <tr><td className={tableCell}>Bonus</td><td className={`${tableCell} text-right`}>{n(data.bonus)}</td></tr>
-                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Earnings</td><td className={`${tableCell} text-right font-bold`}>{n(data.total_allowances)}</td></tr>
+                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Earnings</td><td className={`${tableCell} text-right font-bold`}>{n(totalEarningsPayslip)}</td></tr>
                   <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Gross Salary</td><td className={`${tableCell} text-right font-bold`}>{n(data.gross_salary)}</td></tr>
                 </tbody>
               </table>
@@ -461,6 +465,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                   <tr><td className={tableCell}>No Pay</td><td className={`${tableCell} text-right`}>{n(data.no_pay)}</td></tr>
                   <tr><td className={tableCell}>PAYE</td><td className={`${tableCell} text-right`}>{n(data.paye)}</td></tr>
                   <tr><td className={tableCell}>Salary Advance</td><td className={`${tableCell} text-right`}>{n(data.salary_advance)}</td></tr>
+                  <tr><td className={tableCell}>Employee EPF (8%)</td><td className={`${tableCell} text-right`}>{n(epfPayslipAmount)}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -473,7 +478,6 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
               <table className="w-full text-sm">
                 <tbody>
                   <tr><td className={tableCell}>Earnings base (for EPF/ETF)</td><td className={`${tableCell} text-right`}>{n(data.total_for_epf)}</td></tr>
-                  <tr><td className={tableCell}>Employee EPF (8%)</td><td className={`${tableCell} text-right font-semibold`}>{n(epfPayslipAmount)}</td></tr>
                   <tr><td className={tableCell}>Employer EPF (12%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.employer_epf_payment)}</td></tr>
                   <tr><td className={tableCell}>Employer ETF (3%)</td><td className={`${tableCell} text-right text-gray-600`}>{n(data.etf_payment)}</td></tr>
                 </tbody>
