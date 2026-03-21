@@ -2,6 +2,7 @@ import axios from "axios";
 import { jsPDF } from "jspdf";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaHistory, FaTimes } from "react-icons/fa";
+import { reportTableTheme } from "../../utils/LeaveHelper";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -772,55 +773,58 @@ const AttendanceHistoryReport = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
-              <tr>
-                <th className="px-6 py-3 text-left font-semibold">S.No</th>
-                <th className="px-6 py-3 text-left font-semibold">Employee ID</th>
-                <th className="px-6 py-3 text-left font-semibold">Name</th>
-                <th className="px-6 py-3 text-left font-semibold">Department</th>
-                <th className="px-6 py-3 text-left font-semibold">Designation</th>
-                <th className="px-6 py-3 text-center font-semibold">Days worked</th>
-                <th className="px-6 py-3 text-center font-semibold">Total hours</th>
-                <th className="px-6 py-3 text-center font-semibold">Total leave</th>
-                <th className="px-6 py-3 text-center font-semibold">Action</th>
+      <div className={reportTableTheme.outerCard}>
+        <div className={reportTableTheme.scrollX}>
+          <table className={reportTableTheme.table}>
+            <thead>
+              <tr className={reportTableTheme.theadRow}>
+                <th className={reportTableTheme.th}>S.No</th>
+                <th className={reportTableTheme.th}>Employee ID</th>
+                <th className={reportTableTheme.th}>Name</th>
+                <th className={reportTableTheme.th}>Department</th>
+                <th className={reportTableTheme.th}>Designation</th>
+                <th className={reportTableTheme.thCenter}>Days worked</th>
+                <th className={reportTableTheme.thCenter}>Total hours</th>
+                <th className={reportTableTheme.thCenter}>Total leave</th>
+                <th className={reportTableTheme.thCenter}>Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                  <td colSpan={9} className={reportTableTheme.emptyRow}>
                     Generating attendance history…
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                  <td colSpan={9} className={reportTableTheme.emptyRow}>
                     {to ? "No attendance records found for the selected filters." : "Select a date range to load the report."}
                   </td>
                 </tr>
               ) : summaryByEmployee.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={9} className={reportTableTheme.emptyRow}>
                     No employees found for the selected filters.
                   </td>
                 </tr>
               ) : (
                 summaryByEmployee.map((emp, i) => (
-                  <tr key={emp.employee_db_id} className="border-t border-gray-100 hover:bg-blue-50">
-                    <td className="px-6 py-3 font-medium text-gray-700">{i + 1}</td>
-                    <td className="px-6 py-3 text-gray-600">{emp.employee_id || "—"}</td>
-                    <td className="px-6 py-3 font-semibold text-gray-900">{emp.employee_name || "—"}</td>
-                    <td className="px-6 py-3 text-gray-600">{emp.department || "—"}</td>
-                    <td className="px-6 py-3 text-gray-600">{emp.designation || "—"}</td>
-                    <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.workedDays ?? 0}</td>
-                    <td className="px-6 py-3 text-center font-medium text-gray-900">{(emp.totalHours ?? 0).toFixed(1)}</td>
-                    <td className="px-6 py-3 text-center font-medium text-gray-900">
+                  <tr
+                    key={emp.employee_db_id}
+                    className={`${reportTableTheme.tbodyRow} ${i % 2 === 1 ? reportTableTheme.tbodyRowStripe : ""}`}
+                  >
+                    <td className={`${reportTableTheme.td} font-medium`}>{i + 1}</td>
+                    <td className={reportTableTheme.td}>{emp.employee_id || "—"}</td>
+                    <td className={`${reportTableTheme.td} font-semibold text-gray-900`}>{emp.employee_name || "—"}</td>
+                    <td className={reportTableTheme.td}>{emp.department || "—"}</td>
+                    <td className={reportTableTheme.td}>{emp.designation || "—"}</td>
+                    <td className={`${reportTableTheme.tdCenter} font-medium`}>{emp.workedDays ?? 0}</td>
+                    <td className={`${reportTableTheme.tdCenter} font-medium`}>{(emp.totalHours ?? 0).toFixed(1)}</td>
+                    <td className={`${reportTableTheme.tdCenter} font-medium`}>
                       {leaveTotalsMap?.[emp.employee_db_id] ?? 0}
                     </td>
-                    <td className="px-6 py-3 text-center">
+                    <td className={reportTableTheme.tdCenter}>
                       <button
                         type="button"
                         onClick={() => {
@@ -896,44 +900,47 @@ const AttendanceHistoryReport = () => {
                   {monthlySummary.length > 0 && (
                     <div className="mb-6">
                       <h4 className="text-sm font-bold text-gray-800 mb-2">Summary by month</h4>
-                      <div className="rounded-xl border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
-                            <tr>
-                              <th className="px-4 py-2 text-left font-semibold">Month</th>
-                              <th className="px-4 py-2 text-right font-semibold">Worked days</th>
-                              <th className="px-4 py-2 text-right font-semibold">Total hours</th>
-                              <th className="px-4 py-2 text-right font-semibold">Total leave</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {monthlySummary.map((row) => (
-                              <tr key={row.month} className="border-t border-gray-100">
-                                <td className="px-4 py-2 font-medium text-gray-900">
-                                  {new Date(row.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                                </td>
-                                <td className="px-4 py-2 text-right">{row.workedDays}</td>
-                                <td className="px-4 py-2 text-right">{(Number(row.totalHours) || 0).toFixed(1)}</td>
-                                <td className="px-4 py-2 text-right">{row.totalLeave ?? 0}</td>
+                      <div className={reportTableTheme.outerCard}>
+                        <div className={reportTableTheme.scrollX}>
+                          <table className={reportTableTheme.table}>
+                            <thead>
+                              <tr className={reportTableTheme.theadRow}>
+                                <th className={reportTableTheme.th}>Month</th>
+                                <th className={reportTableTheme.thRight}>Worked days</th>
+                                <th className={reportTableTheme.thRight}>Total hours</th>
+                                <th className={reportTableTheme.thRight}>Total leave</th>
                               </tr>
-                            ))}
-                          </tbody>
-                          <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                            <tr className="font-bold text-gray-900">
-                              <td className="px-4 py-2">Total</td>
-                              <td className="px-4 py-2 text-right">
-                                {monthlySummary.reduce((s, row) => s + (row.workedDays || 0), 0)}
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                {monthlySummary.reduce((s, row) => s + (Number(row.totalHours) || 0), 0).toFixed(1)}
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                {monthlySummary.reduce((s, row) => s + (Number(row.totalLeave) || 0), 0)}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {monthlySummary.map((row, mi) => (
+                                <tr
+                                  key={row.month}
+                                  className={`${reportTableTheme.tbodyRow} ${mi % 2 === 1 ? reportTableTheme.tbodyRowStripe : ""}`}
+                                >
+                                  <td className={`${reportTableTheme.td} font-medium text-gray-900`}>
+                                    {new Date(row.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                                  </td>
+                                  <td className={reportTableTheme.tdRight}>{row.workedDays}</td>
+                                  <td className={reportTableTheme.tdRight}>{(Number(row.totalHours) || 0).toFixed(1)}</td>
+                                  <td className={reportTableTheme.tdRight}>{row.totalLeave ?? 0}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className={reportTableTheme.tfootRow}>
+                                <td className={reportTableTheme.td}>Total</td>
+                                <td className={reportTableTheme.tdRight}>
+                                  {monthlySummary.reduce((s, row) => s + (row.workedDays || 0), 0)}
+                                </td>
+                                <td className={reportTableTheme.tdRight}>
+                                  {monthlySummary.reduce((s, row) => s + (Number(row.totalHours) || 0), 0).toFixed(1)}
+                                </td>
+                                <td className={reportTableTheme.tdRight}>
+                                  {monthlySummary.reduce((s, row) => s + (Number(row.totalLeave) || 0), 0)}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
                         </div>
                       </div>
                     </div>
@@ -976,60 +983,65 @@ const AttendanceHistoryReport = () => {
                     </span>
                   </div>
 
-                  <div className="flex-1 min-h-0 rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+                  <div className={`flex-1 min-h-0 flex flex-col ${reportTableTheme.outerCard}`}>
                     <div className="overflow-auto flex-1 min-h-0">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-100 text-gray-700 uppercase text-xs sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold">Date</th>
-                          <th className="px-4 py-3 text-left font-semibold">In Time</th>
-                          <th className="px-4 py-3 text-left font-semibold">Out Time</th>
-                          <th className="px-4 py-3 text-left font-semibold">Hours</th>
-                          <th className="px-4 py-3 text-center font-semibold">Status</th>
-                          {historyShowExtraColumns && (
-                            <>
-                              <th className="px-4 py-3 text-right font-semibold">Holidays</th>
-                              <th className="px-4 py-3 text-right font-semibold">Day off</th>
-                              <th className="px-4 py-3 text-right font-semibold">Leave</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredHistoryRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={historyShowExtraColumns ? 8 : 5} className="px-4 py-8 text-center text-gray-500">
-                              No records match the filter
-                            </td>
+                      <table className={reportTableTheme.table}>
+                        <thead className="sticky top-0 z-10 shadow-[0_1px_0_#e2e8f0]">
+                          <tr className={reportTableTheme.theadRow}>
+                            <th className={reportTableTheme.th}>Date</th>
+                            <th className={reportTableTheme.th}>In Time</th>
+                            <th className={reportTableTheme.th}>Out Time</th>
+                            <th className={reportTableTheme.th}>Hours</th>
+                            <th className={reportTableTheme.thCenter}>Status</th>
+                            {historyShowExtraColumns && (
+                              <>
+                                <th className={reportTableTheme.thRight}>Holidays</th>
+                                <th className={reportTableTheme.thRight}>Day off</th>
+                                <th className={reportTableTheme.thRight}>Leave</th>
+                              </>
+                            )}
                           </tr>
-                        ) : (
-                          filteredHistoryRows.map((r) => (
-                            <tr key={r._id || `${r.date}-${r.inTime}`} className="border-t border-gray-100 hover:bg-gray-50">
-                              <td className="px-4 py-2">{new Date(r.date).toLocaleDateString()}</td>
-                              <td className="px-4 py-2">{r.inTime || "—"}</td>
-                              <td className="px-4 py-2">{r.outTime || "—"}</td>
-                              <td className="px-4 py-2">{r.workingHours || "—"}</td>
-                              <td className="px-4 py-2 text-center">
-                                <span
-                                  className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                    r.status === "Present" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                                  }`}
-                                >
-                                  {r.status || "—"}
-                                </span>
+                        </thead>
+                        <tbody>
+                          {filteredHistoryRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={historyShowExtraColumns ? 8 : 5} className={reportTableTheme.emptyRow}>
+                                No records match the filter
                               </td>
-                              {historyShowExtraColumns && (
-                                <>
-                                  <td className="px-4 py-2 text-right">{r.holidays != null ? r.holidays : 0}</td>
-                                  <td className="px-4 py-2 text-right">{r.dayOff != null ? r.dayOff : 0}</td>
-                                  <td className="px-4 py-2 text-right">{r.leave != null ? r.leave : 0}</td>
-                                </>
-                              )}
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                          ) : (
+                            filteredHistoryRows.map((r, ri) => (
+                              <tr
+                                key={r._id || `${r.date}-${r.inTime}`}
+                                className={`${reportTableTheme.tbodyRow} ${ri % 2 === 1 ? reportTableTheme.tbodyRowStripe : ""}`}
+                              >
+                                <td className={reportTableTheme.td}>{new Date(r.date).toLocaleDateString()}</td>
+                                <td className={reportTableTheme.td}>{r.inTime || "—"}</td>
+                                <td className={reportTableTheme.td}>{r.outTime || "—"}</td>
+                                <td className={reportTableTheme.td}>{r.workingHours || "—"}</td>
+                                <td className={reportTableTheme.tdCenter}>
+                                  <span
+                                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
+                                      r.status === "Present"
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-red-100 text-red-700"
+                                    }`}
+                                  >
+                                    {r.status || "—"}
+                                  </span>
+                                </td>
+                                {historyShowExtraColumns && (
+                                  <>
+                                    <td className={reportTableTheme.tdRight}>{r.holidays != null ? r.holidays : 0}</td>
+                                    <td className={reportTableTheme.tdRight}>{r.dayOff != null ? r.dayOff : 0}</td>
+                                    <td className={reportTableTheme.tdRight}>{r.leave != null ? r.leave : 0}</td>
+                                  </>
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </>

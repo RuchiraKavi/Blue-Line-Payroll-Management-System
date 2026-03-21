@@ -67,6 +67,28 @@ export const leaveDataTableCustomStyles = {
   },
 };
 
+/**
+ * Tailwind class bundles aligned with `leaveDataTableCustomStyles` for native `<table>` markup
+ * (Attendance History Report and similar pages).
+ */
+export const reportTableTheme = {
+  outerCard: "bg-white rounded-xl border border-gray-200 overflow-hidden",
+  scrollX: "overflow-x-auto",
+  table: "min-w-full border-collapse",
+  theadRow: "bg-[#f8fafc] border-b-2 border-[#e2e8f0]",
+  th: "px-4 py-3 text-left text-sm font-semibold text-[#475569] align-middle",
+  thCenter: "px-4 py-3 text-center text-sm font-semibold text-[#475569] align-middle",
+  thRight: "px-4 py-3 text-right text-sm font-semibold text-[#475569] align-middle",
+  tbodyRow:
+    "border-b border-[#e5e7eb] text-sm text-[#374151] min-h-[72px] hover:bg-[#f8fafc] transition-colors",
+  tbodyRowStripe: "bg-[#fafafa]",
+  td: "px-4 py-3 align-middle",
+  tdCenter: "px-4 py-3 text-center align-middle tabular-nums",
+  tdRight: "px-4 py-3 text-right align-middle tabular-nums",
+  emptyRow: "px-4 py-10 text-center text-sm text-gray-500",
+  tfootRow: "bg-[#f9fafb] border-t-2 border-[#e5e7eb] text-sm font-semibold text-[#374151]",
+};
+
 export const leaveTypeLabels = {
   casual: "Casual Leave",
   annual: "Annual Leave",
