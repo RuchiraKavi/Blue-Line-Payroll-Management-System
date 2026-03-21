@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import DataTable from "react-data-table-component";
-import { columns } from "../../utils/LeaveHelper";
+import { columns, leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHelper";
 
 const LeaveManage = () => {
   // 🔹 States
@@ -29,7 +29,6 @@ const LeaveManage = () => {
             days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
           }
 
-          const leaveTypeLabels = { casual: "Casual Leave", annual: "Annual Leave", sick: "Sick Leave", nopay: "No Pay" };
           return {
             _id: leave._id,
             sno: index + 1,
@@ -211,10 +210,10 @@ const LeaveManage = () => {
           )}
         </div>
 
-        {/* Enhanced DataTable Section */}
-        <div className="p-8">
+        {/* Enhanced DataTable Section — no outer padding so the table aligns with the card edges */}
+        <div>
           {loading ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-20 px-8">
               <div className="text-center">
                 <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div>
                 <p className="mt-4 text-gray-600 font-medium">Loading leave requests...</p>
@@ -223,7 +222,7 @@ const LeaveManage = () => {
           ) : (
             <>
               {/* Results Summary */}
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-6 flex items-center justify-between px-8 pt-6">
                 <div className="text-sm text-gray-600">
                   Showing <span className="font-semibold text-gray-900">{filteredLeaves.length}</span> of <span className="font-semibold text-gray-900">{leaves.length}</span> leave requests
                 </div>
@@ -261,67 +260,7 @@ const LeaveManage = () => {
                     </p>
                   </div>
                 }
-                customStyles={{
-                  header: {
-                    style: {
-                      fontSize: '16px',
-                      fontWeight: '600',
-                      color: '#374151',
-                      backgroundColor: '#f9fafb',
-                      borderBottom: '2px solid #e5e7eb',
-                      minHeight: '56px',
-                    },
-                  },
-                  headRow: {
-                    style: {
-                      backgroundColor: '#f8fafc',
-                      borderBottom: '2px solid #e2e8f0',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#475569',
-                      minHeight: '56px',
-                    },
-                  },
-                  headCells: {
-                    style: {
-                      paddingLeft: '16px',
-                      paddingRight: '16px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#475569',
-                    },
-                  },
-                  rows: {
-                    style: {
-                      fontSize: '14px',
-                      color: '#374151',
-                      minHeight: '72px',
-                      '&:hover': {
-                        backgroundColor: '#f8fafc',
-                        cursor: 'pointer',
-                      },
-                    },
-                    stripedStyle: {
-                      backgroundColor: '#fafafa',
-                    },
-                  },
-                  cells: {
-                    style: {
-                      paddingLeft: '16px',
-                      paddingRight: '16px',
-                      fontSize: '14px',
-                    },
-                  },
-                  pagination: {
-                    style: {
-                      borderTop: '2px solid #e5e7eb',
-                      backgroundColor: '#f9fafb',
-                      fontSize: '14px',
-                      color: '#374151',
-                      padding: '16px',
-                    },
-                  },
-                }}
+                customStyles={leaveDataTableCustomStyles}
               />
             </>
           )}

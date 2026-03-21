@@ -4,6 +4,76 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
+/** Shared DataTable styles — used by Leave Management (requests) and Leave History Report */
+export const leaveDataTableCustomStyles = {
+  header: {
+    style: {
+      fontSize: "16px",
+      fontWeight: "600",
+      color: "#374151",
+      backgroundColor: "#f9fafb",
+      borderBottom: "2px solid #e5e7eb",
+      minHeight: "56px",
+    },
+  },
+  headRow: {
+    style: {
+      backgroundColor: "#f8fafc",
+      borderBottom: "2px solid #e2e8f0",
+      fontSize: "14px",
+      fontWeight: "600",
+      color: "#475569",
+      minHeight: "56px",
+    },
+  },
+  headCells: {
+    style: {
+      paddingLeft: "16px",
+      paddingRight: "16px",
+      fontSize: "14px",
+      fontWeight: "600",
+      color: "#475569",
+    },
+  },
+  rows: {
+    style: {
+      fontSize: "14px",
+      color: "#374151",
+      minHeight: "72px",
+      "&:hover": {
+        backgroundColor: "#f8fafc",
+        cursor: "pointer",
+      },
+    },
+    stripedStyle: {
+      backgroundColor: "#fafafa",
+    },
+  },
+  cells: {
+    style: {
+      paddingLeft: "16px",
+      paddingRight: "16px",
+      fontSize: "14px",
+    },
+  },
+  pagination: {
+    style: {
+      borderTop: "2px solid #e5e7eb",
+      backgroundColor: "#f9fafb",
+      fontSize: "14px",
+      color: "#374151",
+      padding: "16px",
+    },
+  },
+};
+
+export const leaveTypeLabels = {
+  casual: "Casual Leave",
+  annual: "Annual Leave",
+  sick: "Sick Leave",
+  nopay: "No Pay",
+};
+
 // Leave action buttons
 export const LeaveButtons = ({ Id }) => {
   const navigate = useNavigate();
@@ -39,6 +109,7 @@ export const columns = [
     sortable: true,
     center: true,
     width: "80px",
+    cell: (row) => <span className="block w-full text-center tabular-nums">{row.days}</span>,
   },
   { name: "Reason", selector: (row) => row.reason, wrap: true },
   {

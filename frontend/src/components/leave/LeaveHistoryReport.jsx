@@ -1,7 +1,65 @@
 import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
+import DataTable from "react-data-table-component";
+import { leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHelper";
 
 const API_BASE = "http://localhost:5000/api";
+
+const reportColumns = [
+  { name: "Employee", selector: (row) => row?.employeeId?.userId?.name || "—", sortable: true, wrap: true },
+  { name: "Employee ID", selector: (row) => row?.employeeId?.employee_id || "—", sortable: true },
+  { name: "Department", selector: (row) => row?.employeeId?.department?.dep_name || "—", sortable: true },
+  {
+    name: "Leave Type",
+    selector: (row) => leaveTypeLabels[row.leaveType] || row.leaveType || "—",
+    sortable: true,
+  },
+  {
+    name: "Applied",
+    selector: (row) => (row?.appliedAt ? new Date(row.appliedAt).toLocaleDateString("en-US") : "—"),
+    sortable: true,
+  },
+  {
+    name: "From",
+    selector: (row) => (row?.startDate ? new Date(row.startDate).toLocaleDateString("en-US") : "—"),
+    sortable: true,
+  },
+  {
+    name: "To",
+    selector: (row) => (row?.endDate ? new Date(row.endDate).toLocaleDateString("en-US") : "—"),
+    sortable: true,
+  },
+  { name: "Reason", selector: (row) => row?.reason || "—", sortable: true, wrap: true },
+  {
+    name: "Status",
+    selector: (row) => row.status,
+    sortable: true,
+    center: true,
+    cell: (row) => (
+      <span
+        className={`px-2 py-1 rounded text-sm font-semibold ${
+          row.status === "Approved"
+            ? "bg-green-100 text-green-700"
+            : row.status === "Rejected"
+              ? "bg-red-100 text-red-700"
+              : "bg-yellow-100 text-yellow-700"
+        }`}
+      >
+        {row.status}
+      </span>
+    ),
+  },
+  {
+    name: "Days",
+    selector: (row) => row.totalDays ?? 0,
+    sortable: true,
+    center: true,
+    width: "90px",
+    cell: (row) => (
+      <span className="block w-full text-center tabular-nums">{row.totalDays ?? 0}</span>
+    ),
+  },
+];
 
 const escapeCsvCell = (value) => {
   const str = value == null ? "" : String(value);
@@ -114,7 +172,7 @@ const LeaveHistoryReport = () => {
       const empName = l?.employeeId?.userId?.name || "";
       const empId = l?.employeeId?.employee_id || "";
       const dept = l?.employeeId?.department?.dep_name || "";
-      const type = l?.leaveType || "";
+      const type = leaveTypeLabels[l?.leaveType] || l?.leaveType || "";
       const appliedAt = l?.appliedAt ? new Date(l.appliedAt).toLocaleDateString("en-US") : "";
       const from = l?.startDate ? new Date(l.startDate).toLocaleDateString("en-US") : "";
       const to = l?.endDate ? new Date(l.endDate).toLocaleDateString("en-US") : "";
@@ -236,75 +294,39 @@ const LeaveHistoryReport = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-10 text-gray-500">Loading leave history...</div>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div>
+            <p className="mt-4 text-gray-600 font-medium">Loading leave history...</p>
+          </div>
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
-                <tr>
-                  <th className="px-4 py-3 text-left">Employee</th>
-                  <th className="px-4 py-3 text-left">Employee ID</th>
-                  <th className="px-4 py-3 text-left">Department</th>
-                  <th className="px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-left">Applied</th>
-                  <th className="px-4 py-3 text-left">From</th>
-                  <th className="px-4 py-3 text-left">To</th>
-                  <th className="px-4 py-3 text-left">Reason</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-right">Days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLeaves.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-10 text-center text-gray-500" colSpan={10}>
-                      No leave records found for the selected filters.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredLeaves.map((l, idx) => {
-                    const statusKey = String(l.status || "").toLowerCase();
-                    const badge =
-                      statusKey === "approved"
-                        ? "bg-green-100 text-green-700"
-                        : statusKey === "rejected"
-                          ? "bg-red-100 text-red-700"
-                          : statusKey === "pending"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-gray-100 text-gray-700";
-
-                    return (
-                      <tr key={l._id || idx} className="border-t hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {l?.employeeId?.userId?.name || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">{l?.employeeId?.employee_id || "—"}</td>
-                        <td className="px-4 py-3 text-gray-700">{l?.employeeId?.department?.dep_name || "—"}</td>
-                        <td className="px-4 py-3 text-gray-700">{l?.leaveType || "—"}</td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {l?.appliedAt ? new Date(l.appliedAt).toLocaleDateString("en-US") : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {l?.startDate ? new Date(l.startDate).toLocaleDateString("en-US") : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {l?.endDate ? new Date(l.endDate).toLocaleDateString("en-US") : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">{l?.reason || "—"}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${badge}`}>
-                            {String(l.status || "").toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700">{l?.totalDays ?? 0}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={reportColumns}
+            data={filteredLeaves}
+            highlightOnHover
+            responsive
+            pagination
+            paginationPerPage={10}
+            paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
+            striped
+            noDataComponent={
+              <div className="py-20 text-center">
+                <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                  ></path>
+                </svg>
+                <h3 className="text-xl font-semibold text-gray-500 mb-2">No leave records found</h3>
+                <p className="text-gray-400">Try adjusting your search or filter criteria</p>
+              </div>
+            }
+            customStyles={leaveDataTableCustomStyles}
+          />
         </div>
       )}
     </div>
