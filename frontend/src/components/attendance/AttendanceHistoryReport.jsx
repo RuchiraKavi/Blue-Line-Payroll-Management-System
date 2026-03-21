@@ -27,7 +27,7 @@ const downloadAttendanceHistorySummaryPdf = ({ summaryRows, leaveTotalsMap, from
   y += 7;
   doc.setFontSize(9);
   doc.setTextColor(40, 40, 40);
-  doc.text(`Period: ${from || "—"}  →  ${to || "—"}`, margin, y);
+  doc.text(`Date range: ${from || "—"}  -  ${to || "—"}`, margin, y);
   y += 5;
   const q = (employeeQuery || "").trim();
   if (q) {
@@ -94,19 +94,16 @@ const monthLabelFromKey = (key) =>
   new Date(`${key}-01`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
 /**
- * PDF matching the View history modal: monthly summary, filter note, filtered detail rows (incl. optional extra columns).
+ * PDF matching the View history modal: monthly summary and filtered detail rows (incl. optional extra columns).
  */
 const downloadEmployeeHistoryModalPdf = ({
   employeeName,
   employeeId,
   historyFrom,
   historyTo,
-  historyStatusFilter,
-  historyMonthFilter,
   historyShowExtraColumns,
   monthlySummary,
   filteredRows,
-  totalHistoryCount,
 }) => {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
@@ -134,29 +131,8 @@ const downloadEmployeeHistoryModalPdf = ({
   y += 7;
   doc.setFontSize(9);
   doc.setTextColor(40, 40, 40);
-  doc.text(`Date range: ${historyFrom || "—"}  →  ${historyTo || "—"}`, margin, y);
-  y += 5;
-  const statusLbl = historyStatusFilter === "all" ? "All status" : historyStatusFilter;
-  const monthLbl =
-    historyMonthFilter === "all" ? "All months" : monthLabelFromKey(historyMonthFilter);
-  doc.text(
-    `Filter: ${statusLbl} · ${monthLbl} · Showing ${filteredRows.length} of ${totalHistoryCount} records`,
-    margin,
-    y
-  );
-  y += 5;
-  if (historyShowExtraColumns) {
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Detail columns: Date, In Time, Out Time, Hours, Status, Holidays, Day off, Leave", margin, y);
-    y += 4;
-  } else {
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Detail columns: Date, In Time, Out Time, Hours, Status", margin, y);
-    y += 4;
-  }
-  y += 3;
+  doc.text(`Date range: ${historyFrom || "—"}  -  ${historyTo || "—"}`, margin, y);
+  y += 6;
   doc.setTextColor(0, 0, 0);
 
   /* ----- Summary by month ----- */
@@ -649,24 +625,18 @@ const AttendanceHistoryReport = () => {
       employeeId: historyEmployee.employee_id,
       historyFrom,
       historyTo,
-      historyStatusFilter,
-      historyMonthFilter,
       historyShowExtraColumns,
       monthlySummary,
       filteredRows: filteredHistoryRows,
-      totalHistoryCount: historyRecords.length,
     });
   }, [
     historyEmployee,
     historyLoading,
     historyFrom,
     historyTo,
-    historyStatusFilter,
-    historyMonthFilter,
     historyShowExtraColumns,
     monthlySummary,
     filteredHistoryRows,
-    historyRecords.length,
   ]);
 
   const handleExport = () => {
@@ -798,7 +768,6 @@ const AttendanceHistoryReport = () => {
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
               />
             </div>
-            <p className="text-sm text-gray-600 mt-2 md:mt-0">Report loads automatically when you change the date range.</p>
           </div>
         </div>
       </div>
@@ -874,10 +843,10 @@ const AttendanceHistoryReport = () => {
       {historyEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeHistory}>
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b flex items-center justify-between bg-blue-50">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-blue-50 shrink-0 rounded-t-2xl">
               <h3 className="text-lg font-bold text-gray-900">
                 Attendance history — {historyEmployee.userId?.name || "Employee"} ({historyEmployee.employee_id})
               </h3>
@@ -885,7 +854,7 @@ const AttendanceHistoryReport = () => {
                 <FaTimes className="text-xl" />
               </button>
             </div>
-            <div className="p-6 overflow-hidden flex flex-col flex-1 min-h-0">
+            <div className="p-6 overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <span className="text-sm font-medium text-gray-700">Date range:</span>
                 <input
@@ -927,7 +896,8 @@ const AttendanceHistoryReport = () => {
                   {monthlySummary.length > 0 && (
                     <div className="mb-6">
                       <h4 className="text-sm font-bold text-gray-800 mb-2">Summary by month</h4>
-                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <div className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
                             <tr>
@@ -964,6 +934,7 @@ const AttendanceHistoryReport = () => {
                             </tr>
                           </tfoot>
                         </table>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -996,7 +967,7 @@ const AttendanceHistoryReport = () => {
                         type="checkbox"
                         checked={historyShowExtraColumns}
                         onChange={(e) => setHistoryShowExtraColumns(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="w-4 h-4 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span>Show extra columns (Holidays, Day off, Leave)</span>
                     </label>
@@ -1005,7 +976,8 @@ const AttendanceHistoryReport = () => {
                     </span>
                   </div>
 
-                  <div className="overflow-auto flex-1 border border-gray-200 rounded-xl">
+                  <div className="flex-1 min-h-0 rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+                    <div className="overflow-auto flex-1 min-h-0">
                     <table className="min-w-full text-sm">
                       <thead className="bg-gray-100 text-gray-700 uppercase text-xs sticky top-0">
                         <tr>
@@ -1058,6 +1030,7 @@ const AttendanceHistoryReport = () => {
                         )}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </>
               )}
