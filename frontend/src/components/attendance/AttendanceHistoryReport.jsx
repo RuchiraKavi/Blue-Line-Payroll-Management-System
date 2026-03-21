@@ -1,27 +1,310 @@
 import axios from "axios";
-import React, { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaHistory, FaTimes } from "react-icons/fa";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
-const escapeCsvCell = (value) => {
-  const str = value == null ? "" : String(value);
-  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
+/** PDF of the summary table currently shown (same filters: date range + employee search). */
+const downloadAttendanceHistorySummaryPdf = ({ summaryRows, leaveTotalsMap, from, to, employeeQuery }) => {
+  if (!Array.isArray(summaryRows) || summaryRows.length === 0) return;
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const tableW = pageW - 2 * margin;
+  const colWeights = [8, 24, 42, 36, 36, 22, 22, 22];
+  const wSum = colWeights.reduce((a, b) => a + b, 0);
+  const w = colWeights.map((c) => (c / wSum) * tableW);
+  const rowH = 6;
+  let y = 12;
+
+  doc.setFontSize(14);
+  doc.setTextColor(37, 99, 235);
+  doc.text("Attendance History Report", pageW / 2, y, { align: "center" });
+  y += 7;
+  doc.setFontSize(9);
+  doc.setTextColor(40, 40, 40);
+  doc.text(`Period: ${from || "—"}  →  ${to || "—"}`, margin, y);
+  y += 5;
+  const q = (employeeQuery || "").trim();
+  if (q) {
+    doc.text(`Employee filter: ${q}`, margin, y);
+    y += 5;
+  }
+  y += 3;
+
+  const headers = ["S.No", "Employee ID", "Name", "Department", "Designation", "Days worked", "Total hours", "Total leave"];
+
+  const drawTableHeader = () => {
+    doc.setFillColor(243, 244, 246);
+    doc.rect(margin, y, tableW, rowH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    let x = margin;
+    headers.forEach((h, i) => {
+      doc.text(h, x + w[i] / 2, y + 4.2, { align: "center" });
+      x += w[i];
+    });
+    y += rowH;
+    doc.setFont("helvetica", "normal");
+  };
+
+  drawTableHeader();
+
+  summaryRows.forEach((emp, idx) => {
+    if (y + rowH > pageH - 10) {
+      doc.addPage("landscape");
+      y = 12;
+      drawTableHeader();
+    }
+    doc.setFontSize(7);
+    let x = margin;
+    const cells = [
+      String(idx + 1),
+      emp.employee_id || "—",
+      emp.employee_name || "—",
+      emp.department || "—",
+      emp.designation || "—",
+      String(emp.workedDays ?? 0),
+      (Number(emp.totalHours) || 0).toFixed(1),
+      String(leaveTotalsMap?.[emp.employee_db_id] ?? 0),
+    ];
+    cells.forEach((cell, i) => {
+      const raw = String(cell);
+      const display = raw.length > 42 ? `${raw.slice(0, 39)}…` : raw;
+      if (i >= 5) {
+        doc.text(display, x + w[i] / 2, y + 4.2, { align: "center", maxWidth: w[i] - 2 });
+      } else {
+        doc.text(display, x + 1.5, y + 4.2, { maxWidth: w[i] - 3 });
+      }
+      x += w[i];
+    });
+    y += rowH;
+  });
+
+  const safeFrom = (from || "start").replaceAll("-", "_");
+  const safeTo = (to || "end").replaceAll("-", "_");
+  doc.save(`attendance_history_report_${safeFrom}_to_${safeTo}.pdf`);
 };
 
-const downloadCsv = (filename, rows) => {
-  const csv = rows.map((r) => r.map(escapeCsvCell).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+const monthLabelFromKey = (key) =>
+  new Date(`${key}-01`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+/**
+ * PDF matching the View history modal: monthly summary, filter note, filtered detail rows (incl. optional extra columns).
+ */
+const downloadEmployeeHistoryModalPdf = ({
+  employeeName,
+  employeeId,
+  historyFrom,
+  historyTo,
+  historyStatusFilter,
+  historyMonthFilter,
+  historyShowExtraColumns,
+  monthlySummary,
+  filteredRows,
+  totalHistoryCount,
+}) => {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const tableW = pageW - 2 * margin;
+  const rowH = 5.5;
+  let y = 11;
+
+  const newPage = () => {
+    doc.addPage("landscape");
+    y = 11;
+  };
+
+  const need = (h) => {
+    if (y + h > pageH - 10) {
+      newPage();
+    }
+  };
+
+  doc.setFontSize(13);
+  doc.setTextColor(37, 99, 235);
+  const title = `Attendance history — ${employeeName || "Employee"} (${employeeId || "—"})`;
+  doc.text(title, pageW / 2, y, { align: "center" });
+  y += 7;
+  doc.setFontSize(9);
+  doc.setTextColor(40, 40, 40);
+  doc.text(`Date range: ${historyFrom || "—"}  →  ${historyTo || "—"}`, margin, y);
+  y += 5;
+  const statusLbl = historyStatusFilter === "all" ? "All status" : historyStatusFilter;
+  const monthLbl =
+    historyMonthFilter === "all" ? "All months" : monthLabelFromKey(historyMonthFilter);
+  doc.text(
+    `Filter: ${statusLbl} · ${monthLbl} · Showing ${filteredRows.length} of ${totalHistoryCount} records`,
+    margin,
+    y
+  );
+  y += 5;
+  if (historyShowExtraColumns) {
+    doc.setFontSize(8);
+    doc.setTextColor(90, 90, 90);
+    doc.text("Detail columns: Date, In Time, Out Time, Hours, Status, Holidays, Day off, Leave", margin, y);
+    y += 4;
+  } else {
+    doc.setFontSize(8);
+    doc.setTextColor(90, 90, 90);
+    doc.text("Detail columns: Date, In Time, Out Time, Hours, Status", margin, y);
+    y += 4;
+  }
+  y += 3;
+  doc.setTextColor(0, 0, 0);
+
+  /* ----- Summary by month ----- */
+  if (Array.isArray(monthlySummary) && monthlySummary.length > 0) {
+    need(rowH + 8);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Summary by month", margin, y);
+    y += 5;
+    const mw = [0.4, 0.2, 0.2, 0.2].map((p) => p * tableW);
+    const drawMonthHeader = () => {
+      need(rowH + 2);
+      doc.setFillColor(243, 244, 246);
+      doc.rect(margin, y, tableW, rowH, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      let x = margin;
+      ["Month", "Worked days", "Total hours", "Total leave"].forEach((h, i) => {
+        const align = i === 0 ? "left" : "right";
+        const tx = i === 0 ? x + 2 : x + mw[i] - 2;
+        doc.text(h, tx, y + 3.8, { align });
+        x += mw[i];
+      });
+      y += rowH;
+      doc.setFont("helvetica", "normal");
+    };
+    drawMonthHeader();
+    monthlySummary.forEach((row) => {
+      need(rowH + 1);
+      doc.setFontSize(7);
+      let x = margin;
+      const cells = [
+        monthLabelFromKey(row.month),
+        String(row.workedDays ?? 0),
+        (Number(row.totalHours) || 0).toFixed(1),
+        String(row.totalLeave ?? 0),
+      ];
+      cells.forEach((cell, i) => {
+        const txt = String(cell).length > 28 ? `${String(cell).slice(0, 25)}…` : String(cell);
+        if (i === 0) doc.text(txt, x + 2, y + 3.8, { maxWidth: mw[i] - 4 });
+        else doc.text(txt, x + mw[i] - 2, y + 3.8, { align: "right" });
+        x += mw[i];
+      });
+      y += rowH;
+    });
+    need(rowH + 2);
+    doc.setFillColor(243, 244, 246);
+    doc.rect(margin, y, tableW, rowH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    let x = margin;
+    const tWorked = monthlySummary.reduce((s, r) => s + (r.workedDays || 0), 0);
+    const tHours = monthlySummary.reduce((s, r) => s + (Number(r.totalHours) || 0), 0);
+    const tLeave = monthlySummary.reduce((s, r) => s + (Number(r.totalLeave) || 0), 0);
+    doc.text("Total", x + 2, y + 3.8);
+    doc.text(String(tWorked), x + mw[0] + mw[1] - 2, y + 3.8, { align: "right" });
+    doc.text(tHours.toFixed(1), x + mw[0] + mw[1] + mw[2] - 2, y + 3.8, { align: "right" });
+    doc.text(String(tLeave), x + tableW - 2, y + 3.8, { align: "right" });
+    y += rowH + 5;
+    doc.setFont("helvetica", "normal");
+  }
+
+  /* ----- Detail table (filtered) ----- */
+  need(rowH + 6);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Attendance records", margin, y);
+  y += 5;
+
+  const extra = historyShowExtraColumns;
+  const headers = extra
+    ? ["Date", "In Time", "Out Time", "Hours", "Status", "Holidays", "Day off", "Leave"]
+    : ["Date", "In Time", "Out Time", "Hours", "Status"];
+  const weights = extra
+    ? [22, 18, 18, 14, 16, 12, 12, 12]
+    : [26, 22, 22, 18, 22];
+  const wSum = weights.reduce((a, b) => a + b, 0);
+  const dw = weights.map((c) => (c / wSum) * tableW);
+
+  const drawDetailHeader = () => {
+    need(rowH + 2);
+    doc.setFillColor(243, 244, 246);
+    doc.rect(margin, y, tableW, rowH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    let x = margin;
+    headers.forEach((h, i) => {
+      const center = i === 4; // Status
+      doc.text(h, center ? x + dw[i] / 2 : x + 1.5, y + 3.8, {
+        align: center ? "center" : "left",
+        maxWidth: dw[i] - 2,
+      });
+      x += dw[i];
+    });
+    y += rowH;
+    doc.setFont("helvetica", "normal");
+  };
+
+  drawDetailHeader();
+
+  if (!filteredRows.length) {
+    need(rowH + 2);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("No records match the filter", margin + 2, y + 4);
+    y += rowH + 2;
+  } else {
+    filteredRows.forEach((r) => {
+      if (y + rowH > pageH - 10) {
+        newPage();
+        drawDetailHeader();
+      }
+      doc.setFontSize(6.5);
+      doc.setTextColor(0, 0, 0);
+      let x = margin;
+      const dateStr = r.date ? new Date(r.date).toLocaleDateString() : "—";
+      const cells = extra
+        ? [
+            dateStr,
+            r.inTime || "—",
+            r.outTime || "—",
+            r.workingHours || "—",
+            r.status || "—",
+            String(r.holidays != null ? r.holidays : 0),
+            String(r.dayOff != null ? r.dayOff : 0),
+            String(r.leave != null ? r.leave : 0),
+          ]
+        : [dateStr, r.inTime || "—", r.outTime || "—", r.workingHours || "—", r.status || "—"];
+      cells.forEach((cell, i) => {
+        const raw = String(cell);
+        const txt = raw.length > 22 ? `${raw.slice(0, 19)}…` : raw;
+        if (i === 4) {
+          doc.text(txt, x + dw[i] / 2, y + 3.8, { align: "center", maxWidth: dw[i] - 1 });
+        } else if (i > 4) {
+          doc.text(txt, x + dw[i] - 1.5, y + 3.8, { align: "right", maxWidth: dw[i] - 2 });
+        } else {
+          doc.text(txt, x + 1.2, y + 3.8, { maxWidth: dw[i] - 2 });
+        }
+        x += dw[i];
+      });
+      y += rowH;
+    });
+  }
+
+  const safeId = String(employeeId || "emp").replace(/[^\w-]+/g, "_");
+  const safeFrom = (historyFrom || "start").replaceAll("-", "_");
+  const safeTo = (historyTo || "end").replaceAll("-", "_");
+  doc.save(`attendance_history_${safeId}_${safeFrom}_to_${safeTo}.pdf`);
 };
 
 /** Parse workingHours string to decimal hours: "8.5" → 8.5, "8:30" → 8.5 */
@@ -35,12 +318,38 @@ const parseWorkingHours = (value) => {
   return parseFloat(s) || 0;
 };
 
+/** Days of a leave that fall within a given month (YYYY-MM) — same as Attendance page. */
+const leaveDaysInMonth = (leave, monthKey) => {
+  const [y, m] = monthKey.split("-").map(Number);
+  const monthStart = new Date(y, m - 1, 1);
+  const monthEnd = new Date(y, m, 0);
+  const start = new Date(leave.startDate);
+  const end = new Date(leave.endDate);
+  if (end < monthStart || start > monthEnd) return 0;
+  const overlapStart = new Date(Math.max(start.getTime(), monthStart.getTime()));
+  const overlapEnd = new Date(Math.min(end.getTime(), monthEnd.getTime()));
+  return Math.max(0, Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1);
+};
+
+/** Local calendar month bounds as YYYY-MM-DD (for default report range). */
+const getCurrentMonthDateRange = () => {
+  const pad = (n) => String(n).padStart(2, "0");
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return {
+    from: `${y}-${pad(m + 1)}-01`,
+    to: `${y}-${pad(m + 1)}-${pad(lastDay)}`,
+  };
+};
+
 const AttendanceHistoryReport = () => {
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
 
-  const [from, setFrom] = useState(""); // YYYY-MM-DD
-  const [to, setTo] = useState(""); // YYYY-MM-DD
+  const [from, setFrom] = useState(() => getCurrentMonthDateRange().from);
+  const [to, setTo] = useState(() => getCurrentMonthDateRange().to);
 
   const [employeeQuery, setEmployeeQuery] = useState(""); // Employee ID or name
   const [employeeQueryDebounced, setEmployeeQueryDebounced] = useState("");
@@ -50,7 +359,17 @@ const AttendanceHistoryReport = () => {
   const [records, setRecords] = useState([]); // flattened rows for all employees
 
   const [leaveTotalsMap, setLeaveTotalsMap] = useState({}); // keyed by Employee ObjectId
-  const [historyEmployeeDbId, setHistoryEmployeeDbId] = useState(null);
+
+  /* View history modal — same behavior as Attendance page “All employees” table */
+  const [historyEmployee, setHistoryEmployee] = useState(null);
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyLeaves, setHistoryLeaves] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+  const [historyMonthFilter, setHistoryMonthFilter] = useState("all");
+  const [historyShowExtraColumns, setHistoryShowExtraColumns] = useState(false);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -95,17 +414,68 @@ const AttendanceHistoryReport = () => {
     return params;
   };
 
+  const closeHistory = useCallback(() => {
+    setHistoryEmployee(null);
+    setHistoryRecords([]);
+    setHistoryLeaves([]);
+    setHistoryFrom("");
+    setHistoryTo("");
+    setHistoryStatusFilter("all");
+    setHistoryMonthFilter("all");
+  }, []);
+
+  const openHistory = useCallback(async (emp, rangeFrom, rangeTo) => {
+    if (!emp?._id) return;
+    setHistoryEmployee(emp);
+    setHistoryRecords([]);
+    setHistoryLeaves([]);
+    try {
+      setHistoryLoading(true);
+      const params = new URLSearchParams();
+      if (rangeFrom) params.set("from", rangeFrom);
+      if (rangeTo) params.set("to", rangeTo);
+      const [attendanceRes, leavesRes] = await Promise.all([
+        axios.get(
+          `${API_BASE}/attendance/employee/${emp._id}${params.toString() ? `?${params.toString()}` : ""}`,
+          { headers: getAuthHeader() }
+        ),
+        axios.get(`${API_BASE}/leaves/employee/${emp._id}`, { headers: getAuthHeader() }),
+      ]);
+      if (attendanceRes.data?.success) {
+        setHistoryRecords(attendanceRes.data.attendance || []);
+        if (attendanceRes.data.from) setHistoryFrom(attendanceRes.data.from);
+        if (attendanceRes.data.to) setHistoryTo(attendanceRes.data.to);
+      }
+      if (leavesRes.data?.success && Array.isArray(leavesRes.data.leaves)) {
+        const approved = (leavesRes.data.leaves || []).filter(
+          (l) => (l.status || "").toLowerCase() === "approved"
+        );
+        setHistoryLeaves(approved);
+      }
+    } catch (err) {
+      console.error(err);
+      setHistoryRecords([]);
+      setHistoryLeaves([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const refreshHistory = useCallback(() => {
+    if (historyEmployee) openHistory(historyEmployee, historyFrom || undefined, historyTo || undefined);
+  }, [historyEmployee, historyFrom, historyTo, openHistory]);
+
   const generateReport = async (employeesToFetch) => {
     if (!Array.isArray(employeesToFetch) || employeesToFetch.length === 0) {
       setRecords([]);
       setLeaveTotalsMap({});
-      setHistoryEmployeeDbId(null);
+      closeHistory();
       return;
     }
     setLoading(true);
     setError("");
     setRecords([]);
-    setHistoryEmployeeDbId(null);
+    closeHistory();
     try {
       const params = buildParams();
 
@@ -172,13 +542,14 @@ const AttendanceHistoryReport = () => {
   };
 
   const clearFilters = () => {
-    setFrom("");
-    setTo("");
+    const { from: f, to: t } = getCurrentMonthDateRange();
+    setFrom(f);
+    setTo(t);
     setEmployeeQuery("");
     setEmployeeQueryDebounced("");
     setRecords([]);
     setLeaveTotalsMap({});
-    setHistoryEmployeeDbId(null);
+    closeHistory();
     setError("");
   };
 
@@ -214,50 +585,98 @@ const AttendanceHistoryReport = () => {
     return Object.values(byId).sort((a, b) => String(a.employee_id).localeCompare(String(b.employee_id)));
   }, [records]);
 
-  const historyRecords = useMemo(() => {
-    if (!historyEmployeeDbId) return [];
-    return (records || []).filter((r) => String(r.employee_db_id) === String(historyEmployeeDbId));
-  }, [records, historyEmployeeDbId]);
+  const monthlySummary = useMemo(() => {
+    const byMonth = {};
+    (historyRecords || []).forEach((r) => {
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0, totalLeave: 0 };
+      if (r.status === "Present") {
+        byMonth[key].workedDays += 1;
+        byMonth[key].totalHours += parseWorkingHours(r.workingHours);
+      }
+    });
+    (historyLeaves || []).forEach((leave) => {
+      const start = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      let year = start.getFullYear();
+      let month = start.getMonth();
+      const endYear = end.getFullYear();
+      const endMonth = end.getMonth();
+      while (year < endYear || (year === endYear && month <= endMonth)) {
+        const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+        if (!byMonth[key]) byMonth[key] = { month: key, workedDays: 0, totalHours: 0, totalLeave: 0 };
+        byMonth[key].totalLeave += leaveDaysInMonth(leave, key);
+        if (month === 11) {
+          year += 1;
+          month = 0;
+        } else {
+          month += 1;
+        }
+      }
+    });
+    return Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month));
+  }, [historyRecords, historyLeaves]);
 
-  const reportRows = useMemo(() => {
-    const header = [
-      "Employee ID",
-      "Employee Name",
-      "Department",
-      "Designation",
-      "Date",
-      "In Time",
-      "Out Time",
-      "Working Hours",
-      "Status",
-      "Holidays",
-      "Day Off",
-      "Leave",
-    ];
+  const availableMonths = useMemo(() => {
+    const set = new Set();
+    (historyRecords || []).forEach((r) => {
+      const d = new Date(r.date);
+      set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [historyRecords]);
 
-    const rows = records.map((r) => [
-      r.employee_id,
-      r.employee_name,
-      r.department,
-      r.designation,
-      r.date,
-      r.inTime,
-      r.outTime,
-      r.workingHours,
-      r.status,
-      r.holidays,
-      r.dayOff,
-      r.leave,
-    ]);
+  const filteredHistoryRows = useMemo(() => {
+    let list = historyRecords || [];
+    if (historyStatusFilter !== "all") {
+      list = list.filter((r) => r.status === historyStatusFilter);
+    }
+    if (historyMonthFilter !== "all") {
+      list = list.filter((r) => {
+        const d = new Date(r.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return key === historyMonthFilter;
+      });
+    }
+    return list;
+  }, [historyRecords, historyStatusFilter, historyMonthFilter]);
 
-    return [header, ...rows];
-  }, [records]);
+  const handleExportHistoryPdf = useCallback(() => {
+    if (!historyEmployee || historyLoading) return;
+    downloadEmployeeHistoryModalPdf({
+      employeeName: historyEmployee.userId?.name || "Employee",
+      employeeId: historyEmployee.employee_id,
+      historyFrom,
+      historyTo,
+      historyStatusFilter,
+      historyMonthFilter,
+      historyShowExtraColumns,
+      monthlySummary,
+      filteredRows: filteredHistoryRows,
+      totalHistoryCount: historyRecords.length,
+    });
+  }, [
+    historyEmployee,
+    historyLoading,
+    historyFrom,
+    historyTo,
+    historyStatusFilter,
+    historyMonthFilter,
+    historyShowExtraColumns,
+    monthlySummary,
+    filteredHistoryRows,
+    historyRecords.length,
+  ]);
 
   const handleExport = () => {
-    const safeFrom = from || "start";
-    const safeTo = to || "end";
-    const name = `attendance_history_report_${safeFrom}_to_${safeTo}`.replaceAll("-", "_");
-    downloadCsv(`${name}.csv`, reportRows);
+    downloadAttendanceHistorySummaryPdf({
+      summaryRows: summaryByEmployee,
+      leaveTotalsMap,
+      from,
+      to,
+      employeeQuery,
+    });
   };
 
   // Fetch leave totals for the same duration so the summary table can show "Total leave"
@@ -285,7 +704,7 @@ const AttendanceHistoryReport = () => {
           });
           setLeaveTotalsMap(map);
         }
-      } catch (err) {
+      } catch {
         setLeaveTotalsMap({});
       }
     };
@@ -322,16 +741,18 @@ const AttendanceHistoryReport = () => {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Attendance History Report</h2>
-          <p className="text-sm text-gray-600 mt-1">Exports attendance records for all employees within the selected duration.</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Summary for the selected period and employee filter. Export PDF matches the table below.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+        <button
             type="button"
             onClick={handleExport}
-            disabled={loading || records.length === 0}
-            className="px-4 py-2 rounded-xl bg-white border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading || summaryByEmployee.length === 0}
+            className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Export CSV
+            Export PDF
           </button>
           <button
             type="button"
@@ -377,137 +798,271 @@ const AttendanceHistoryReport = () => {
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
               />
             </div>
-            <p className="text-sm text-gray-600 mt-2 md:mt-0">
-              {to ? "Report loads automatically." : "Select a To date to load report."}
-            </p>
+            <p className="text-sm text-gray-600 mt-2 md:mt-0">Report loads automatically when you change the date range.</p>
           </div>
         </div>
       </div>
 
-      {loading ? (
-        <div className="text-center py-10 text-gray-500">Generating attendance history...</div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {records.length === 0 ? (
-            <div className="px-6 py-10 text-center text-gray-500">
-              {to ? "No attendance records found for the selected filters." : "No records yet. Select a To date."}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+              <tr>
+                <th className="px-6 py-3 text-left font-semibold">S.No</th>
+                <th className="px-6 py-3 text-left font-semibold">Employee ID</th>
+                <th className="px-6 py-3 text-left font-semibold">Name</th>
+                <th className="px-6 py-3 text-left font-semibold">Department</th>
+                <th className="px-6 py-3 text-left font-semibold">Designation</th>
+                <th className="px-6 py-3 text-center font-semibold">Days worked</th>
+                <th className="px-6 py-3 text-center font-semibold">Total hours</th>
+                <th className="px-6 py-3 text-center font-semibold">Total leave</th>
+                <th className="px-6 py-3 text-center font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                    Generating attendance history…
+                  </td>
+                </tr>
+              ) : records.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                    {to ? "No attendance records found for the selected filters." : "Select a date range to load the report."}
+                  </td>
+                </tr>
+              ) : summaryByEmployee.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    No employees found for the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                summaryByEmployee.map((emp, i) => (
+                  <tr key={emp.employee_db_id} className="border-t border-gray-100 hover:bg-blue-50">
+                    <td className="px-6 py-3 font-medium text-gray-700">{i + 1}</td>
+                    <td className="px-6 py-3 text-gray-600">{emp.employee_id || "—"}</td>
+                    <td className="px-6 py-3 font-semibold text-gray-900">{emp.employee_name || "—"}</td>
+                    <td className="px-6 py-3 text-gray-600">{emp.department || "—"}</td>
+                    <td className="px-6 py-3 text-gray-600">{emp.designation || "—"}</td>
+                    <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.workedDays ?? 0}</td>
+                    <td className="px-6 py-3 text-center font-medium text-gray-900">{(emp.totalHours ?? 0).toFixed(1)}</td>
+                    <td className="px-6 py-3 text-center font-medium text-gray-900">
+                      {leaveTotalsMap?.[emp.employee_db_id] ?? 0}
+                    </td>
+                    <td className="px-6 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const full = employeesForReport.find((e) => String(e._id) === String(emp.employee_db_id));
+                          if (full) openHistory(full);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium"
+                      >
+                        <FaHistory /> View history
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {historyEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeHistory}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b flex items-center justify-between bg-blue-50">
+              <h3 className="text-lg font-bold text-gray-900">
+                Attendance history — {historyEmployee.userId?.name || "Employee"} ({historyEmployee.employee_id})
+              </h3>
+              <button type="button" onClick={closeHistory} className="p-2 rounded-lg hover:bg-gray-200 text-gray-600" aria-label="Close">
+                <FaTimes className="text-xl" />
+              </button>
             </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold">S.No</th>
-                      <th className="px-6 py-3 text-left font-semibold">Employee ID</th>
-                      <th className="px-6 py-3 text-left font-semibold">Name</th>
-                      <th className="px-6 py-3 text-left font-semibold">Department</th>
-                      <th className="px-6 py-3 text-left font-semibold">Designation</th>
-                      <th className="px-6 py-3 text-center font-semibold">Days worked</th>
-                      <th className="px-6 py-3 text-center font-semibold">Total hours</th>
-                      <th className="px-6 py-3 text-center font-semibold">Total leave</th>
-                      <th className="px-6 py-3 text-center font-semibold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summaryByEmployee.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                          No employees found for the selected filters.
-                        </td>
-                      </tr>
-                    ) : (
-                      summaryByEmployee.map((emp, i) => (
-                        <tr key={emp.employee_db_id} className="border-t border-gray-100 hover:bg-blue-50">
-                          <td className="px-6 py-3 font-medium text-gray-700">{i + 1}</td>
-                          <td className="px-6 py-3 text-gray-600">{emp.employee_id || "—"}</td>
-                          <td className="px-6 py-3 font-semibold text-gray-900">{emp.employee_name || "—"}</td>
-                          <td className="px-6 py-3 text-gray-600">{emp.department || "—"}</td>
-                          <td className="px-6 py-3 text-gray-600">{emp.designation || "—"}</td>
-                          <td className="px-6 py-3 text-center font-medium text-gray-900">{emp.workedDays ?? 0}</td>
-                          <td className="px-6 py-3 text-center font-medium text-gray-900">{(emp.totalHours ?? 0).toFixed(1)}</td>
-                          <td className="px-6 py-3 text-center font-medium text-gray-900">
-                            {leaveTotalsMap?.[emp.employee_db_id] ?? 0}
-                          </td>
-                          <td className="px-6 py-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setHistoryEmployeeDbId(emp.employee_db_id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium"
-                            >
-                              <FaHistory /> View history
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+            <div className="p-6 overflow-hidden flex flex-col flex-1 min-h-0">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <span className="text-sm font-medium text-gray-700">Date range:</span>
+                <input
+                  type="date"
+                  value={historyFrom}
+                  onChange={(e) => setHistoryFrom(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <input
+                  type="date"
+                  value={historyTo}
+                  onChange={(e) => setHistoryTo(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={refreshHistory}
+                  disabled={historyLoading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {historyLoading ? "Loading…" : "Apply"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportHistoryPdf}
+                  disabled={historyLoading || historyRecords.length === 0}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Export PDF
+                </button>
               </div>
 
-              {historyEmployeeDbId && (
-                <div className="mt-6 border-t border-gray-200 pt-6">
-                  <div className="flex items-center justify-between gap-4 mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Attendance history -{" "}
-                        {records.find((r) => String(r.employee_db_id) === String(historyEmployeeDbId))?.employee_id || "—"}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {from || "—"} → {to || "—"}
-                      </p>
+              {historyLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent" />
+                </div>
+              ) : (
+                <>
+                  {monthlySummary.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-bold text-gray-800 mb-2">Summary by month</h4>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold">Month</th>
+                              <th className="px-4 py-2 text-right font-semibold">Worked days</th>
+                              <th className="px-4 py-2 text-right font-semibold">Total hours</th>
+                              <th className="px-4 py-2 text-right font-semibold">Total leave</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {monthlySummary.map((row) => (
+                              <tr key={row.month} className="border-t border-gray-100">
+                                <td className="px-4 py-2 font-medium text-gray-900">
+                                  {new Date(row.month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                                </td>
+                                <td className="px-4 py-2 text-right">{row.workedDays}</td>
+                                <td className="px-4 py-2 text-right">{(Number(row.totalHours) || 0).toFixed(1)}</td>
+                                <td className="px-4 py-2 text-right">{row.totalLeave ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                            <tr className="font-bold text-gray-900">
+                              <td className="px-4 py-2">Total</td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (row.workedDays || 0), 0)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (Number(row.totalHours) || 0), 0).toFixed(1)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {monthlySummary.reduce((s, row) => s + (Number(row.totalLeave) || 0), 0)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryEmployeeDbId(null)}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <span className="text-sm font-medium text-gray-700">Filter:</span>
+                    <select
+                      value={historyStatusFilter}
+                      onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     >
-                      <FaTimes /> Close
-                    </button>
+                      <option value="all">All status</option>
+                      <option value="Present">Present</option>
+                      <option value="Absent">Absent</option>
+                    </select>
+                    <select
+                      value={historyMonthFilter}
+                      onChange={(e) => setHistoryMonthFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="all">All months</option>
+                      {availableMonths.map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(m + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={historyShowExtraColumns}
+                        onChange={(e) => setHistoryShowExtraColumns(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Show extra columns (Holidays, Day off, Leave)</span>
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      Showing {filteredHistoryRows.length} of {historyRecords.length} records
+                    </span>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  <div className="overflow-auto flex-1 border border-gray-200 rounded-xl">
                     <table className="min-w-full text-sm">
-                      <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+                      <thead className="bg-gray-100 text-gray-700 uppercase text-xs sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 text-left">Date</th>
-                          <th className="px-4 py-3 text-left">In</th>
-                          <th className="px-4 py-3 text-left">Out</th>
-                          <th className="px-4 py-3 text-left">Hours</th>
-                          <th className="px-4 py-3 text-center">Status</th>
-                          <th className="px-4 py-3 text-left">Holidays</th>
-                          <th className="px-4 py-3 text-left">Day Off</th>
-                          <th className="px-4 py-3 text-left">Leave</th>
+                          <th className="px-4 py-3 text-left font-semibold">Date</th>
+                          <th className="px-4 py-3 text-left font-semibold">In Time</th>
+                          <th className="px-4 py-3 text-left font-semibold">Out Time</th>
+                          <th className="px-4 py-3 text-left font-semibold">Hours</th>
+                          <th className="px-4 py-3 text-center font-semibold">Status</th>
+                          {historyShowExtraColumns && (
+                            <>
+                              <th className="px-4 py-3 text-right font-semibold">Holidays</th>
+                              <th className="px-4 py-3 text-right font-semibold">Day off</th>
+                              <th className="px-4 py-3 text-right font-semibold">Leave</th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
-                        {historyRecords.length === 0 ? (
+                        {filteredHistoryRows.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-6 py-10 text-center text-gray-500">
-                              No attendance rows found for this employee in the selected duration.
+                            <td colSpan={historyShowExtraColumns ? 8 : 5} className="px-4 py-8 text-center text-gray-500">
+                              No records match the filter
                             </td>
                           </tr>
                         ) : (
-                          historyRecords.map((r, idx) => (
-                            <tr key={`${r.date}-${idx}`} className="border-t hover:bg-gray-50">
-                              <td className="px-4 py-3 text-gray-700">{r.date || "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.inTime || "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.outTime || "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.workingHours || "—"}</td>
-                              <td className="px-4 py-3 text-center text-gray-700">{r.status || "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.holidays ?? "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.dayOff ?? "—"}</td>
-                              <td className="px-4 py-3 text-gray-700">{r.leave ?? "—"}</td>
+                          filteredHistoryRows.map((r) => (
+                            <tr key={r._id || `${r.date}-${r.inTime}`} className="border-t border-gray-100 hover:bg-gray-50">
+                              <td className="px-4 py-2">{new Date(r.date).toLocaleDateString()}</td>
+                              <td className="px-4 py-2">{r.inTime || "—"}</td>
+                              <td className="px-4 py-2">{r.outTime || "—"}</td>
+                              <td className="px-4 py-2">{r.workingHours || "—"}</td>
+                              <td className="px-4 py-2 text-center">
+                                <span
+                                  className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                    r.status === "Present" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {r.status || "—"}
+                                </span>
+                              </td>
+                              {historyShowExtraColumns && (
+                                <>
+                                  <td className="px-4 py-2 text-right">{r.holidays != null ? r.holidays : 0}</td>
+                                  <td className="px-4 py-2 text-right">{r.dayOff != null ? r.dayOff : 0}</td>
+                                  <td className="px-4 py-2 text-right">{r.leave != null ? r.leave : 0}</td>
+                                </>
+                              )}
                             </tr>
                           ))
                         )}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
       )}
     </div>
