@@ -456,15 +456,11 @@ const updateEmployee = async (req, res) => {
 
     // Admin/HR/etc: keep existing behavior
     /* ================= UPDATE USER ================= */
-    await User.findByIdAndUpdate(
-      employee.userId,
-      {
-        name,
-        email,
-        role,
-      },
-      { new: true }
-    );
+    const userPayload = { name, email, role };
+    if (req.file) {
+      userPayload.profileImage = imagePath;
+    }
+    await User.findByIdAndUpdate(employee.userId, userPayload, { new: true });
 
     /* ================= UPDATE EMPLOYEE ================= */
     await Employee.findByIdAndUpdate(
