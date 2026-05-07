@@ -114,7 +114,25 @@ const getEmployeeLeaves = async (req, res) => {
     }
 
     // Try to find leaves by ID (could be either userId or employeeId)
-    let leaves = await Leave.find({ employeeId: userId }).sort({ createdAt: -1 });
+    const populateForList = (query) =>
+      query
+        .populate({
+          path: "employeeId",
+          populate: [
+            { path: "department", select: "dep_name" },
+            { path: "userId", select: "name" },
+          ],
+        })
+        .populate({
+          path: "assignedTo",
+          populate: [
+            { path: "userId", select: "name" },
+            { path: "department", select: "dep_name" },
+          ],
+        });
+
+    let leaves = await populateForList(Leave.find({ employeeId: userId }))
+      .sort({ createdAt: -1 });
     
     // If no leaves found, check if the param is a User ID and find the employee
     if (leaves.length === 0) {
@@ -130,7 +148,8 @@ const getEmployeeLeaves = async (req, res) => {
       }
 
       // Try to find leaves by employee ID
-      leaves = await Leave.find({ employeeId: employee._id }).sort({ createdAt: -1 });
+      leaves = await populateForList(Leave.find({ employeeId: employee._id }))
+        .sort({ createdAt: -1 });
     }
 
     // Return empty array if no leaves found (don't throw error)
@@ -156,6 +175,12 @@ const getLeaves = async (req, res) => {
           select: "name",
         },
         ]
+        }).populate({
+          path: "assignedTo",
+          populate: [
+            { path: "userId", select: "name" },
+            { path: "department", select: "dep_name" },
+          ],
         })
 
     res.status(200).json({ success: true, leaves });
@@ -170,13 +195,18 @@ const getLeaves = async (req, res) => {
 const getLeaveDetails = async (req, res) => {
   try {
     const { id } = req.params; // leave ID
-    const leave = await Leave.findById(id).populate({
-      path: "employeeId",
-      populate: [
-        { path: "department", select: "dep_name" },
-        { path: "userId", select: "name profileImage" }, // include profileImage
-      ],
-    });
+    const leave = await Leave.findById(id)
+      .populate({
+        path: "employeeId",
+        populate: [
+          { path: "department", select: "dep_name" },
+          { path: "userId", select: "name profileImage" }, // include profileImage
+        ],
+      })
+      .populate({
+        path: "assignedTo",
+        populate: [{ path: "userId", select: "name role" }, { path: "department", select: "dep_name" }],
+      });
 
     if (!leave) {
       return res.status(404).json({ success: false, message: "Leave not found" });
@@ -186,6 +216,117 @@ const getLeaveDetails = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Leave fetching failed" });
+  }
+};
+
+// Get assignees (employees) in same department as the leave applicant
+const getLeaveAssignees = async (req, res) => {
+  try {
+    const { id } = req.params; // leave ID
+
+    const leave = await Leave.findById(id).populate({
+      path: "employeeId",
+      select: "department",
+    });
+
+    if (!leave) {
+      return res.status(404).json({ success: false, message: "Leave not found" });
+    }
+
+    const departmentId = leave.employeeId?.department;
+    if (!departmentId) {
+      return res.status(400).json({ success: false, message: "Leave employee department not found" });
+    }
+
+    const employees = await Employee.find({ department: departmentId })
+      .populate("userId", "name role")
+      .select("_id employee_id userId");
+
+    // Exclude the employee who applied for the leave
+    const applicantEmployeeId = String(leave.employeeId?._id || "");
+    const assignees = (employees || [])
+      .filter((e) => e?.userId && String(e._id) !== applicantEmployeeId)
+      .map((e) => ({
+        employeeMongoId: String(e._id),
+        employee_id: e.employee_id,
+        userId: String(e.userId?._id || ""),
+        name: e.userId?.name || "",
+        role: e.userId?.role || "",
+      }))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+    return res.status(200).json({ success: true, assignees });
+  } catch (error) {
+    console.error("Get leave assignees error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch assignees" });
+  }
+};
+
+// Assign an employee (same department) before approval
+const assignLeave = async (req, res) => {
+  try {
+    const { id } = req.params; // leave ID
+    const { assignedTo } = req.body; // Employee _id
+
+    if (!assignedTo) {
+      return res.status(400).json({ success: false, message: "assignedTo is required" });
+    }
+
+    const leave = await Leave.findById(id).populate({
+      path: "employeeId",
+      select: "department",
+    });
+
+    if (!leave) {
+      return res.status(404).json({ success: false, message: "Leave not found" });
+    }
+
+    if (leave.status !== "Pending") {
+      return res.status(400).json({ success: false, message: `Cannot assign for ${leave.status} leave` });
+    }
+
+    const departmentId = leave.employeeId?.department;
+    if (!departmentId) {
+      return res.status(400).json({ success: false, message: "Leave employee department not found" });
+    }
+
+    const assigneeEmployee = await Employee.findById(assignedTo).populate("userId", "name role");
+    if (!assigneeEmployee || !assigneeEmployee.userId) {
+      return res.status(404).json({ success: false, message: "Assignee employee not found" });
+    }
+
+    if (String(assigneeEmployee.department) !== String(departmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Assignee must be in the same department",
+      });
+    }
+
+    leave.assignedTo = assigneeEmployee._id;
+    leave.assignedAt = new Date();
+    await leave.save();
+
+    const populated = await Leave.findById(id)
+      .populate({
+        path: "employeeId",
+        populate: [
+          { path: "department", select: "dep_name" },
+          { path: "userId", select: "name profileImage" },
+        ],
+      })
+      .populate({
+        path: "assignedTo",
+        populate: [{ path: "userId", select: "name role" }, { path: "department", select: "dep_name" }],
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Leave assigned successfully",
+      leave: populated,
+    });
+  } catch (error) {
+    console.error("Assign leave error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to assign leave" });
   }
 };
 
@@ -211,13 +352,23 @@ const updateLeaveStatus = async (req, res) => {
     }
 
     /* ---------------- FIND LEAVE ---------------- */
-    const leave = await Leave.findById(leaveId).populate({
-      path: "employeeId",
-      populate: {
-        path: "userId",
-        select: "name email role",
-      },
-    });
+    const leave = await Leave.findById(leaveId)
+      .populate({
+        path: "employeeId",
+        select: "employee_id email department userId",
+        populate: [
+          { path: "department", select: "dep_name" },
+          { path: "userId", select: "name email role" },
+        ],
+      })
+      .populate({
+        path: "assignedTo",
+        select: "employee_id email department userId",
+        populate: [
+          { path: "userId", select: "name role" },
+          { path: "department", select: "dep_name" },
+        ],
+      });
 
     if (!leave) {
       return res.status(404).json({
@@ -231,6 +382,14 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Leave already ${leave.status}`,
+      });
+    }
+
+    // Require assignment before approval
+    if (normalizedStatus === "approved" && !leave.assignedTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Please assign an employee from the same department before approving",
       });
     }
 
@@ -271,13 +430,23 @@ const updateLeaveStatus = async (req, res) => {
     /* ---------------- UPDATE STATUS ---------------- */
     // Store with capitalized first letter to match model enum: Pending | Approved | Rejected
     leave.status = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+    leave.approvedBy = req.user?.id || req.user?._id || leave.approvedBy;
     await leave.save();
 
     /* ---------------- SEND EMAIL ---------------- */
-    const employeeEmail = leave.employeeId.userId.email;
+    const employeeEmail = leave?.employeeId?.email || leave?.employeeId?.userId?.email;
     const employeeName = leave.employeeId.userId.name;
 
     const displayStatus = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+
+    const assignedName = leave?.assignedTo?.userId?.name || "";
+    const assignedEmpId = leave?.assignedTo?.employee_id || "";
+    const assignedEmail = leave?.assignedTo?.email || "";
+    const assignedDept = leave?.assignedTo?.department?.dep_name || "";
+
+    const assignedLine = assignedName
+      ? `<p><b>Assigned To:</b> ${assignedName}${assignedEmpId ? ` (${assignedEmpId})` : ""}${assignedDept ? ` - ${assignedDept}` : ""}</p>`
+      : `<p><b>Assigned To:</b> —</p>`;
 
     const emailHTML = `
       <h3>Leave Request Update</h3>
@@ -287,11 +456,12 @@ const updateLeaveStatus = async (req, res) => {
       <p><b>Days:</b> ${leave.totalDays}</p>
       <p><b>From:</b> ${leave.startDate.toDateString()}</p>
       <p><b>To:</b> ${leave.endDate.toDateString()}</p>
+      ${assignedLine}
       <br/>
       <p>Regards,<br/>HR Department</p>
     `;
 
-    let emailSent = true;
+    let employeeEmailSent = true;
     try {
       await sendEmail({
         to: employeeEmail,
@@ -299,15 +469,47 @@ const updateLeaveStatus = async (req, res) => {
         html: emailHTML,
       });
     } catch (emailError) {
-      emailSent = false;
+      employeeEmailSent = false;
       console.error("Email send failed:", emailError);
+    }
+
+    // Also notify the assigned employee (if any)
+    let assigneeEmailSent = true;
+    if (assignedEmail) {
+      const employeeDept = leave?.employeeId?.department?.dep_name || "";
+      const employeePublicId = leave?.employeeId?.employee_id || "";
+      const assigneeHTML = `
+        <h3>Leave Assignment Notification</h3>
+        <p>Dear ${assignedName},</p>
+        <p>A leave request has been <b>${displayStatus}</b> and assigned to you.</p>
+        <p><b>Employee:</b> ${employeeName}${employeePublicId ? ` (${employeePublicId})` : ""}${employeeDept ? ` - ${employeeDept}` : ""}</p>
+        <p><b>Leave Type:</b> ${leave.leaveType === "nopay" ? "No Pay" : leave.leaveType}</p>
+        <p><b>Days:</b> ${leave.totalDays}</p>
+        <p><b>From:</b> ${leave.startDate.toDateString()}</p>
+        <p><b>To:</b> ${leave.endDate.toDateString()}</p>
+        <p><b>Reason:</b> ${leave.reason || "—"}</p>
+        <br/>
+        <p>Regards,<br/>HR Department</p>
+      `;
+
+      try {
+        await sendEmail({
+          to: assignedEmail,
+          subject: `Leave Assigned: ${employeeName} (${displayStatus})`,
+          html: assigneeHTML,
+        });
+      } catch (emailError) {
+        assigneeEmailSent = false;
+        console.error("Assignee email send failed:", emailError);
+      }
     }
 
     res.status(200).json({
       success: true,
-      message: emailSent
-        ? `Leave ${displayStatus} successfully and email sent`
-        : `Leave ${displayStatus} successfully (email failed)`,
+      message:
+        employeeEmailSent && assigneeEmailSent
+          ? `Leave ${displayStatus} successfully and emails sent`
+          : `Leave ${displayStatus} successfully (email sending failed)`,
     });
   } catch (error) {
     console.error("Update Leave Error:", error);
@@ -459,4 +661,15 @@ const getTotalLeaveDaysByEmployee = async (req, res) => {
   }
 };
 
-export { requestLeave, getEmployeeLeaves, getLeaves, getLeaveDetails, updateLeaveStatus, getLeavesByUser, getEmployeeLeaveBalance, getTotalLeaveDaysByEmployee };
+export {
+  requestLeave,
+  getEmployeeLeaves,
+  getLeaves,
+  getLeaveDetails,
+  getLeaveAssignees,
+  assignLeave,
+  updateLeaveStatus,
+  getLeavesByUser,
+  getEmployeeLeaveBalance,
+  getTotalLeaveDaysByEmployee,
+};

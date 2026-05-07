@@ -8,6 +8,18 @@ const leaveSchema = new Schema(
       required: true,
     },
 
+    // Assigned employee (must be same department as employeeId.department)
+    assignedTo: {
+      type: Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+
+    assignedAt: {
+      type: Date,
+      default: null,
+    },
+
     leaveType: {
       type: String,
       enum: ["casual", "annual", "sick", "nopay"],
