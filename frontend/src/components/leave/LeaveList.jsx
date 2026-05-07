@@ -190,6 +190,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
             <tr>
               <th className="px-4 py-3 text-left">#</th>
               <th className="px-4 py-3 text-left">Leave Type</th>
+              <th className="px-4 py-3 text-left">Assigned To</th>
               <th className="px-4 py-3 text-left">From</th>
               <th className="px-4 py-3 text-left">To</th>
               <th className="px-4 py-3 text-left">Applied</th>
@@ -205,6 +206,11 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
                   <td className="px-4 py-3">{index + 1}</td>
                   <td className="px-4 py-3 font-medium">
                     {formatLeaveType(leave.leaveType)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {leave?.assignedTo?.userId?.name
+                      ? leave.assignedTo.userId.name
+                      : "—"}
                   </td>
                   <td className="px-4 py-3">
                     {new Date(leave.startDate).toLocaleDateString()}
@@ -229,7 +235,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
               ))
             ) : (
               <tr>
-                <td colSpan="7" className="px-4 py-10 text-center text-gray-500">
+                <td colSpan="8" className="px-4 py-10 text-center text-gray-500">
                   📭 No leave records found
                 </td>
               </tr>

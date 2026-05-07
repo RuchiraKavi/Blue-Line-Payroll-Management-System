@@ -125,6 +125,7 @@ export const columns = [
   { name: "Employee", selector: (row) => row.name, sortable: true },
   { name: "Department", selector: (row) => row.dep_name, sortable: true },
   { name: "Leave Type", selector: (row) => row.leave_type, sortable: true },
+  { name: "Assigned To", selector: (row) => row.assigned_to, sortable: true },
   {
     name: "Days",
     selector: (row) => row.days,

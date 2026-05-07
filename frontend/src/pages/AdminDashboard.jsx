@@ -24,7 +24,7 @@ function AdminDashboard() {
       <AdminSidebar />
 
       {/* MAIN AREA */}
-      <div className="flex-1 flex flex-col bg-white">
+      <div className="flex-1 min-w-0 flex flex-col bg-white">
 
         {/* FIXED NAVBAR */}
         <div className="fixed left-64 right-0 top-0 z-50">
@@ -32,7 +32,7 @@ function AdminDashboard() {
         </div>
 
         {/* SCROLLABLE CONTENT */}
-        <div className="mt-14 overflow-y-auto h-[calc(100vh-3.5rem)] p-6 bg-gray-100">
+        <div className="mt-14 overflow-auto h-[calc(100vh-3.5rem)] p-6 bg-gray-100 min-w-0">
           <Outlet />
         </div>
 

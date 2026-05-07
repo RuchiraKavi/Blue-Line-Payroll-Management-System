@@ -8,6 +8,9 @@ const LeaveDetail = () => {
   const [leave, setLeave] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false); // to handle button state
+  const [assignees, setAssignees] = useState([]);
+  const [selectedAssignee, setSelectedAssignee] = useState("");
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     const fetchLeave = async () => {
@@ -23,6 +26,8 @@ const LeaveDetail = () => {
 
         if (response.data.success) {
           setLeave(response.data.leave);
+          const existing = response.data.leave?.assignedTo?._id;
+          if (existing) setSelectedAssignee(String(existing));
         }
       } catch (error) {
         console.error(error);
@@ -34,6 +39,45 @@ const LeaveDetail = () => {
 
     fetchLeave();
   }, [id]);
+
+  useEffect(() => {
+    const fetchAssignees = async () => {
+      try {
+        if (!leave || leave.status?.toLowerCase() !== "pending") return;
+        const res = await axios.get(`http://localhost:5000/api/leaves/${id}/assignees`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (res.data?.success) setAssignees(res.data.assignees || []);
+      } catch (error) {
+        console.error("Assignees fetch error:", error);
+        // Don't block the page if this fails
+      }
+    };
+    fetchAssignees();
+  }, [leave, id]);
+
+  const handleAssign = async () => {
+    if (!selectedAssignee) return;
+    try {
+      setAssigning(true);
+      const res = await axios.put(
+        `http://localhost:5000/api/leaves/${id}/assign`,
+        { assignedTo: selectedAssignee },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      if (res.data?.success) {
+        setLeave(res.data.leave);
+        alert("Assigned successfully!");
+      } else {
+        alert(res.data?.message || "Failed to assign");
+      }
+    } catch (error) {
+      console.error("Assign leave error:", error);
+      alert(error.response?.data?.message || "Error assigning leave");
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const handleStatusUpdate = async (status) => {
     if (!window.confirm(`Are you sure you want to ${status.toLowerCase()} this leave?`)) return;
@@ -93,6 +137,9 @@ const LeaveDetail = () => {
     days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
   }
 
+  const isPending = leave.status?.toLowerCase() === "pending";
+  const isAssigned = Boolean(leave.assignedTo?._id);
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen flex justify-center items-start md:items-center">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -146,15 +193,67 @@ const LeaveDetail = () => {
             <p><b>End Date:</b> {leave.endDate?.slice(0, 10)}</p>
             <p className="md:col-span-2"><b>Reason:</b> {leave.reason}</p>
             <p><b>Applied At:</b> {leave.appliedAt?.slice(0, 10)}</p>
+            <p>
+              <b>Assigned To:</b>{" "}
+              {leave.assignedTo?.userId?.name
+                ? `${leave.assignedTo.userId.name}${leave.assignedTo?.department?.dep_name ? ` (${leave.assignedTo.department.dep_name})` : ""}`
+                : "Not assigned"}
+            </p>
           </div>
 
+          {/* Assignment Section */}
+          {isPending && (
+            <div className="mt-2 px-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="font-semibold text-gray-800 mb-2">Assign (same department)</div>
+                <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                  <select
+                    className="w-full md:flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white"
+                    value={selectedAssignee}
+                    onChange={(e) => setSelectedAssignee(e.target.value)}
+                    disabled={assigning || updating}
+                  >
+                    <option value="">Select employee…</option>
+                    {assignees.map((a) => (
+                      <option key={a.employeeMongoId} value={a.employeeMongoId}>
+                        {a.name} ({a.employee_id})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={handleAssign}
+                    disabled={!selectedAssignee || assigning || updating}
+                    className={`px-4 py-2 rounded-lg font-semibold transition ${
+                      !selectedAssignee || assigning || updating
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {assigning ? "Assigning..." : "Assign"}
+                  </button>
+                </div>
+
+                {!isAssigned && (
+                  <p className="text-sm text-gray-600 mt-2">
+                    You must assign someone from the same department before approving.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Approve / Reject Buttons */}
-          {leave.status?.toLowerCase() === "pending" && (
+          {isPending && (
             <div className="flex justify-center gap-4 mt-4">
               <button
                 onClick={() => handleStatusUpdate("Approved")}
-                disabled={updating}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+                disabled={updating || !isAssigned}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  updating || !isAssigned
+                    ? "bg-green-200 text-green-700 cursor-not-allowed"
+                    : "bg-green-600 text-white hover:bg-green-700"
+                }`}
               >
                 Approve
               </button>

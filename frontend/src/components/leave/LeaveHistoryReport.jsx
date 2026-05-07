@@ -6,35 +6,41 @@ import { leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHe
 const API_BASE = "http://localhost:5000/api";
 
 const reportColumns = [
-  { name: "Employee", selector: (row) => row?.employeeId?.userId?.name || "—", sortable: true, wrap: true },
-  { name: "Employee ID", selector: (row) => row?.employeeId?.employee_id || "—", sortable: true },
-  { name: "Department", selector: (row) => row?.employeeId?.department?.dep_name || "—", sortable: true },
+  { name: "Employee", selector: (row) => row?.employeeId?.userId?.name || "—", sortable: true, wrap: true, minWidth: "180px", grow: 2 },
+  { name: "Employee ID", selector: (row) => row?.employeeId?.employee_id || "—", sortable: true, minWidth: "150px", maxWidth: "200px" },
+  { name: "Department", selector: (row) => row?.employeeId?.department?.dep_name || "—", sortable: true, minWidth: "160px", grow: 2 },
+  { name: "Assigned To", selector: (row) => row?.assignedTo?.userId?.name || "—", sortable: true, wrap: true, minWidth: "180px", grow: 2 },
   {
     name: "Leave Type",
     selector: (row) => leaveTypeLabels[row.leaveType] || row.leaveType || "—",
     sortable: true,
+    minWidth: "140px",
   },
   {
     name: "Applied",
     selector: (row) => (row?.appliedAt ? new Date(row.appliedAt).toLocaleDateString("en-US") : "—"),
     sortable: true,
+    minWidth: "120px",
   },
   {
     name: "From",
     selector: (row) => (row?.startDate ? new Date(row.startDate).toLocaleDateString("en-US") : "—"),
     sortable: true,
+    minWidth: "120px",
   },
   {
     name: "To",
     selector: (row) => (row?.endDate ? new Date(row.endDate).toLocaleDateString("en-US") : "—"),
     sortable: true,
+    minWidth: "120px",
   },
-  { name: "Reason", selector: (row) => row?.reason || "—", sortable: true, wrap: true },
+  { name: "Reason", selector: (row) => row?.reason || "—", sortable: true, wrap: true, minWidth: "320px", grow: 4 },
   {
     name: "Status",
     selector: (row) => row.status,
     sortable: true,
     center: true,
+    minWidth: "120px",
     cell: (row) => (
       <span
         className={`px-2 py-1 rounded text-sm font-semibold ${
@@ -54,10 +60,8 @@ const reportColumns = [
     selector: (row) => row.totalDays ?? 0,
     sortable: true,
     center: true,
-    width: "90px",
-    cell: (row) => (
-      <span className="block w-full text-center tabular-nums">{row.totalDays ?? 0}</span>
-    ),
+    minWidth: "90px",
+    cell: (row) => <span className="block w-full text-center tabular-nums">{row.totalDays ?? 0}</span>,
   },
 ];
 
@@ -159,6 +163,7 @@ const LeaveHistoryReport = () => {
       "Employee Name",
       "Employee ID",
       "Department",
+      "Assigned To",
       "Leave Type",
       "Applied At",
       "From",
@@ -172,6 +177,7 @@ const LeaveHistoryReport = () => {
       const empName = l?.employeeId?.userId?.name || "";
       const empId = l?.employeeId?.employee_id || "";
       const dept = l?.employeeId?.department?.dep_name || "";
+      const assignedTo = l?.assignedTo?.userId?.name || "";
       const type = leaveTypeLabels[l?.leaveType] || l?.leaveType || "";
       const appliedAt = l?.appliedAt ? new Date(l.appliedAt).toLocaleDateString("en-US") : "";
       const from = l?.startDate ? new Date(l.startDate).toLocaleDateString("en-US") : "";
@@ -180,7 +186,7 @@ const LeaveHistoryReport = () => {
       const st = l?.status || "";
       const days = l?.totalDays ?? "";
 
-      return [empName, empId, dept, type, appliedAt, from, to, reason, st, days];
+      return [empName, empId, dept, assignedTo, type, appliedAt, from, to, reason, st, days];
     });
 
     return [header, ...rows];
@@ -301,32 +307,67 @@ const LeaveHistoryReport = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <DataTable
-            columns={reportColumns}
-            data={filteredLeaves}
-            highlightOnHover
-            responsive
-            pagination
-            paginationPerPage={10}
-            paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
-            striped
-            noDataComponent={
-              <div className="py-20 text-center">
-                <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1"
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-                  ></path>
-                </svg>
-                <h3 className="text-xl font-semibold text-gray-500 mb-2">No leave records found</h3>
-                <p className="text-gray-400">Try adjusting your search or filter criteria</p>
-              </div>
-            }
-            customStyles={leaveDataTableCustomStyles}
-          />
+        <div className="bg-white rounded-xl border border-gray-200">
+          <div className="w-full min-w-0 overflow-x-auto">
+            <div style={{ minWidth: 1900 }}>
+              <DataTable
+                columns={reportColumns}
+                data={filteredLeaves}
+                highlightOnHover
+                responsive
+                pagination
+                paginationPerPage={10}
+                paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
+                striped
+                noDataComponent={
+                  <div className="py-20 text-center">
+                    <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="1"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                      ></path>
+                    </svg>
+                    <h3 className="text-xl font-semibold text-gray-500 mb-2">No leave records found</h3>
+                    <p className="text-gray-400">Try adjusting your search or filter criteria</p>
+                  </div>
+                }
+                customStyles={{
+                  ...leaveDataTableCustomStyles,
+                  headCells: {
+                    style: {
+                      ...(leaveDataTableCustomStyles?.headCells?.style || {}),
+                      whiteSpace: "nowrap",
+                      overflow: "visible",
+                      textOverflow: "clip",
+                    },
+                  },
+                  table: {
+                    style: {
+                      ...(leaveDataTableCustomStyles?.table?.style || {}),
+                      width: "100%",
+                      minWidth: "1900px",
+                      tableLayout: "auto",
+                    },
+                  },
+                  tableWrapper: {
+                    style: {
+                      overflowX: "auto",
+                      overflowY: "hidden",
+                    },
+                  },
+                  responsiveWrapper: {
+                    style: {
+                      ...(leaveDataTableCustomStyles?.responsiveWrapper?.style || {}),
+                      overflowX: "auto",
+                      overflowY: "hidden",
+                    },
+                  },
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -35,6 +35,7 @@ const LeaveManage = () => {
             name: leave.employeeId?.userId?.name || "N/A",
             dep_name: leave.employeeId?.department?.dep_name || "N/A",
             leave_type: leaveTypeLabels[leave.leaveType] || leave.leaveType,
+            assigned_to: leave.assignedTo?.userId?.name || "—",
             days,
             reason: leave.reason,
             status: leave.status,
