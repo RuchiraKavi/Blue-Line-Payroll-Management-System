@@ -55,7 +55,15 @@ const EmployeeSalaryHistory = () => {
         const data = res.data.data;
         const employee = data.employee || {};
         const monthName = monthNames[Number(month) - 1] || "";
-        downloadPayslipPdf(employee, data, month, year, monthName);
+        downloadPayslipPdf(
+          employee,
+          data,
+          month,
+          year,
+          monthName,
+          data.signature_data_url ?? null,
+          data.signature_date ?? null
+        );
       } else {
         alert("Payslip not found for this period.");
       }

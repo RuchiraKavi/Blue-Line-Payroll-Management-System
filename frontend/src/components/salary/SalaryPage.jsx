@@ -15,23 +15,36 @@ const getAuthHeader = () => ({
 
 const APPROVAL = { PENDING: "pending", APPROVED: "approved", REJECTED: "rejected" };
 
+const employeeMetaLine = (row) =>
+  [
+    row.employee_id,
+    row.nic ? `NIC: ${row.nic}` : null,
+    row.epf_number ? `EPF: ${row.epf_number}` : null,
+    row.designation,
+    row.department,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
 const defaultRow = (emp) => ({
   _id: emp._id,
   employee_id: emp.employee_id,
+  nic: emp.nic || "",
+  epf_number: emp.epf_number || "",
   name: emp.userId?.name || "N/A",
   designation: emp.designation || "",
   department: emp.department?.dep_name || "N/A",
   basic_salary: Number(emp.basic_salary) || 0,
-  travel_allowance: 0,
-  food_allowance: 0,
-  holiday_payment: 0,
-  allowance_ns: 0,
-  bonus: 0,
+  travel_allowance: Number(emp.travel_allowance) || 0,
+  food_allowance: Number(emp.food_allowance) || 0,
+  holiday_payment: Number(emp.holiday_payment) || 0,
+  allowance_ns: Number(emp.allowance_ns) || 0,
+  bonus: Number(emp.bonus) || 0,
   no_pay: Number(emp.no_pay) ?? 0,
   no_pay_days: emp.no_pay_days != null ? emp.no_pay_days : 0,
   salary_advance: 0,
-  stamp_duty: 0,
-  mobile_deduction: 0,
+  stamp_duty: Number(emp.stamp_duty) || 0,
+  mobile_deduction: Number(emp.mobile_deduction) || 0,
   epf_percent: 8,
   etf_percent: 3,
   paye: 0,
@@ -82,6 +95,7 @@ const SalaryPage = () => {
   const { user } = useAuth();
   const role = user?.role?.toLowerCase?.() || "";
   const canApprove = ["admin", "accountant", "account_manager", "account"].includes(role);
+  const canEditAllowances = ["admin", "hr", "hr_manager"].includes(role);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +147,8 @@ const SalaryPage = () => {
       return {
         ...row,
         approvalStatus: savedStatus,
+        nic: entry.nic ?? row.nic,
+        epf_number: entry.epf_number ?? row.epf_number,
         basic_salary: entry.basic_salary ?? row.basic_salary,
         travel_allowance: entry.travel_allowance ?? 0,
         food_allowance: entry.food_allowance ?? 0,
@@ -357,6 +373,7 @@ const SalaryPage = () => {
       setCurrentCalculateIndex(0);
       return;
     }
+
     const run = runForPeriod?.run;
     const hasEntry = (row) => run?.entries?.some((e) => entryMatchesRow(e, row));
     const firstToCalculate = run?.entries?.length
@@ -523,20 +540,30 @@ const SalaryPage = () => {
     }
     y += 10;
     const totalTableW = pageW - 2 * margin;
-    const colEmployee = totalTableW * 0.32;
-    const colDept = totalTableW * 0.18;
-    const colGross = totalTableW * 0.15;
-    const colDed = totalTableW * 0.15;
-    const colNet = totalTableW * 0.2;
+    const colEmployee = totalTableW * 0.22;
+    const colNic = totalTableW * 0.11;
+    const colEpf = totalTableW * 0.11;
+    const colDept = totalTableW * 0.12;
+    const colGross = totalTableW * 0.13;
+    const colDed = totalTableW * 0.13;
+    const colNet = totalTableW * 0.18;
     const rowH = 7;
+    const xNic = margin + colEmployee;
+    const xEpf = xNic + colNic;
+    const xDept = xEpf + colEpf;
+    const xGross = xDept + colDept;
+    const xDed = xGross + colGross;
+    const xNet = xDed + colDed;
     doc.setFillColor(240, 247, 255);
     doc.rect(margin, y, totalTableW, rowH, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.text("Employee", margin + 2, y + 4.5);
-    doc.text("Department", margin + colEmployee + 2, y + 4.5);
-    doc.text("Gross Salary", margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
-    doc.text("Total Deduction", margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+    doc.text("NIC", xNic + 2, y + 4.5);
+    doc.text("EPF No.", xEpf + 2, y + 4.5);
+    doc.text("Department", xDept + 2, y + 4.5);
+    doc.text("Gross Salary", xGross + colGross - 2, y + 4.5, { align: "right" });
+    doc.text("Total Deduction", xDed + colDed - 2, y + 4.5, { align: "right" });
     doc.text("Net Pay", margin + totalTableW - 2, y + 4.5, { align: "right" });
     doc.setFont("helvetica", "normal");
     y += rowH;
@@ -547,10 +574,12 @@ const SalaryPage = () => {
       }
       const c = getSummaryAmounts(row);
       doc.setFontSize(8);
-      doc.text((row.name || "—").slice(0, 28), margin + 2, y + 4.5);
-      doc.text((row.department || "—").slice(0, 14), margin + colEmployee + 2, y + 4.5);
-      doc.text(Number(c.gross_salary).toFixed(2), margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
-      doc.text(Number(c.total_deduction).toFixed(2), margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+      doc.text((row.name || "—").slice(0, 22), margin + 2, y + 4.5);
+      doc.text((row.nic || "—").slice(0, 12), xNic + 2, y + 4.5);
+      doc.text((row.epf_number || "—").slice(0, 12), xEpf + 2, y + 4.5);
+      doc.text((row.department || "—").slice(0, 12), xDept + 2, y + 4.5);
+      doc.text(Number(c.gross_salary).toFixed(2), xGross + colGross - 2, y + 4.5, { align: "right" });
+      doc.text(Number(c.total_deduction).toFixed(2), xDed + colDed - 2, y + 4.5, { align: "right" });
       doc.text(Number(c.net_pay).toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
       y += rowH;
     });
@@ -563,8 +592,8 @@ const SalaryPage = () => {
     const totNet = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).net_pay), 0);
     doc.setFont("helvetica", "bold");
     doc.text(filteredRows.length < approvedRows.length ? `Total (${filteredRows.length} shown)` : "Total", margin + 2, y + 4.5);
-    doc.text(totGross.toFixed(2), margin + colEmployee + colDept + colGross - 2, y + 4.5, { align: "right" });
-    doc.text(totDed.toFixed(2), margin + colEmployee + colDept + colGross + colDed - 2, y + 4.5, { align: "right" });
+    doc.text(totGross.toFixed(2), xGross + colGross - 2, y + 4.5, { align: "right" });
+    doc.text(totDed.toFixed(2), xDed + colDed - 2, y + 4.5, { align: "right" });
     doc.setTextColor(21, 128, 61);
     doc.text(totNet.toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
     doc.setTextColor(0, 0, 0);
@@ -954,6 +983,9 @@ const SalaryPage = () => {
                     _id: e.employee,
                     name: e.name,
                     employee_id: e.employee_id,
+                    nic: e.nic || "",
+                    epf_number: e.epf_number || "",
+                    designation: e.designation || "",
                     department: e.department,
                     gross_salary: e.gross_salary,
                     total_deduction: e.total_deduction,
@@ -962,7 +994,7 @@ const SalaryPage = () => {
             const searchLower = (summarySearch || "").trim().toLowerCase();
             const departments = [...new Set(approvedRows.map((r) => r.department).filter(Boolean))].sort();
             const filteredRows = approvedRows.filter((r) => {
-              const matchSearch = !searchLower || (r.name || "").toLowerCase().includes(searchLower) || (r.employee_id || "").toLowerCase().includes(searchLower) || (r.department || "").toLowerCase().includes(searchLower);
+              const matchSearch = !searchLower || (r.name || "").toLowerCase().includes(searchLower) || (r.employee_id || "").toLowerCase().includes(searchLower) || (r.nic || "").toLowerCase().includes(searchLower) || (r.epf_number || "").toLowerCase().includes(searchLower) || (r.department || "").toLowerCase().includes(searchLower);
               const matchDept = !summaryDepartment || (r.department || "") === summaryDepartment;
               return matchSearch && matchDept;
             });
@@ -1001,7 +1033,7 @@ const SalaryPage = () => {
                     </select>
                     <input
                       type="text"
-                      placeholder="Search by name, ID or department..."
+                      placeholder="Search by name, ID, NIC, EPF no. or department..."
                       value={summarySearch}
                       onChange={(e) => setSummarySearch(e.target.value)}
                       className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm min-w-[200px]"
@@ -1044,6 +1076,8 @@ const SalaryPage = () => {
                       <thead className="bg-linear-to-r from-gray-50 to-blue-50 text-gray-700 uppercase text-xs border-b-2 border-gray-200">
                         <tr>
                           <th className="px-6 py-4 text-left font-semibold">Employee</th>
+                          <th className="px-6 py-4 text-left font-semibold">NIC</th>
+                          <th className="px-6 py-4 text-left font-semibold">EPF No.</th>
                           <th className="px-6 py-4 text-left font-semibold">Department</th>
                           <th className="px-6 py-4 text-right font-semibold">Gross Salary</th>
                           <th className="px-6 py-4 text-right font-semibold">Total Deduction</th>
@@ -1053,13 +1087,13 @@ const SalaryPage = () => {
                       <tbody>
                         {summaryLoading ? (
                           <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                               Loading {monthNames[summaryMonth - 1]} {summaryYear}…
                             </td>
                           </tr>
                         ) : filteredRows.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                               {approvedRows.length === 0 ? (!isSummaryCurrentPeriod ? `No saved run for ${monthNames[summaryMonth - 1]} ${summaryYear}.` : "Approve salary entries below to include them in the summary.") : "No employees match the filter."}
                             </td>
                           </tr>
@@ -1072,6 +1106,8 @@ const SalaryPage = () => {
                                   <div className="font-semibold text-gray-900">{row.name}</div>
                                   <div className="text-xs text-gray-500">{row.employee_id}{row.designation ? ` · ${row.designation}` : ""}</div>
                                 </td>
+                                <td className="px-6 py-4 text-gray-700 font-mono text-xs">{row.nic || "—"}</td>
+                                <td className="px-6 py-4 text-gray-700 font-mono text-xs">{row.epf_number || "—"}</td>
                                 <td className="px-6 py-4 text-gray-700">{row.department}</td>
                                 <td className="px-6 py-4 text-right font-medium">{Number(c.gross_salary).toFixed(2)}</td>
                                 <td className="px-6 py-4 text-right">{Number(c.total_deduction).toFixed(2)}</td>
@@ -1084,7 +1120,7 @@ const SalaryPage = () => {
                       {!summaryLoading && filteredRows.length > 0 && (
                         <tfoot>
                           <tr className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-200">
-                            <td className="px-6 py-4" colSpan={2}>Total{filteredRows.length < approvedRows.length ? ` (${filteredRows.length} shown)` : ""}</td>
+                            <td className="px-6 py-4" colSpan={4}>Total{filteredRows.length < approvedRows.length ? ` (${filteredRows.length} shown)` : ""}</td>
                             <td className="px-6 py-4 text-right">
                               {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).gross_salary), 0).toFixed(2)}
                             </td>
@@ -1162,7 +1198,7 @@ const SalaryPage = () => {
                                 Salary for {periodLabel}
                               </span>
                             </div>
-                            <span className="text-gray-500 text-sm block mt-1">{row.employee_id} · {row.designation} · {row.department}</span>
+                            <span className="text-gray-500 text-sm block mt-1">{employeeMetaLine(row)}</span>
                             {row.approvalStatus === APPROVAL.APPROVED && (
                               <span className="ml-2 inline-flex items-center px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700">Approved</span>
                             )}
@@ -1200,43 +1236,39 @@ const SalaryPage = () => {
                           </div>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Travel</span>
-                            <input type="number" min="0" step="1" readOnly={locked} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances (set on employee profile)" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Food</span>
-                            <input type="number" min="0" step="1" readOnly={locked} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Holiday</span>
-                            <input type="number" min="0" step="1" readOnly={locked} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Allowance-NS</span>
-                            <input type="number" min="0" step="1" readOnly={locked} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Bonus</span>
-                            <input type="number" min="0" step="1" readOnly={locked} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
                         </div>
                       </div>
 
-                      <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-2">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">
-                          Deductions
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="border-2 border-slate-200 rounded-xl p-4 bg-slate-50/50">
-                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
-                            <div className="space-y-2 text-sm">
-                              <label className="flex justify-between items-center gap-2">
-                                <span className="text-gray-700">Stamp Duty</span>
-                                <input type="number" min="0" step="1" readOnly={locked} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                      <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-1">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">Deductions</h3>
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
+                        <div className="space-y-2 text-sm">
+                          <label className="flex justify-between items-center gap-2">
+                            <span className="text-gray-700">Stamp Duty</span>
+                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Mobile Deduction</span>
-                                <input type="number" min="0" step="1" readOnly={locked} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
                               </label>
                               <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                                 <span>Total Service Charges</span>
@@ -1254,35 +1286,31 @@ const SalaryPage = () => {
                                 <span className="text-gray-700">Salary Advance</span>
                                 <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="From approved advance requests (read-only)" />
                               </label>
-                            </div>
-                          </div>
-
-                          <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
-                            <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">EPF & ETF Payment</h4>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between items-center gap-2">
-                                <span className="text-gray-700">Earnings base (excl. bonus)</span>
-                                <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
-                              </div>
-                              <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                                <span>Employee EPF (8%) — deducted</span>
-                                <span>{epf.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between items-center gap-2 text-gray-700">
-                                <span>Employer EPF (12%)</span>
-                                <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between items-center gap-2 text-gray-700">
-                                <span>Employer ETF (3%)</span>
-                                <span className="font-medium">{etf.toFixed(2)}</span>
-                              </div>
-                            </div>
-                          </div>
                         </div>
-                        <div className="mt-4 flex justify-end">
-                          <div className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-semibold text-sm shadow-sm">
-                            <span className="mr-2">Total Deduction:</span>
-                            <span>{totalDed.toFixed(2)}</span>
+
+                      </div>
+                      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1">
+                        <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
+                            <span className="text-gray-700 font-medium">EPF Number</span>
+                            <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                            <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
+                          </div>
+                          <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
+                            <span>Employee EPF (8%) — deducted</span>
+                            <span>{epf.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-gray-700">
+                            <span>Employer EPF (12%)</span>
+                            <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-gray-700">
+                            <span>Employer ETF (3%)</span>
+                            <span className="font-medium">{etf.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -1558,7 +1586,7 @@ const SalaryPage = () => {
                         <span className="font-semibold text-gray-900">{row.name}</span>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800">Salary for {periodLabel}</span>
                       </div>
-                      <span className="text-gray-500 text-sm block mt-1">{row.employee_id} · {row.designation} · {row.department}</span>
+                      <span className="text-gray-500 text-sm block mt-1">{employeeMetaLine(row)}</span>
                       {row.approvalStatus === APPROVAL.APPROVED && (
                         <span className="ml-2 inline-flex items-center px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700">Approved</span>
                       )}
@@ -1607,40 +1635,38 @@ const SalaryPage = () => {
                         </div>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Travel</span>
-                          <input type="number" min="0" step="1" value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Food</span>
-                          <input type="number" min="0" step="1" value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Holiday</span>
-                          <input type="number" min="0" step="1" value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Allowance-NS</span>
-                          <input type="number" min="0" step="1" value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Bonus</span>
-                          <input type="number" min="0" step="1" value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
                       </div>
                     </div>
-                    <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-2 min-w-0">
+                    <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-1 min-w-0">
                       <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">Deductions</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="border-2 border-slate-200 rounded-xl p-4 bg-slate-50/50">
-                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
-                          <div className="space-y-2 text-sm">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
+                      <div className="space-y-2 text-sm">
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Stamp Duty</span>
-                              <input type="number" min="0" step="1" value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                             </label>
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Mobile Deduction</span>
-                              <input type="number" min="0" step="1" value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                             </label>
                             <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                               <span>Total Service Charges</span>
@@ -1658,34 +1684,30 @@ const SalaryPage = () => {
                               <span className="text-gray-700">Salary Advance</span>
                               <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" />
                             </label>
-                          </div>
-                        </div>
-                        <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
-                          <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">EPF & ETF Payment</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between items-center gap-2">
-                              <span className="text-gray-700">Earnings base (excl. bonus)</span>
-                              <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
-                            </div>
-                            <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                              <span>Employee EPF (8%) — deducted</span>
-                              <span>{epf.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between items-center gap-2 text-gray-700">
-                              <span>Employer EPF (12%)</span>
-                              <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between items-center gap-2 text-gray-700">
-                              <span>Employer ETF (3%)</span>
-                              <span className="font-medium">{etf.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        </div>
                       </div>
-                      <div className="mt-4 flex justify-end">
-                        <div className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-semibold text-sm shadow-sm">
-                          <span className="mr-2">Total Deduction:</span>
-                          <span>{totalDed.toFixed(2)}</span>
+                    </div>
+                    <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1 min-w-0">
+                      <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
+                          <span className="text-gray-700 font-medium">EPF Number</span>
+                          <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                          <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
+                        </div>
+                        <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
+                          <span>Employee EPF (8%) — deducted</span>
+                          <span>{epf.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2 text-gray-700">
+                          <span>Employer EPF (12%)</span>
+                          <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2 text-gray-700">
+                          <span>Employer ETF (3%)</span>
+                          <span className="font-medium">{etf.toFixed(2)}</span>
                         </div>
                       </div>
                     </div>

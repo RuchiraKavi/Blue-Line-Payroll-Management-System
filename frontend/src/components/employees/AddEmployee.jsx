@@ -1,17 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { fetchDepartments } from "../../utils/EmployeeHelper";
+import { fetchDepartments, fetchDesignationsByDepartment } from "../../utils/EmployeeHelper";
 import { useAuth } from "../../hooks/useAuth";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./AllowancesSection";
+import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
 
 const AddEmployee = () => {
   const { user, loading } = useAuth();
   const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [designationsLoading, setDesignationsLoading] = useState(false);
   const [formData, setFormData] = useState({
     employee_id: "",
     name: "",
     email: "",
     nic: "",
+    epf_number: "",
     dob: "",
     gender: "",
     marital_status: "",
@@ -20,6 +25,8 @@ const AddEmployee = () => {
     designation: "",
     department: "",
     basic_salary: "",
+    ...emptyAllowances(),
+    ...emptyServiceCharges(),
     password: "",
     role: "",
     bank_name: "",
@@ -66,6 +73,7 @@ const AddEmployee = () => {
           setFormData((prevData) => ({
             ...prevData,
             employee_id: idResponse.data.nextId,
+            epf_number: idResponse.data.nextEpfNumber || "",
           }));
         }
       } catch (err) {
@@ -96,11 +104,33 @@ const AddEmployee = () => {
     }
   }, [user, loading, navigate]);
 
+  useEffect(() => {
+    const loadDesignations = async () => {
+      if (!formData.department) {
+        setDesignations([]);
+        return;
+      }
+
+      setDesignationsLoading(true);
+      const list = await fetchDesignationsByDepartment(formData.department);
+      setDesignations(list);
+      setDesignationsLoading(false);
+    };
+
+    loadDesignations();
+  }, [formData.department]);
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     setError("");
     if (name === "image") {
       setFormData((prevData) => ({ ...prevData, [name]: files[0] }));
+    } else if (name === "department") {
+      setFormData((prevData) => ({
+        ...prevData,
+        department: value,
+        designation: "",
+      }));
     } else {
       setFormData((prevData) => ({ ...prevData, [name]: value }));
     }
@@ -132,6 +162,18 @@ const AddEmployee = () => {
 
     if (!/^[0-9]{8,18}$/.test(formData.bank_account_number))
       return "Bank Account Number must be 8–18 digits";
+
+    const numericProfileFields = [
+      ...ALLOWANCE_FIELDS.map((f) => f.name),
+      ...SERVICE_CHARGE_FIELDS.map((f) => f.name),
+    ];
+    for (const field of numericProfileFields) {
+      const val = formData[field];
+      if (val !== "" && val != null && Number(val) < 0) {
+        return "Allowance and service charge amounts cannot be negative";
+      }
+    }
+
     return null;
   };
 
@@ -153,9 +195,17 @@ const AddEmployee = () => {
       return;
     }
 
+    const profileDefaultNames = [
+      ...ALLOWANCE_FIELDS.map((f) => f.name),
+      ...SERVICE_CHARGE_FIELDS.map((f) => f.name),
+    ];
     const formDataObj = new FormData();
     Object.keys(formData).forEach((key) => {
-      if (formData[key]) {
+      if (key === "image") {
+        if (formData[key]) formDataObj.append(key, formData[key]);
+      } else if (profileDefaultNames.includes(key)) {
+        formDataObj.append(key, formData[key] === "" ? "0" : formData[key]);
+      } else if (formData[key] !== null && formData[key] !== "") {
         formDataObj.append(key, formData[key]);
       }
     });
@@ -219,7 +269,11 @@ const AddEmployee = () => {
           Register Employee
         </h3>
         <p className="text-center text-sm text-gray-600 mb-6">
-          Next Employee ID: <span className="font-semibold text-indigo-600">{formData.employee_id}</span> | Adding as: <span className="font-semibold capitalize">{user?.role}</span>
+          Next Employee ID: <span className="font-semibold text-indigo-600">{formData.employee_id}</span>
+          {" · "}
+          Next EPF No.: <span className="font-semibold text-indigo-600">{formData.epf_number}</span>
+          {" | Adding as: "}
+          <span className="font-semibold capitalize">{user?.role}</span>
         </p>
 
         {error && (
@@ -264,6 +318,20 @@ const AddEmployee = () => {
               />
             </div>
 
+          {/* EPF Number */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              EPF Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="epf_number"
+              value={formData.epf_number}
+              readOnly
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed uppercase"
+              required
+            />
+          </div>
 
           {/* Email */}
           <div>
@@ -294,7 +362,6 @@ const AddEmployee = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
               required
             />
-            <p className="mt-1 text-xs text-gray-500">Auto-generated from backend</p>
           </div>
 
           {/* Date of Birth */}
@@ -378,22 +445,6 @@ const AddEmployee = () => {
             />
           </div>
 
-          {/* Designation */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Designation <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="designation"
-              value={formData.designation}
-              placeholder="Job Title"
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              required
-            />
-          </div>
-
           {/* Department */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -415,6 +466,41 @@ const AddEmployee = () => {
             </select>
           </div>
 
+          {/* Designation */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Designation <span className="text-red-500">*</span>
+            </label>
+            <select
+              name="designation"
+              value={formData.designation}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+              required
+              disabled={!formData.department || designationsLoading}
+            >
+              <option value="">
+                {!formData.department
+                  ? "Select a department first"
+                  : designationsLoading
+                  ? "Loading designations..."
+                  : designations.length === 0
+                  ? "No designations — add them in department settings"
+                  : "Select Designation"}
+              </option>
+              {designations.map((des) => (
+                <option key={des._id} value={des.title}>
+                  {des.title}
+                </option>
+              ))}
+            </select>
+            {formData.department && !designationsLoading && designations.length === 0 && (
+              <p className="mt-1 text-xs text-amber-600">
+                Add designations for this department under Departments → Edit.
+              </p>
+            )}
+          </div>
+
           {/* Basic Salary */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -430,6 +516,10 @@ const AddEmployee = () => {
               required
             />
           </div>
+
+          <AllowancesSection values={formData} onChange={handleChange} />
+
+          <ServiceChargesSection values={formData} onChange={handleChange} />
 
           {/* Bank Name */}
             <div>
@@ -523,9 +613,6 @@ const AddEmployee = () => {
                 ));
               })()}
             </select>
-            <p className="mt-1 text-xs text-gray-500">
-              Available roles based on your permissions
-            </p>
           </div>
 
           {/* Upload Image */}

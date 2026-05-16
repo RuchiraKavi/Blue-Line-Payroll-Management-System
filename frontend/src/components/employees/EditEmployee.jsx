@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { fetchDepartments } from "../../utils/EmployeeHelper";
+import { fetchDepartments, fetchDesignationsByDepartment } from "../../utils/EmployeeHelper";
 import { useAuth } from "../../hooks/useAuth";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
+import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./AllowancesSection";
+import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
 
 const EditEmployee = () => {
   const { user, loading } = useAuth();
@@ -10,6 +12,7 @@ const EditEmployee = () => {
     name: "",
     email: "",
     nic: "",
+    epf_number: "",
     employee_id: "",
     dob: "",
     gender: "",
@@ -19,6 +22,8 @@ const EditEmployee = () => {
     designation: "",
     department: "",
     basic_salary: "",
+    ...emptyAllowances(),
+    ...emptyServiceCharges(),
     role: "",
     bank_name: "",
     bank_branch: "",
@@ -29,6 +34,8 @@ const EditEmployee = () => {
 
   const [error, setError] = useState("");
   const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [designationsLoading, setDesignationsLoading] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
 
@@ -78,6 +85,7 @@ const EditEmployee = () => {
           name: emp.userId?.name || "",
           email: emp.userId?.email || "",
           nic: emp.nic || "",
+          epf_number: emp.epf_number || "",
           employee_id: emp.employee_id || "",
           dob: emp.dob ? emp.dob.slice(0, 10) : "",
           gender: emp.gender || "",
@@ -87,6 +95,13 @@ const EditEmployee = () => {
           designation: emp.designation || "",
           department: emp.department?._id || "",
           basic_salary: emp.basic_salary || "",
+          travel_allowance: emp.travel_allowance ?? "",
+          food_allowance: emp.food_allowance ?? "",
+          holiday_payment: emp.holiday_payment ?? "",
+          allowance_ns: emp.allowance_ns ?? "",
+          bonus: emp.bonus ?? "",
+          stamp_duty: emp.stamp_duty ?? "",
+          mobile_deduction: emp.mobile_deduction ?? "",
           role: emp.userId?.role || "",
           bank_name: emp.bank_details?.bank_name || "",
           bank_branch: emp.bank_details?.bank_branch || "",
@@ -112,9 +127,46 @@ const EditEmployee = () => {
     getDepartments();
   }, []);
 
+  useEffect(() => {
+    const loadDesignations = async () => {
+      if (!employee.department) {
+        setDesignations([]);
+        return;
+      }
+
+      setDesignationsLoading(true);
+      const list = await fetchDesignationsByDepartment(employee.department);
+      const withCurrent =
+        employee.designation &&
+        !list.some(
+          (d) =>
+            d.title.toLowerCase() === employee.designation.toLowerCase()
+        )
+          ? [
+              ...list,
+              { _id: "current", title: employee.designation },
+            ]
+          : list;
+
+      setDesignations(withCurrent);
+      setDesignationsLoading(false);
+    };
+
+    loadDesignations();
+  }, [employee.department, employee.designation]);
+
   /* ================= Handle Change ================= */
   const handleChange = (e) => {
     const { name, value, files } = e.target;
+
+    if (name === "department") {
+      setEmployee((prev) => ({
+        ...prev,
+        department: value,
+        designation: "",
+      }));
+      return;
+    }
 
     setEmployee((prev) => ({
       ...prev,
@@ -148,13 +200,19 @@ const EditEmployee = () => {
       return;
     }
 
+    const profileDefaultNames = [
+      ...ALLOWANCE_FIELDS.map((f) => f.name),
+      ...SERVICE_CHARGE_FIELDS.map((f) => f.name),
+    ];
     const formData = new FormData();
     Object.keys(employee).forEach((key) => {
-      // Skip null/empty values, but include image only if it's a File object
+      if (key === "employee_id" || key === "epf_number") return;
       if (key === "image") {
         if (employee[key] instanceof File) {
           formData.append(key, employee[key]);
         }
+      } else if (profileDefaultNames.includes(key)) {
+        formData.append(key, employee[key] === "" ? "0" : employee[key]);
       } else if (employee[key] !== null && employee[key] !== "") {
         formData.append(key, employee[key]);
       }
@@ -246,6 +304,21 @@ const EditEmployee = () => {
         />
       </div>
 
+
+      {/* EPF Number */}
+      <div className="flex flex-col">
+        <label htmlFor="epf_number" className="mb-1 font-medium">
+          EPF Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="epf_number"
+          name="epf_number"
+          value={employee.epf_number || "—"}
+          readOnly
+          className="input uppercase bg-gray-100 cursor-not-allowed"
+        />
+      </div>
 
       {/* Email */}
       <div className="flex flex-col">
@@ -350,20 +423,6 @@ const EditEmployee = () => {
         />
       </div>
 
-      {/* Designation */}
-      <div className="flex flex-col">
-        <label htmlFor="designation" className="mb-1 font-medium">Designation</label>
-        <input
-          type="text"
-          name="designation"
-          id="designation"
-          value={employee.designation}
-          onChange={handleChange}
-          required
-          className="input"
-        />
-      </div>
-
       {/* Department */}
       <div className="flex flex-col">
         <label htmlFor="department" className="mb-1 font-medium">Department</label>
@@ -384,6 +443,40 @@ const EditEmployee = () => {
         </select>
       </div>
 
+      {/* Designation */}
+      <div className="flex flex-col">
+        <label htmlFor="designation" className="mb-1 font-medium">Designation</label>
+        <select
+          name="designation"
+          id="designation"
+          value={employee.designation}
+          onChange={handleChange}
+          required
+          disabled={!employee.department || designationsLoading}
+          className="input disabled:bg-gray-100"
+        >
+          <option value="">
+            {!employee.department
+              ? "Select a department first"
+              : designationsLoading
+              ? "Loading designations..."
+              : designations.length === 0
+              ? "No designations — add them in department settings"
+              : "Select Designation"}
+          </option>
+          {designations.map((des) => (
+            <option key={des._id} value={des.title}>
+              {des.title}
+            </option>
+          ))}
+        </select>
+        {employee.department && !designationsLoading && designations.length === 0 && (
+          <p className="mt-1 text-xs text-amber-600">
+            Add designations for this department under Departments → Edit.
+          </p>
+        )}
+      </div>
+
       {/* Basic Salary */}
       <div className="flex flex-col">
         <label htmlFor="basic_salary" className="mb-1 font-medium">Basic Salary</label>
@@ -397,6 +490,10 @@ const EditEmployee = () => {
           className="input"
         />
       </div>
+
+      <AllowancesSection values={employee} onChange={handleChange} />
+
+      <ServiceChargesSection values={employee} onChange={handleChange} />
 
       {/* Bank Name */}
       <div className="flex flex-col">
@@ -475,7 +572,6 @@ const EditEmployee = () => {
             ));
           })()}
         </select>
-        <p className="mt-1 text-xs text-gray-500">Available roles based on your permissions</p>
       </div>
 
       {/* Image Upload */}

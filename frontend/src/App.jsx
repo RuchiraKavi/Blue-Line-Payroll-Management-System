@@ -31,6 +31,7 @@ import AttendanceList from "./components/attendance/AttendanceList.jsx";
 import AttendanceHistoryReport from "./components/attendance/AttendanceHistoryReport.jsx";
 import SalaryPage from "./components/salary/SalaryPage.jsx";
 import EmployeeSalaryHistory from "./components/salary/EmployeeSalaryHistory.jsx";
+import AdminEmployeeSalaryHistory from "./components/salary/AdminEmployeeSalaryHistory.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -137,6 +138,15 @@ function App() {
           />
 
           <Route
+            path="employees/salary/:employeeId"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AdminEmployeeSalaryHistory />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="employees/:id"
             element={
               <ProtectedRoute allowedRoles={["admin", "hr"]}>
@@ -209,7 +219,7 @@ function App() {
           <Route
             path="salary"
             element={
-              <ProtectedRoute allowedRoles={["admin", "account", "account_manager", "accountant"]}>
+              <ProtectedRoute allowedRoles={["admin", "hr", "hr_manager", "account", "account_manager", "accountant"]}>
                 <SalaryPage />
               </ProtectedRoute>
             }

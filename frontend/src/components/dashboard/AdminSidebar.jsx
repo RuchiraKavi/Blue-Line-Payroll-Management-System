@@ -107,8 +107,8 @@ const AdminSidebar = () => {
           </NavLink>
         )}
 
-        {/* Salary → Admin & Accountant only */}
-        {(role === "admin" || isAccount) && (
+        {/* Salary → Admin, HR & Accountant */}
+        {(role === "admin" || isHR || isAccount) && (
           <NavLink
             to="/admin-dashboard/salary"
             className={({ isActive }) =>

@@ -20,6 +20,26 @@ export const columns = (refreshDepartments) => [
 ];
 
 
+export const fetchDesignations = async (departmentId) => {
+  if (!departmentId) return [];
+
+  try {
+    const response = await axios.get(
+      `http://localhost:5000/api/departments/${departmentId}/designations`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      }
+    );
+
+    return response.data.success ? response.data.designations : [];
+  } catch (error) {
+    alert(error.response?.data?.message || "Error fetching designations");
+    return [];
+  }
+};
+
 export const DepartmentButtons = ({ _id, refresh }) => {
   const navigate = useNavigate();
 

@@ -71,6 +71,7 @@ const Profile = () => {
                   <p><b>Name:</b> {employee.userId?.name}</p>
                   <p><b>Email:</b> {employee.userId?.email}</p>
                   <p><b>NIC:</b> {employee.nic}</p>
+                  <p><b>EPF Number:</b> {employee.epf_number || "—"}</p>
                   <p><b>DOB:</b> {employee.dob?.slice(0, 10)}</p>
                   <p><b>Gender:</b> {employee.gender}</p>
                   <p><b>Marital Status:</b> {employee.marital_status}</p>
@@ -109,6 +110,23 @@ const Profile = () => {
                       {employee.userId?.role}
                     </span>
                   </p>
+                </div>
+                <div className="mt-4 border border-amber-200 rounded-lg p-4 bg-amber-50/50">
+                  <h4 className="font-semibold text-amber-900 mb-2">Allowances</h4>
+                  <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                    <p><b>Travel:</b> Rs. {(employee.travel_allowance ?? 0).toLocaleString()}</p>
+                    <p><b>Food:</b> Rs. {(employee.food_allowance ?? 0).toLocaleString()}</p>
+                    <p><b>Holiday:</b> Rs. {(employee.holiday_payment ?? 0).toLocaleString()}</p>
+                    <p><b>Allowance-NS:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
+                    <p><b>Bonus:</b> Rs. {(employee.bonus ?? 0).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="mt-4 border border-slate-300 rounded-lg p-4 bg-slate-50/60">
+                  <h4 className="font-semibold text-slate-900 mb-2">Service Charges</h4>
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                    <p><b>Stamp Duty:</b> Rs. {(employee.stamp_duty ?? 0).toLocaleString()}</p>
+                    <p><b>Mobile Deduction:</b> Rs. {(employee.mobile_deduction ?? 0).toLocaleString()}</p>
+                  </div>
                 </div>
               </div>
 

@@ -51,6 +51,17 @@ function pdfTable(doc, y, left, width, rows, options = {}) {
 
 /** Export: generate and download payslip PDF — single page, scaled to fit A4. */
 export function downloadPayslipPdf(employee, data, month, year, monthName, signatureDataUrl = null, signatureDate = null) {
+  const resolvedSignatureUrl =
+    signatureDataUrl ??
+    (typeof data?.signature_data_url === "string" && data.signature_data_url.length > 0
+      ? data.signature_data_url
+      : null);
+  const resolvedSignatureDate =
+    signatureDate ??
+    (typeof data?.signature_date === "string" && data.signature_date.trim()
+      ? data.signature_date.trim()
+      : null);
+
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -58,7 +69,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const tableWidth = pageW - margin * 2;
   const usableH = pageH - margin * 2; // A4 height 297mm
   // Scale so entire payslip fits on one page with small bottom margin
-  const totalLogicalH = margin + 22 + (6+5+4*6+5) + (6+5+9*6+5) + (6+5+6*6+5) + (6+5+4*6+5) + (6+6+6+5) + (5+5+5+4) + (6+5+5+3+10);
+  const totalLogicalH = margin + 22 + (6+5+6*6+5) + (6+5+9*6+5) + (6+5+6*6+5) + (6+5+4*6+5) + (6+6+6+5) + (5+5+5+4) + (6+5+5+3+10);
   const v = Math.min(1, (usableH * 0.97) / totalLogicalH);
   const rowH = 6 * v;
   const gap = (x) => x * v;
@@ -68,6 +79,8 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const totalEarningsPayslip = (Number(data.basic_salary) || 0) + (Number(data.total_allowances) || 0);
   const empName = employee?.userId?.name || data?.name || "N/A";
   const empId = employee?.employee_id || data?.employee_id || "—";
+  const empNic = employee?.nic || data?.nic || "—";
+  const empEpfNumber = employee?.epf_number || data?.epf_number || "—";
   const designation = employee?.designation || data?.designation || "—";
   const department = (employee?.department?.dep_name ?? employee?.department) || data?.department || "—";
   const bankName = employee?.bank_details?.bank_name || "—";
@@ -104,6 +117,8 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   y = pdfTable(doc, y, margin, tableWidth, [
     { label: "Name", value: empName, labelBg: true },
     { label: "Employee ID", value: empId, labelBg: true },
+    { label: "NIC", value: empNic, labelBg: true },
+    { label: "EPF Number", value: empEpfNumber, labelBg: true },
     { label: "Designation", value: designation, labelBg: true },
     { label: "Department", value: department, labelBg: true },
   ], opts({ labelColumnFill: [249, 250, 251] }));
@@ -213,8 +228,8 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const dateBoxW = 30;
   const sigY = y;
 
-  const dateStr = (signatureDate != null && String(signatureDate).trim() !== "")
-    ? String(signatureDate)
+  const dateStr = (resolvedSignatureDate != null && String(resolvedSignatureDate).trim() !== "")
+    ? String(resolvedSignatureDate)
     : new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 
   doc.setDrawColor(209, 213, 219);
@@ -229,7 +244,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const safeName = `${String(empName).replace(/[^a-zA-Z0-9-_]/g, "_")}_Payslip_${monthName}_${year}.pdf`;
 
   const addSignatureAndSave = () => {
-    if (signatureDataUrl && typeof signatureDataUrl === "string" && signatureDataUrl.startsWith("data:image")) {
+    if (resolvedSignatureUrl && typeof resolvedSignatureUrl === "string" && resolvedSignatureUrl.startsWith("data:image")) {
       const img = new Image();
       img.onload = () => {
         try {
@@ -249,13 +264,13 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
           }
         } catch (_) {
           try {
-            doc.addImage(signatureDataUrl, /image\/png/i.test(signatureDataUrl) ? "PNG" : "JPEG", margin, sigY, sigBoxW, sigBoxH);
+            doc.addImage(resolvedSignatureUrl, /image\/png/i.test(resolvedSignatureUrl) ? "PNG" : "JPEG", margin, sigY, sigBoxW, sigBoxH);
           } catch (_) {}
         }
         doc.save(safeName);
       };
       img.onerror = () => doc.save(safeName);
-      img.src = signatureDataUrl;
+      img.src = resolvedSignatureUrl;
     } else {
       doc.save(safeName);
     }
@@ -314,10 +329,12 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
     }, 250);
   };
 
-  const empName = employee?.userId?.name || "N/A";
-  const empId = employee?.employee_id || "—";
-  const designation = employee?.designation || "—";
-  const department = employee?.department?.dep_name || "—";
+  const empName = employee?.userId?.name || data?.name || "N/A";
+  const empId = employee?.employee_id || data?.employee_id || "—";
+  const empNic = employee?.nic || data?.nic || "—";
+  const empEpfNumber = employee?.epf_number || data?.epf_number || "—";
+  const designation = employee?.designation || data?.designation || "—";
+  const department = (employee?.department?.dep_name ?? employee?.department) || data?.department || "—";
   const bankName = employee?.bank_details?.bank_name || "—";
   const bankBranch = employee?.bank_details?.bank_branch || "—";
   const bankAcc = employee?.bank_details?.bank_account_number || "—";
@@ -416,6 +433,8 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                 <tbody>
                   <tr><td className={`${tableCell} font-medium w-1/3 bg-gray-50`}>Name</td><td className={tableCell}>{empName}</td></tr>
                   <tr><td className={`${tableCell} font-medium bg-gray-50`}>Employee ID</td><td className={tableCell}>{empId}</td></tr>
+                  <tr><td className={`${tableCell} font-medium bg-gray-50`}>NIC</td><td className={tableCell}>{empNic}</td></tr>
+                  <tr><td className={`${tableCell} font-medium bg-gray-50`}>EPF Number</td><td className={tableCell}>{empEpfNumber}</td></tr>
                   <tr><td className={`${tableCell} font-medium bg-gray-50`}>Designation</td><td className={tableCell}>{designation}</td></tr>
                   <tr><td className={`${tableCell} font-medium bg-gray-50`}>Department</td><td className={tableCell}>{department}</td></tr>
                 </tbody>
