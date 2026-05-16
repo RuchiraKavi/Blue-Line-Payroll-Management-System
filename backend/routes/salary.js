@@ -13,15 +13,23 @@ import {
   getSalaryRuns,
   getContributionHistory,
   getMySalaryHistory,
+  getEmployeeSalaryHistory,
   getMyPayslip,
 } from "../controllers/salaryController.js";
 
 const router = express.Router();
 
-const salaryRoles = ["admin", "account", "accountant", "account_manager"];
+const salaryRoles = ["admin", "hr", "hr_manager", "account", "accountant", "account_manager"];
 
 router.get("/my-history", authMiddleware, getMySalaryHistory);
 router.get("/me/payslip", authMiddleware, getMyPayslip);
+
+router.get(
+  "/employee-history/:employeeId",
+  authMiddleware,
+  authorizeRoles(...salaryRoles),
+  getEmployeeSalaryHistory
+);
 
 router.get(
   "/employees",

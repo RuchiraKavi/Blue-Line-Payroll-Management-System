@@ -5,6 +5,9 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Department from "../models/Department.js";
+import { validateDesignationForDepartment } from "../utils/designationValidation.js";
+import { parseAllowance } from "../utils/parseAllowance.js";
+import { getNextEpfNumber, resolveEpfNumberForNewEmployee } from "../utils/epfValidation.js";
 
 /* ================= MULTER SETUP ================= */
 const storage = multer.diskStorage({
@@ -49,10 +52,17 @@ const getLastEmployeeId = async (req, res) => {
       }
     }
 
+    const nextEpfNumber = await getNextEpfNumber(Employee);
+    const lastWithEpf = await Employee.findOne({ epf_number: { $regex: /^EPF\d+$/i } })
+      .sort({ epf_number: -1 })
+      .select("epf_number");
+
     return res.status(200).json({
       success: true,
       nextId,
+      nextEpfNumber,
       lastId: lastEmployee?.employee_id || null,
+      lastEpfNumber: lastWithEpf?.epf_number || null,
     });
   } catch (error) {
     console.error("Get Last Employee ID Error:", error);
@@ -72,6 +82,7 @@ const addEmployee = async (req, res) => {
       password,
       employee_id,
       nic,
+      epf_number,
       dob,
       gender,
       marital_status,
@@ -84,6 +95,13 @@ const addEmployee = async (req, res) => {
       bank_name,
       bank_branch,
       bank_account_number,
+      travel_allowance,
+      food_allowance,
+      holiday_payment,
+      allowance_ns,
+      bonus,
+      stamp_duty,
+      mobile_deduction,
     } = req.body;
 
     /* ---------------- ROLE NORMALIZATION ---------------- */
@@ -178,6 +196,30 @@ const addEmployee = async (req, res) => {
     if (await Employee.findOne({ nic }))
       return res.status(400).json({ success: false, message: "NIC already exists" });
 
+    const epfCheck = await resolveEpfNumberForNewEmployee(Employee, epf_number);
+    if (!epfCheck.ok) {
+      return res.status(400).json({ success: false, message: epfCheck.message });
+    }
+
+    const departmentExists = await Department.findById(department);
+    if (!departmentExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid department selected",
+      });
+    }
+
+    const designationValid = await validateDesignationForDepartment(
+      designation,
+      department
+    );
+    if (!designationValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid designation for the chosen department",
+      });
+    }
+
     /* ---------------- CREATE USER ---------------- */
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -214,6 +256,7 @@ const addEmployee = async (req, res) => {
       employee_id: finalEmployeeId,
       email,
       nic,
+      epf_number: epfCheck.value,
       dob,
       gender,
       marital_status,
@@ -222,6 +265,13 @@ const addEmployee = async (req, res) => {
       designation,
       department,
       basic_salary,
+      travel_allowance: parseAllowance(travel_allowance),
+      food_allowance: parseAllowance(food_allowance),
+      holiday_payment: parseAllowance(holiday_payment),
+      allowance_ns: parseAllowance(allowance_ns),
+      bonus: parseAllowance(bonus),
+      stamp_duty: parseAllowance(stamp_duty),
+      mobile_deduction: parseAllowance(mobile_deduction),
       role: assignedRole,
       bank_details: {
         bank_name,
@@ -242,6 +292,9 @@ const addEmployee = async (req, res) => {
 
   } catch (error) {
     console.error("Add Employee Error:", error);
+    if (error?.code === 11000 && error?.keyPattern?.epf_number) {
+      return res.status(400).json({ success: false, message: "EPF number already assigned to another employee" });
+    }
     res.status(500).json({
       success: false,
       message: error.message || "Server error",
@@ -373,6 +426,13 @@ const updateEmployee = async (req, res) => {
       bank_name,
       bank_branch,
       bank_account_number,
+      travel_allowance,
+      food_allowance,
+      holiday_payment,
+      allowance_ns,
+      bonus,
+      stamp_duty,
+      mobile_deduction,
     } = req.body;
 
     /* ================= FIND EMPLOYEE ================= */
@@ -455,6 +515,34 @@ const updateEmployee = async (req, res) => {
     }
 
     // Admin/HR/etc: keep existing behavior
+    if (department) {
+      const departmentExists = await Department.findById(department);
+      if (!departmentExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid department selected",
+        });
+      }
+    }
+
+    const targetDepartment = department || employee.department;
+    if (designation && targetDepartment) {
+      const designationValid = await validateDesignationForDepartment(
+        designation,
+        targetDepartment
+      );
+      const unchangedDesignation =
+        employee.designation &&
+        designation.trim().toLowerCase() ===
+          employee.designation.trim().toLowerCase();
+      if (!designationValid && !unchangedDesignation) {
+        return res.status(400).json({
+          success: false,
+          message: "Please select a valid designation for the chosen department",
+        });
+      }
+    }
+
     /* ================= UPDATE USER ================= */
     const userPayload = { name, email, role };
     if (req.file) {
@@ -462,29 +550,64 @@ const updateEmployee = async (req, res) => {
     }
     await User.findByIdAndUpdate(employee.userId, userPayload, { new: true });
 
-    /* ================= UPDATE EMPLOYEE ================= */
-    await Employee.findByIdAndUpdate(
-      id,
-      {
-        nic,
-        employee_id,
-        dob,
-        gender,
-        marital_status,
-        joined_date,
-        resigned_date: resigned_date || null,
-        designation,
-        department,
-        basic_salary,
-        bank_details: {
-          bank_name,
-          bank_branch,
-          bank_account_number: bank_account_number,
-        },
-        image: imagePath,
+    const assignerRole = String(req.user?.role || "").toLowerCase();
+    const canEditAllowances = ["admin", "hr", "hr_manager"].includes(assignerRole);
+
+    let resolvedEpfNumber = employee.epf_number;
+    if (!resolvedEpfNumber) {
+      resolvedEpfNumber = await getNextEpfNumber(Employee);
+    }
+
+    const employeeUpdate = {
+      nic,
+      epf_number: resolvedEpfNumber,
+      employee_id,
+      dob,
+      gender,
+      marital_status,
+      joined_date,
+      resigned_date: resigned_date || null,
+      designation,
+      department,
+      basic_salary,
+      bank_details: {
+        bank_name,
+        bank_branch,
+        bank_account_number: bank_account_number,
       },
-      { new: true }
-    );
+      image: imagePath,
+    };
+
+    if (canEditAllowances) {
+      employeeUpdate.travel_allowance = parseAllowance(
+        travel_allowance,
+        employee.travel_allowance
+      );
+      employeeUpdate.food_allowance = parseAllowance(
+        food_allowance,
+        employee.food_allowance
+      );
+      employeeUpdate.holiday_payment = parseAllowance(
+        holiday_payment,
+        employee.holiday_payment
+      );
+      employeeUpdate.allowance_ns = parseAllowance(
+        allowance_ns,
+        employee.allowance_ns
+      );
+      employeeUpdate.bonus = parseAllowance(bonus, employee.bonus);
+      employeeUpdate.stamp_duty = parseAllowance(
+        stamp_duty,
+        employee.stamp_duty
+      );
+      employeeUpdate.mobile_deduction = parseAllowance(
+        mobile_deduction,
+        employee.mobile_deduction
+      );
+    }
+
+    /* ================= UPDATE EMPLOYEE ================= */
+    await Employee.findByIdAndUpdate(id, employeeUpdate, { new: true });
 
     return res.status(200).json({
       success: true,
@@ -492,6 +615,9 @@ const updateEmployee = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Employee Error:", error);
+    if (error?.code === 11000 && error?.keyPattern?.epf_number) {
+      return res.status(400).json({ success: false, message: "EPF number already assigned to another employee" });
+    }
     return res.status(500).json({
       success: false,
       message: "Edit employee server error",

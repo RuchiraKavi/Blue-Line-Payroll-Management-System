@@ -28,6 +28,14 @@ const employeeSchema = new mongoose.Schema(
       unique: true,
     },
 
+    epf_number: {
+      type: String,
+      required: [true, "EPF number is required"],
+      unique: true,
+      trim: true,
+      uppercase: true,
+    },
+
     // 👤 PERSONAL DETAILS
     dob: { type: Date, required: true },
     gender: { type: String, required: true },
@@ -51,6 +59,13 @@ const employeeSchema = new mongoose.Schema(
 
     // 💰 SALARY
     basic_salary: { type: Number, required: true },
+    travel_allowance: { type: Number, default: 0, min: 0 },
+    food_allowance: { type: Number, default: 0, min: 0 },
+    holiday_payment: { type: Number, default: 0, min: 0 },
+    allowance_ns: { type: Number, default: 0, min: 0 },
+    bonus: { type: Number, default: 0, min: 0 },
+    stamp_duty: { type: Number, default: 0, min: 0 },
+    mobile_deduction: { type: Number, default: 0, min: 0 },
 
     // 🏦 BANK DETAILS
     bank_details: {

@@ -13,6 +13,37 @@ function entryEmployeeIdString(entry) {
   return String(e);
 }
 
+/** Entry-level signature first, then period-level run signature (admin "Save signature & date"). */
+function resolvePayslipSignature(run, entry) {
+  const entryUrl =
+    typeof entry?.signature_data_url === "string" && entry.signature_data_url.length > 0
+      ? entry.signature_data_url
+      : null;
+  const runUrl =
+    typeof run?.signature_data_url === "string" && run.signature_data_url.length > 0
+      ? run.signature_data_url
+      : null;
+  const entryDate =
+    typeof entry?.signature_date === "string" && entry.signature_date.trim()
+      ? entry.signature_date.trim()
+      : null;
+  const runDate =
+    typeof run?.signature_date === "string" && run.signature_date.trim()
+      ? run.signature_date.trim()
+      : null;
+  return {
+    signature_data_url: entryUrl ?? runUrl ?? null,
+    signature_date: entryDate ?? runDate ?? null,
+  };
+}
+
+/** Use entry value when provided; otherwise fall back to employee profile default. */
+function resolveAmount(entry, employee, field) {
+  const v = entry?.[field];
+  if (v != null && v !== "") return Number(v) || 0;
+  return Number(employee?.[field]) || 0;
+}
+
 /**
  * Calculate salary for one entry (Sri Lanka rules).
  * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
@@ -209,15 +240,15 @@ export const calculateSalary = async (req, res) => {
         designation: employee.designation || "",
         department: employee.department?.dep_name || "N/A",
         basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
-        travel_allowance: Number(entry.travel_allowance) || 0,
-        food_allowance: Number(entry.food_allowance) || 0,
-        holiday_payment: Number(entry.holiday_payment) || 0,
-        allowance_ns: Number(entry.allowance_ns) || 0,
-        bonus: Number(entry.bonus) || 0,
+        travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
+        food_allowance: resolveAmount(entry, employee, "food_allowance"),
+        holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
+        allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+        bonus: resolveAmount(entry, employee, "bonus"),
         no_pay: Number(entry.no_pay) || 0,
         salary_advance: Number(entry.salary_advance) || 0,
-        stamp_duty: Number(entry.stamp_duty) || 0,
-        mobile_deduction: Number(entry.mobile_deduction) || 0,
+        stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
+        mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
         paye: Number(entry.paye) || 0,
         epf_percent: 8,
         etf_percent: Number(entry.etf_percent) || 3,
@@ -275,15 +306,15 @@ export const saveSalaryRun = async (req, res) => {
         designation: employee.designation || "",
         department: employee.department?.dep_name || "N/A",
         basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
-        travel_allowance: Number(entry.travel_allowance) || 0,
-        food_allowance: Number(entry.food_allowance) || 0,
-        holiday_payment: Number(entry.holiday_payment) || 0,
-        allowance_ns: Number(entry.allowance_ns) || 0,
-        bonus: Number(entry.bonus) || 0,
+        travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
+        food_allowance: resolveAmount(entry, employee, "food_allowance"),
+        holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
+        allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+        bonus: resolveAmount(entry, employee, "bonus"),
         no_pay: Number(entry.no_pay) || 0,
         salary_advance: Number(entry.salary_advance) || 0,
-        stamp_duty: Number(entry.stamp_duty) || 0,
-        mobile_deduction: Number(entry.mobile_deduction) || 0,
+        stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
+        mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
         paye: Number(entry.paye) || 0,
         epf_percent: 8,
         etf_percent: Number(entry.etf_percent) || 3,
@@ -296,6 +327,8 @@ export const saveSalaryRun = async (req, res) => {
       storedEntries.push({
         employee: employee._id,
         employee_id: computed.employee_id,
+        nic: employee.nic || "",
+        epf_number: employee.epf_number || "",
         name: computed.name,
         designation: computed.designation,
         department: computed.department,
@@ -388,18 +421,18 @@ export const saveOneSalaryEntry = async (req, res) => {
       designation: employee.designation || "",
       department: depName,
       basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
-      travel_allowance: Number(entry.travel_allowance) || 0,
-      food_allowance: Number(entry.food_allowance) || 0,
-      holiday_payment: Number(entry.holiday_payment) || 0,
-      allowance_ns: Number(entry.allowance_ns) || 0,
-      bonus: Number(entry.bonus) || 0,
+      travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
+      food_allowance: resolveAmount(entry, employee, "food_allowance"),
+      holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
+      allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+      bonus: resolveAmount(entry, employee, "bonus"),
       no_pay: Number(entry.no_pay) || 0,
       salary_advance: Number(entry.salary_advance) || 0,
-      stamp_duty: Number(entry.stamp_duty) || 0,
-      mobile_deduction: Number(entry.mobile_deduction) || 0,
+      stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
+      mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
       paye: Number(entry.paye) || 0,
-epf_percent: 8,
-    etf_percent: Number(entry.etf_percent) || 3,
+      epf_percent: 8,
+      etf_percent: Number(entry.etf_percent) || 3,
     };
     const computed = calculateEntry(input);
     const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
@@ -408,6 +441,8 @@ epf_percent: 8,
     const newEntry = {
       employee: employee._id,
       employee_id: computed.employee_id,
+      nic: employee.nic || "",
+      epf_number: employee.epf_number || "",
       name: computed.name,
       designation: computed.designation,
       department: computed.department,
@@ -530,11 +565,14 @@ export const getPayslip = async (req, res) => {
       .populate("userId", "name email role profileImage")
       .populate("department", "dep_name");
 
+    const sig = resolvePayslipSignature(run, entry);
     const data = {
       ...entry.toObject ? entry.toObject() : entry,
       employee,
       epf_percent: entry.epf_percent ?? 12,
       etf_percent: entry.etf_percent ?? 3,
+      signature_data_url: sig.signature_data_url,
+      signature_date: sig.signature_date,
     };
 
     return res.status(200).json({
@@ -741,6 +779,41 @@ export const getContributionHistory = async (req, res) => {
   }
 };
 
+async function buildSalaryHistoryForEmployee(employee) {
+  const employeeIdStr = String(employee._id);
+  const employeeIdRef = employee.employee_id;
+
+  const runs = await SalaryRun.find().sort({ year: -1, month: -1 }).lean();
+
+  const history = [];
+  for (const run of runs) {
+    if (!run.entries?.length) continue;
+    const entry = run.entries.find((e) => {
+      const entryIdStr = entryEmployeeIdString(e);
+      if (entryIdStr && entryIdStr === employeeIdStr) return true;
+      if (
+        employeeIdRef &&
+        e.employee_id &&
+        String(e.employee_id) === String(employeeIdRef)
+      )
+        return true;
+      return false;
+    });
+    if (entry) {
+      history.push({
+        month: run.month,
+        year: run.year,
+        monthName: monthNames[run.month - 1],
+        gross_salary: entry.gross_salary ?? 0,
+        total_deduction: entry.total_deduction ?? 0,
+        net_pay: entry.net_pay ?? 0,
+        approval_status: entry.approval_status ?? "pending",
+      });
+    }
+  }
+  return history;
+}
+
 /**
  * GET /api/salary/my-history
  * Returns salary history for the logged-in employee (all saved runs that include this employee).
@@ -758,33 +831,8 @@ export const getMySalaryHistory = async (req, res) => {
         history: [],
       });
     }
-    const employeeIdStr = String(employee._id);
-    const employeeIdRef = employee.employee_id; // e.g. "BL001"
 
-    const runs = await SalaryRun.find()
-      .sort({ year: -1, month: -1 })
-      .lean();
-
-    const history = [];
-    for (const run of runs) {
-      if (!run.entries || !run.entries.length) continue;
-      const entry = run.entries.find((e) => {
-        const entryIdStr = entryEmployeeIdString(e);
-        if (entryIdStr && entryIdStr === employeeIdStr) return true;
-        if (employeeIdRef && e.employee_id && String(e.employee_id) === String(employeeIdRef)) return true;
-        return false;
-      });
-      if (entry) {
-        history.push({
-          month: run.month,
-          year: run.year,
-          monthName: monthNames[run.month - 1],
-          gross_salary: entry.gross_salary ?? 0,
-          total_deduction: entry.total_deduction ?? 0,
-          net_pay: entry.net_pay ?? 0,
-        });
-      }
-    }
+    const history = await buildSalaryHistoryForEmployee(employee);
 
     return res.status(200).json({
       success: true,
@@ -792,6 +840,54 @@ export const getMySalaryHistory = async (req, res) => {
     });
   } catch (error) {
     console.error("Get my salary history error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get salary history",
+    });
+  }
+};
+
+/**
+ * GET /api/salary/employee-history/:employeeId
+ * Returns salary history for a specific employee (admin / HR).
+ */
+export const getEmployeeSalaryHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    const employee = await Employee.findById(employeeId)
+      .populate("userId", "name email")
+      .populate("department", "dep_name")
+      .lean();
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const history = await buildSalaryHistoryForEmployee(employee);
+
+    return res.status(200).json({
+      success: true,
+      employee: {
+        _id: employee._id,
+        employee_id: employee.employee_id,
+        name: employee.userId?.name || "N/A",
+        designation: employee.designation || "",
+        department: employee.department?.dep_name || "N/A",
+      },
+      history,
+    });
+  } catch (error) {
+    console.error("Get employee salary history error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to get salary history",
@@ -854,11 +950,14 @@ export const getMyPayslip = async (req, res) => {
       });
     }
 
+    const sig = resolvePayslipSignature(run, entry);
     const data = {
       ...(entry.toObject ? entry.toObject() : entry),
       employee,
       epf_percent: entry.epf_percent ?? 12,
       etf_percent: entry.etf_percent ?? 3,
+      signature_data_url: sig.signature_data_url,
+      signature_date: sig.signature_date,
     };
 
     return res.status(200).json({

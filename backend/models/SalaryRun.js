@@ -4,6 +4,8 @@ const payslipEntrySchema = new Schema(
   {
     employee: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
     employee_id: { type: String },
+    nic: { type: String },
+    epf_number: { type: String },
     name: { type: String },
     designation: { type: String },
     department: { type: String },
