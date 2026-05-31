@@ -6,6 +6,9 @@ import PayslipView from "./PayslipView.jsx";
 import ContributionModal from "./ContributionModal.jsx";
 import AllContributionsModal from "./AllContributionsModal.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
+import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
+import { resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
+import { getCurrentPayPeriod, isFuturePayPeriod } from "../../utils/payPeriod.js";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -48,9 +51,31 @@ const defaultRow = (emp) => ({
   epf_percent: 8,
   etf_percent: 3,
   paye: 0,
+  role: emp.role || emp.userId?.role || "",
+  no_pay_leave: Number(emp.no_pay_leave) || 0,
+  no_pay_from_hours: Number(emp.no_pay_from_hours) || 0,
+  standard_hours: Number(emp.standard_hours) || 0,
+  actual_hours: Number(emp.actual_hours) || 0,
+  shortfall_hours: Number(emp.shortfall_hours) || 0,
+  has_attendance_records: Boolean(emp.has_attendance_records),
   approvalStatus: APPROVAL.PENDING,
   employee: emp,
 });
+
+const mergeNoPayApiIntoRow = (row, np) => {
+  if (!np) return row;
+  return {
+    ...row,
+    no_pay: np.no_pay ?? row.no_pay,
+    no_pay_days: np.no_pay_days ?? row.no_pay_days,
+    no_pay_leave: np.no_pay_leave ?? 0,
+    no_pay_from_hours: np.no_pay_from_hours ?? 0,
+    standard_hours: np.standard_hours ?? 0,
+    actual_hours: np.actual_hours ?? 0,
+    shortfall_hours: np.shortfall_hours ?? 0,
+    has_attendance_records: Boolean(np.has_attendance_records),
+  };
+};
 
 /** Compute totals (Sri Lanka: EPF/ETF base excludes bonus; Employee EPF 8%, Employer EPF 12%, ETF 3%). */
 function computeRow(row) {
@@ -60,14 +85,23 @@ function computeRow(row) {
   const holiday = Number(row.holiday_payment) || 0;
   const allowanceNs = Number(row.allowance_ns) || 0;
   const bonus = Number(row.bonus) || 0;
-  const noPay = Number(row.no_pay) || 0;
+  const role = row.role || row.employee?.role || "";
+  const noPayResolved = resolveNoPayDeduction({
+    basicSalary: basic,
+    role,
+    noPayDays: row.no_pay_days,
+    actualHours: row.actual_hours,
+    hasAttendanceRecords: row.has_attendance_records,
+  });
+  const noPay = noPayResolved.no_pay;
   const stampDuty = Number(row.stamp_duty) || 0;
   const mobileDed = Number(row.mobile_deduction) || 0;
-  const paye = Number(row.paye) || 0;
   const salaryAdvance = Number(row.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
   const grossSalary = basic + totalAllowances;
+  const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
+  const paye = calculateMonthlyApit(monthlyIncomeForApit);
   // EPF/ETF base: basic + fixed allowances only (exclude bonus, after no-pay)
   const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
   const employeeEpfPayment = (totalForEpf * 8) / 100;
@@ -79,6 +113,14 @@ function computeRow(row) {
 
   return {
     ...row,
+    paye,
+    no_pay: noPay,
+    no_pay_leave: noPayResolved.no_pay_leave,
+    no_pay_from_hours: noPayResolved.no_pay_from_hours,
+    standard_hours: noPayResolved.standard_hours,
+    actual_hours: noPayResolved.actual_hours,
+    shortfall_hours: noPayResolved.shortfall_hours,
+    has_attendance_records: noPayResolved.has_attendance_records,
     total_allowances: totalAllowances,
     total_service_charges: totalServiceCharges,
     gross_salary: grossSalary,
@@ -160,7 +202,6 @@ const SalaryPage = () => {
         // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
         stamp_duty: entry.stamp_duty ?? 0,
         mobile_deduction: entry.mobile_deduction ?? 0,
-        paye: entry.paye ?? 0,
         epf_percent: entry.epf_percent ?? 8,
         etf_percent: entry.etf_percent ?? 3,
       };
@@ -196,11 +237,8 @@ const SalaryPage = () => {
           .then((noPayRes) => {
             if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
               const byId = {};
-              noPayRes.data.data.forEach((o) => { byId[o.employeeId] = { no_pay: o.no_pay, no_pay_days: o.no_pay_days }; });
-              setRows((prev) => prev.map((r) => {
-                const np = byId[r._id] || byId[String(r._id)];
-                return np ? { ...r, no_pay: np.no_pay, no_pay_days: np.no_pay_days } : r;
-              }));
+              noPayRes.data.data.forEach((o) => { byId[o.employeeId] = o; });
+              setRows((prev) => prev.map((r) => mergeNoPayApiIntoRow(r, byId[r._id] || byId[String(r._id)])));
             }
           })
           .catch(() => {});
@@ -281,11 +319,8 @@ const SalaryPage = () => {
               if (cancelled) return;
               if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
                 const byId = {};
-                noPayRes.data.data.forEach((o) => { byId[o.employeeId] = { no_pay: o.no_pay, no_pay_days: o.no_pay_days }; });
-                setRows((prev) => prev.map((r) => {
-                  const np = byId[r._id] || byId[String(r._id)];
-                  return np ? { ...r, no_pay: np.no_pay, no_pay_days: np.no_pay_days } : r;
-                }));
+                noPayRes.data.data.forEach((o) => { byId[o.employeeId] = o; });
+                setRows((prev) => prev.map((r) => mergeNoPayApiIntoRow(r, byId[r._id] || byId[String(r._id)])));
               }
             })
             .catch(() => {});
@@ -383,6 +418,24 @@ const SalaryPage = () => {
     setCurrentCalculateIndex(Math.min(target, rows.length - 1));
   }, [month, year, rows.length, runKey]);
 
+  useEffect(() => {
+    if (isFuturePayPeriod(month, year)) {
+      const c = getCurrentPayPeriod();
+      setMonth(c.month);
+      setYear(c.year);
+      setSummaryMonth(c.month);
+      setSummaryYear(c.year);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    if (isFuturePayPeriod(summaryMonth, summaryYear)) {
+      const c = getCurrentPayPeriod();
+      setSummaryMonth(c.month);
+      setSummaryYear(c.year);
+    }
+  }, [summaryMonth, summaryYear]);
+
   // When summary is shown for a different period, fetch that run for the paysheet table
   useEffect(() => {
     const sm = Number(summaryMonth);
@@ -440,7 +493,7 @@ const SalaryPage = () => {
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
         mobile_deduction: row.mobile_deduction,
-        paye: row.paye,
+        paye: computeRow(row).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
       };
@@ -475,7 +528,7 @@ const SalaryPage = () => {
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
           mobile_deduction: row.mobile_deduction,
-          paye: row.paye,
+          paye: computeRow(row).paye,
           epf_percent: row.epf_percent,
           etf_percent: row.etf_percent,
         };
@@ -744,7 +797,7 @@ const SalaryPage = () => {
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
         mobile_deduction: row.mobile_deduction,
-        paye: row.paye,
+        paye: computeRow(row).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
       };
@@ -787,23 +840,26 @@ const SalaryPage = () => {
     try {
       setError("");
       setSaving(true);
-      const entries = rows.map((row) => ({
-        employeeId: row._id,
-        approval_status: row.approvalStatus ?? "pending",
-        basic_salary: row.basic_salary,
-        travel_allowance: row.travel_allowance,
-        food_allowance: row.food_allowance,
-        holiday_payment: row.holiday_payment,
-        allowance_ns: row.allowance_ns,
-        bonus: row.bonus,
-        no_pay: row.no_pay,
-        salary_advance: row.salary_advance,
-        stamp_duty: row.stamp_duty,
-        mobile_deduction: row.mobile_deduction,
-        paye: row.paye,
-        epf_percent: row.epf_percent,
-        etf_percent: row.etf_percent,
-      }));
+      const entries = rows.map((row) => {
+        const computed = computeRow(row);
+        return {
+          employeeId: row._id,
+          approval_status: row.approvalStatus ?? "pending",
+          basic_salary: row.basic_salary,
+          travel_allowance: row.travel_allowance,
+          food_allowance: row.food_allowance,
+          holiday_payment: row.holiday_payment,
+          allowance_ns: row.allowance_ns,
+          bonus: row.bonus,
+          no_pay: row.no_pay,
+          salary_advance: row.salary_advance,
+          stamp_duty: row.stamp_duty,
+          mobile_deduction: row.mobile_deduction,
+          paye: computed.paye,
+          epf_percent: row.epf_percent,
+          etf_percent: row.etf_percent,
+        };
+      });
       const res = await axios.post(
         `${API_BASE}/salary/save`,
         { month, year, entries },
@@ -838,6 +894,14 @@ const SalaryPage = () => {
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
+  ];
+
+  const currentPayPeriod = getCurrentPayPeriod();
+  const periodNotStarted = isFuturePayPeriod(month, year);
+  const payPeriodYearOptions = [
+    currentPayPeriod.year,
+    currentPayPeriod.year - 1,
+    currentPayPeriod.year - 2,
   ];
 
   if (loading) {
@@ -878,16 +942,22 @@ const SalaryPage = () => {
                 onChange={(e) => setMonth(Number(e.target.value))}
                 className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white shadow-sm text-sm font-medium"
               >
-                {monthNames.map((m, i) => (
-                  <option key={i} value={i + 1}>{m}</option>
-                ))}
+                {monthNames.map((m, i) => {
+                  const mNum = i + 1;
+                  const future = isFuturePayPeriod(mNum, year);
+                  return (
+                    <option key={i} value={mNum} disabled={future}>
+                      {m}{future ? " (not started)" : ""}
+                    </option>
+                  );
+                })}
               </select>
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
                 className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white shadow-sm text-sm font-medium"
               >
-                {[year, year - 1, year - 2].map((y) => (
+                {payPeriodYearOptions.map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
@@ -910,7 +980,7 @@ const SalaryPage = () => {
               <button
                 type="button"
                 onClick={saveAllSalaries}
-                disabled={!canSaveAllSalaries || saving || isPeriodLocked}
+                disabled={!canSaveAllSalaries || saving || isPeriodLocked || periodNotStarted}
                 title={isPeriodLocked ? "Salaries for this period have been saved; editing is locked." : !allApproved ? "Approve all employees first to save salaries for this month" : !hasPayslipSignature ? "Add payslip signature (global or on each card) to enable Save All Salaries" : ""}
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg"
               >
@@ -922,6 +992,7 @@ const SalaryPage = () => {
 
         <div className="p-8">
           {/* Tabs inside salary card */}
+          {!periodNotStarted && (
           <div className="mb-6 border-b border-gray-200">
             <nav className="flex space-x-4" aria-label="Salary tabs">
               <button
@@ -948,13 +1019,14 @@ const SalaryPage = () => {
               </button>
             </nav>
           </div>
+          )}
           {error && (
             <div className="mb-6 bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
               {error}
             </div>
           )}
 
-          {(() => {
+          {!periodNotStarted && (() => {
             const run = runForPeriod?.run;
             const hasSavedEntry = (row) => run?.entries?.some((e) => entryMatchesRow(e, row));
             const allSaved = rows.length > 0 && run?.entries?.length > 0 && rows.every(hasSavedEntry);
@@ -1017,9 +1089,15 @@ const SalaryPage = () => {
                       onChange={(e) => setSummaryMonth(Number(e.target.value))}
                       className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
                     >
-                      {monthNames.map((m, i) => (
-                        <option key={i} value={i + 1}>{m}</option>
-                      ))}
+                      {monthNames.map((m, i) => {
+                        const mNum = i + 1;
+                        const future = isFuturePayPeriod(mNum, summaryYear);
+                        return (
+                          <option key={i} value={mNum} disabled={future}>
+                            {m}{future ? " (not started)" : ""}
+                          </option>
+                        );
+                      })}
                     </select>
                     <span className="text-sm font-medium text-gray-700">Year:</span>
                     <select
@@ -1027,7 +1105,7 @@ const SalaryPage = () => {
                       onChange={(e) => setSummaryYear(Number(e.target.value))}
                       className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
                     >
-                      {[year, year + 1, year - 1, year - 2].map((y) => (
+                      {payPeriodYearOptions.map((y) => (
                         <option key={y} value={y}>{y}</option>
                       ))}
                     </select>
@@ -1140,7 +1218,27 @@ const SalaryPage = () => {
             );
           })()}
 
-          {rows.length === 0 ? (
+          {periodNotStarted ? (
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-12 text-center">
+              <p className="text-amber-900 font-semibold text-lg mb-2">
+                {monthNames[month - 1]} {year} has not started yet
+              </p>
+              <p className="text-amber-800 text-sm max-w-md mx-auto">
+                Salary cards are available from the first day of each month. Select the current month or a past period.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const c = getCurrentPayPeriod();
+                  setMonth(c.month);
+                  setYear(c.year);
+                }}
+                className="mt-6 px-5 py-2.5 rounded-xl font-semibold bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+              >
+                Go to {monthNames[currentPayPeriod.month - 1]} {currentPayPeriod.year}
+              </button>
+            </div>
+          ) : rows.length === 0 ? (
             <div className="rounded-2xl border-2 border-gray-200 bg-gray-50 p-12 text-center">
               <p className="text-gray-500 font-medium">No employees found. Add employees first to manage salary.</p>
             </div>
@@ -1276,11 +1374,11 @@ const SalaryPage = () => {
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="0.01" readOnly value={row.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated from no-pay days (read-only)" />
+                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Max(no-pay leave, shortfall from attendance hours)" />
                               </label>
                               <label className="flex justify-between items-center gap-2">
-                                <span className="text-gray-700">PAYE</span>
-                                <input type="number" min="0" step="1" readOnly={locked} value={row.paye} onChange={(e) => updateRow(idx, "paye", e.target.value)} className={inputClass("w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500")} />
+                                <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
+                                <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Salary Advance</span>
@@ -1674,11 +1772,11 @@ const SalaryPage = () => {
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
-                              <input type="number" min="0" step="0.01" readOnly value={row.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" />
+                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Max(no-pay leave, shortfall from attendance hours)" />
                             </label>
                             <label className="flex justify-between items-center gap-2">
-                              <span className="text-gray-700">PAYE</span>
-                              <input type="number" min="0" step="1" value={row.paye} onChange={(e) => updateRow(idx, "paye", e.target.value)} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500" />
+                              <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
+                              <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
                             </label>
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Salary Advance</span>

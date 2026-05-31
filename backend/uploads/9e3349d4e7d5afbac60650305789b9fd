@@ -1,0 +1,7 @@
+employee_id	date	employee_name	inTime	outTime	workingHc status	Holidays	Day off	Leave
+BL001	5/31/2026	Ruchira Kavinda	8:30	17:30	Present	0	0	0
+BL002	5/31/2026	Bhagya	8:30		Absent	0	1	0
+BL003	5/31/2026	Yakuna	8:30	17:30	Present	0	0	0
+BL004	5/31/2026	kavindu yohan	8:30	17:35	Present	0	0	0
+BL005	5/31/2026	Bhagya	8:30		Absent	0	1	0
+BL006	5/31/2026	kavindu yohan	8:30	17:45	Present	0	0	0

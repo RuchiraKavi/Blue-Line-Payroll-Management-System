@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 import Employee from "../models/Employee.js";
 import SalaryRun from "../models/SalaryRun.js";
 import Leave from "../models/Leave.js";
+import { calculateMonthlyApit } from "../utils/sriLankaPaye.js";
+import {
+  buildNoPayPayloadForEmployee,
+  getAttendanceHoursByEmployeeForMonth,
+} from "../utils/payrollAttendance.js";
+import { isFuturePayPeriod, assertPayPeriodStarted } from "../utils/payPeriod.js";
 
 /** Normalize entry.employee to a string id (handles ObjectId, string, or BSON-style object). */
 function entryEmployeeIdString(entry) {
@@ -44,6 +50,38 @@ function resolveAmount(entry, employee, field) {
   return Number(employee?.[field]) || 0;
 }
 
+/** Load leave no-pay days and attendance hours for a payroll month. */
+async function loadPayrollPeriodContext(month, year) {
+  const [noPayDaysMap, hoursMap] = await Promise.all([
+    getNoPayDaysByEmployeeForMonth(month, year),
+    getAttendanceHoursByEmployeeForMonth(month, year),
+  ]);
+  return { noPayDaysMap, hoursMap };
+}
+
+/** Resolve no-pay (leave vs attendance shortfall) and attach breakdown fields to salary input. */
+function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap) {
+  const empId = String(employee._id);
+  const noPayDays = noPayDaysMap.get(empId) || 0;
+  const attendanceInfo = hoursMap.get(empId);
+  const payload = buildNoPayPayloadForEmployee(
+    { _id: employee._id, basic_salary: input.basic_salary ?? employee.basic_salary, role: employee.role },
+    noPayDays,
+    attendanceInfo
+  );
+  return {
+    ...input,
+    no_pay: payload.no_pay,
+    no_pay_days: payload.no_pay_days,
+    no_pay_leave: payload.no_pay_leave,
+    no_pay_from_hours: payload.no_pay_from_hours,
+    standard_hours: payload.standard_hours,
+    actual_hours: payload.actual_hours,
+    shortfall_hours: payload.shortfall_hours,
+    has_attendance_records: payload.has_attendance_records,
+  };
+}
+
 /**
  * Calculate salary for one entry (Sri Lanka rules).
  * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
@@ -59,11 +97,13 @@ function calculateEntry(input) {
   const noPay = Number(input.no_pay) || 0;
   const stampDuty = Number(input.stamp_duty) || 0;
   const mobileDed = Number(input.mobile_deduction) || 0;
-  const paye = Number(input.paye) || 0;
   const salaryAdvance = Number(input.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
   const grossSalary = basic + totalAllowances;
+  // APIT/PAYE base: monthly gross remuneration after no-pay (annualized ×12, LKR 1.8M relief, progressive slabs)
+  const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
+  const paye = calculateMonthlyApit(monthlyIncomeForApit);
   // EPF/ETF base: basic + fixed allowances only (exclude bonus per Sri Lanka practice, after no-pay)
   const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
   const employeeEpfPayment = (totalForEpf * 8) / 100;
@@ -75,6 +115,7 @@ function calculateEntry(input) {
 
   return {
     ...input,
+    paye,
     total_allowances: totalAllowances,
     total_service_charges: totalServiceCharges,
     gross_salary: grossSalary,
@@ -129,21 +170,11 @@ export const getNoPayForPeriod = async (req, res) => {
     if (month == null || year == null || Number.isNaN(month) || Number.isNaN(year)) {
       return res.status(400).json({ success: false, message: "month and year are required" });
     }
-    const noPayDaysMap = await getNoPayDaysByEmployeeForMonth(month, year);
+    const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
     const employees = await Employee.find().select("_id role basic_salary").lean();
-    const data = employees.map((emp) => {
-      const employeeId = String(emp._id);
-      const noPayDays = noPayDaysMap.get(employeeId) || 0;
-      const basicSalary = Number(emp.basic_salary) || 0;
-      const role = (emp.role || "").toLowerCase();
-      const divisor = role === "intern" ? 30 : 24;
-      const noPayAmount = noPayDays > 0 ? (basicSalary / divisor) * noPayDays : 0;
-      return {
-        employeeId,
-        no_pay_days: noPayDays,
-        no_pay: Math.round(noPayAmount * 100) / 100,
-      };
-    });
+    const data = employees.map((emp) =>
+      buildNoPayPayloadForEmployee(emp, noPayDaysMap.get(String(emp._id)) || 0, hoursMap.get(String(emp._id)))
+    );
     return res.status(200).json({ success: true, data });
   } catch (error) {
     console.error("Get no-pay for period error:", error);
@@ -168,19 +199,21 @@ export const getEmployeesForSalary = async (req, res) => {
     const year = req.query.year != null ? Number(req.query.year) : null;
 
     if (month != null && year != null && !Number.isNaN(month) && !Number.isNaN(year)) {
-      const noPayDaysMap = await getNoPayDaysByEmployeeForMonth(month, year);
+      if (isFuturePayPeriod(month, year)) {
+        return res.status(400).json({
+          success: false,
+          message: "Salary for this pay period is not available until the month has started.",
+        });
+      }
+      const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
       const employeesWithNoPay = withUser.map((emp) => {
-        const empId = String(emp._id);
-        const noPayDays = noPayDaysMap.get(empId) || 0;
-        const basicSalary = Number(emp.basic_salary) || 0;
-        const role = (emp.role || "").toLowerCase();
-        const divisor = role === "intern" ? 30 : 24;
-        const noPayAmount = noPayDays > 0 ? (basicSalary / divisor) * noPayDays : 0;
-        return {
-          ...emp.toObject ? emp.toObject() : emp,
-          no_pay_days: noPayDays,
-          no_pay: Math.round(noPayAmount * 100) / 100,
-        };
+        const empObj = emp.toObject ? emp.toObject() : emp;
+        const payload = buildNoPayPayloadForEmployee(
+          empObj,
+          noPayDaysMap.get(String(emp._id)) || 0,
+          hoursMap.get(String(emp._id))
+        );
+        return { ...empObj, ...payload };
       });
       return res.status(200).json({
         success: true,
@@ -208,12 +241,20 @@ export const getEmployeesForSalary = async (req, res) => {
  */
 export const calculateSalary = async (req, res) => {
   try {
-    const { entries } = req.body;
+    const { entries, month, year } = req.body;
     if (!Array.isArray(entries) || entries.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Entries array is required",
       });
+    }
+
+    let periodContext = null;
+    const monthNum = month != null ? Number(month) : null;
+    const yearNum = year != null ? Number(year) : null;
+    if (monthNum && yearNum && !Number.isNaN(monthNum) && !Number.isNaN(yearNum)) {
+      assertPayPeriodStarted(monthNum, yearNum);
+      periodContext = await loadPayrollPeriodContext(monthNum, yearNum);
     }
 
     const rows = [];
@@ -245,7 +286,6 @@ export const calculateSalary = async (req, res) => {
         holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
         allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
         bonus: resolveAmount(entry, employee, "bonus"),
-        no_pay: Number(entry.no_pay) || 0,
         salary_advance: Number(entry.salary_advance) || 0,
         stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
         mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
@@ -254,7 +294,11 @@ export const calculateSalary = async (req, res) => {
         etf_percent: Number(entry.etf_percent) || 3,
       };
 
-      const computed = calculateEntry(input);
+      const inputWithNoPay = periodContext
+        ? applyResolvedNoPay(input, employee, periodContext.noPayDaysMap, periodContext.hoursMap)
+        : { ...input, no_pay: Number(entry.no_pay) || 0 };
+
+      const computed = calculateEntry(inputWithNoPay);
       rows.push({
         ...computed,
         employee,
@@ -267,6 +311,9 @@ export const calculateSalary = async (req, res) => {
     });
   } catch (error) {
     console.error("Calculate salary error:", error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     return res.status(500).json({
       success: false,
       message: "Salary calculation failed",
@@ -288,6 +335,9 @@ export const saveSalaryRun = async (req, res) => {
         message: "month, year and entries array are required",
       });
     }
+    assertPayPeriodStarted(month, year);
+
+    const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
 
     const storedEntries = [];
     for (const entry of entries) {
@@ -298,27 +348,31 @@ export const saveSalaryRun = async (req, res) => {
 
       if (!employee) continue;
 
-      const input = {
-        _id: employee._id,
-        employeeId: employee._id,
-        employee_id: employee.employee_id,
-        name: employee.userId?.name || "N/A",
-        designation: employee.designation || "",
-        department: employee.department?.dep_name || "N/A",
-        basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
-        travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
-        food_allowance: resolveAmount(entry, employee, "food_allowance"),
-        holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
-        allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
-        bonus: resolveAmount(entry, employee, "bonus"),
-        no_pay: Number(entry.no_pay) || 0,
-        salary_advance: Number(entry.salary_advance) || 0,
-        stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
-        mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
-        paye: Number(entry.paye) || 0,
-        epf_percent: 8,
-        etf_percent: Number(entry.etf_percent) || 3,
-      };
+      const input = applyResolvedNoPay(
+        {
+          _id: employee._id,
+          employeeId: employee._id,
+          employee_id: employee.employee_id,
+          name: employee.userId?.name || "N/A",
+          designation: employee.designation || "",
+          department: employee.department?.dep_name || "N/A",
+          basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
+          travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
+          food_allowance: resolveAmount(entry, employee, "food_allowance"),
+          holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
+          allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+          bonus: resolveAmount(entry, employee, "bonus"),
+          salary_advance: Number(entry.salary_advance) || 0,
+          stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
+          mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
+          paye: Number(entry.paye) || 0,
+          epf_percent: 8,
+          etf_percent: Number(entry.etf_percent) || 3,
+        },
+        employee,
+        noPayDaysMap,
+        hoursMap
+      );
 
       const computed = calculateEntry(input);
       const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
@@ -340,6 +394,12 @@ export const saveSalaryRun = async (req, res) => {
         allowance_ns: computed.allowance_ns,
         bonus: computed.bonus,
         no_pay: computed.no_pay,
+        no_pay_days: computed.no_pay_days ?? 0,
+        no_pay_leave: computed.no_pay_leave ?? 0,
+        no_pay_from_hours: computed.no_pay_from_hours ?? 0,
+        standard_hours: computed.standard_hours ?? 0,
+        actual_hours: computed.actual_hours ?? 0,
+        shortfall_hours: computed.shortfall_hours ?? 0,
         salary_advance: computed.salary_advance,
         stamp_duty: computed.stamp_duty,
         mobile_deduction: computed.mobile_deduction,
@@ -378,6 +438,9 @@ export const saveSalaryRun = async (req, res) => {
     });
   } catch (error) {
     console.error("Save salary run error:", error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     return res.status(500).json({
       success: false,
       message: "Failed to save salary run",
@@ -399,6 +462,7 @@ export const saveOneSalaryEntry = async (req, res) => {
         message: "month, year and entry are required",
       });
     }
+    assertPayPeriodStarted(month, year);
     const rawId = entry.employeeId ?? entry._id;
     const employeeId = rawId == null ? null : (typeof rawId === "string" ? rawId : (rawId.toString?.() ?? String(rawId)));
     if (!employeeId) {
@@ -413,27 +477,32 @@ export const saveOneSalaryEntry = async (req, res) => {
     const depName = (employee.department && typeof employee.department === "object" && "dep_name" in employee.department)
       ? employee.department.dep_name
       : (employee.department?.dep_name ?? "N/A");
-    const input = {
-      _id: employee._id,
-      employeeId: employee._id,
-      employee_id: employee.employee_id,
-      name: employee.userId?.name || "N/A",
-      designation: employee.designation || "",
-      department: depName,
-      basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
-      travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
-      food_allowance: resolveAmount(entry, employee, "food_allowance"),
-      holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
-      allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
-      bonus: resolveAmount(entry, employee, "bonus"),
-      no_pay: Number(entry.no_pay) || 0,
-      salary_advance: Number(entry.salary_advance) || 0,
-      stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
-      mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
-      paye: Number(entry.paye) || 0,
-      epf_percent: 8,
-      etf_percent: Number(entry.etf_percent) || 3,
-    };
+    const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
+    const input = applyResolvedNoPay(
+      {
+        _id: employee._id,
+        employeeId: employee._id,
+        employee_id: employee.employee_id,
+        name: employee.userId?.name || "N/A",
+        designation: employee.designation || "",
+        department: depName,
+        basic_salary: Number(entry.basic_salary) ?? Number(employee.basic_salary) ?? 0,
+        travel_allowance: resolveAmount(entry, employee, "travel_allowance"),
+        food_allowance: resolveAmount(entry, employee, "food_allowance"),
+        holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
+        allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+        bonus: resolveAmount(entry, employee, "bonus"),
+        salary_advance: Number(entry.salary_advance) || 0,
+        stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
+        mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
+        paye: Number(entry.paye) || 0,
+        epf_percent: 8,
+        etf_percent: Number(entry.etf_percent) || 3,
+      },
+      employee,
+      noPayDaysMap,
+      hoursMap
+    );
     const computed = calculateEntry(input);
     const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
       ? entry.approval_status
@@ -454,6 +523,12 @@ export const saveOneSalaryEntry = async (req, res) => {
       allowance_ns: computed.allowance_ns,
       bonus: computed.bonus,
       no_pay: computed.no_pay,
+      no_pay_days: computed.no_pay_days ?? 0,
+      no_pay_leave: computed.no_pay_leave ?? 0,
+      no_pay_from_hours: computed.no_pay_from_hours ?? 0,
+      standard_hours: computed.standard_hours ?? 0,
+      actual_hours: computed.actual_hours ?? 0,
+      shortfall_hours: computed.shortfall_hours ?? 0,
       salary_advance: computed.salary_advance,
       stamp_duty: computed.stamp_duty,
       mobile_deduction: computed.mobile_deduction,
@@ -519,6 +594,9 @@ export const saveOneSalaryEntry = async (req, res) => {
     return successResponse(created);
   } catch (error) {
     console.error("Save one salary entry error:", error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     return res.status(500).json({
       success: false,
       message: "Failed to save salary entry",

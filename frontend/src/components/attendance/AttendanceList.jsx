@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
+import { downloadAttendanceUploadTemplate } from "../../utils/attendanceCsvTemplate.js";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -11,14 +12,16 @@ const AttendanceList = () => {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showExtraColumns, setShowExtraColumns] = useState(false);
+  const fileInputRef = useRef(null);
 
   /* =========================
      Fetch Attendance (MEMOIZED)
   ========================== */
-  const fetchAttendance = useCallback(async () => {
+  const fetchAttendance = useCallback(async (dateOverride) => {
+    const queryDate = dateOverride ?? date;
     try {
       const res = await axios.get(
-        `${API_BASE}/attendance?date=${date}`,
+        `${API_BASE}/attendance?date=${queryDate}`,
         { headers: getAuthHeader() }
       );
 
@@ -61,7 +64,7 @@ const AttendanceList = () => {
     try {
       setLoading(true);
 
-      await axios.post(
+      const res = await axios.post(
         `${API_BASE}/attendance/upload`,
         formData,
         {
@@ -72,12 +75,45 @@ const AttendanceList = () => {
         }
       );
 
-      alert("Attendance uploaded successfully");
+      const data = res.data || {};
+      if (!data.success) {
+        const skipped = data.skippedRows?.length
+          ? `\n\nExamples:\n${data.skippedRows.map((s) => `Row ${s.row} (${s.employee_id}): ${s.reason}`).join("\n")}`
+          : "";
+        alert((data.message || "Upload failed") + skipped);
+        return;
+      }
+
+      const saved = (data.inserted || 0) + (data.updated || 0);
+      let msg = `Saved ${saved} record(s)`;
+      if (data.inserted) msg += ` (${data.inserted} new`;
+      if (data.updated) msg += `${data.inserted ? ", " : " ("}${data.updated} updated`;
+      if (data.inserted || data.updated) msg += ")";
+      if (data.skipped) msg += `. Skipped: ${data.skipped}.`;
+      const viewDate = data.dates?.length ? data.dates[data.dates.length - 1] : date;
+      if (data.dates?.length) {
+        msg += `\n\nDates in file: ${data.dates.join(", ")}. Showing ${viewDate}.`;
+      }
+      if (data.skippedRows?.length) {
+        msg += `\n\nSkipped:\n${data.skippedRows.map((s) => `Row ${s.row} (${s.employee_id}): ${s.reason}`).join("\n")}`;
+      }
+
       setFile(null);
-      await fetchAttendance();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      if (viewDate !== date) {
+        setDate(viewDate);
+      }
+      await fetchAttendance(viewDate);
+
+      alert(msg);
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Upload failed");
+      const data = err.response?.data;
+      const skipped = data?.skippedRows?.length
+        ? `\n\n${data.skippedRows.map((s) => `Row ${s.row} (${s.employee_id}): ${s.reason}`).join("\n")}`
+        : "";
+      alert((data?.message || "Upload failed") + skipped);
     } finally {
       setLoading(false);
     }
@@ -220,18 +256,31 @@ const AttendanceList = () => {
             </div>
 
             {/* File Upload Section */}
-            <div className="w-full lg:w-auto">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
-              <div className="flex gap-3 items-center">
-                <div className="relative">
+            <div className="w-full lg:flex-1 lg:max-w-2xl">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Upload attendance file</label>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  type="button"
+                  onClick={() => downloadAttendanceUploadTemplate()}
+                  className="inline-flex items-center gap-2 px-5 py-3 border-2 border-emerald-600 text-emerald-700 bg-emerald-50 rounded-xl font-semibold shadow-sm hover:bg-emerald-100 hover:shadow-md transition-all duration-200 whitespace-nowrap"
+                  title="Download CSV template (status: Present or Absent)"
+                >
+                  <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                  </svg>
+                  Download Excel format
+                </button>
+                <div className="relative flex-1 min-w-[200px]">
                   <input
+                    ref={fileInputRef}
                     type="file"
-                    accept=".csv"
-                    onChange={(e) => setFile(e.target.files[0])}
+                    accept=".csv,text/csv"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
                     className="block w-full text-sm text-gray-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:transition-all file:duration-200 cursor-pointer border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500"
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={handleUpload}
                   disabled={loading}
                   className="group relative overflow-hidden px-6 py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 hover:scale-105 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none whitespace-nowrap"

@@ -1,10 +1,23 @@
-import csv from "csvtojson";
+import fs from "fs";
 import Attendance from "../models/Attendance.js";
 import Employee from "../models/Employee.js";
 import User from "../models/User.js";
+import {
+  normalizeCsvCell,
+  parseCsvDate,
+  parseAttendanceStatus,
+  resolveWorkingHoursForRow,
+  findEmployeeForAttendanceRow,
+  formatLocalDateKey,
+  parseQueryDateLocal,
+  parseAttendanceCsvFile,
+  getCsvField,
+} from "../utils/attendanceCsvParse.js";
 
 /* =========================
    Upload Attendance CSV
+   Columns: employee_id, date, employee_name, inTime, outTime, workingHours, status, Holidays, Day off, Leave
+   status: Present | Absent
 ========================= */
 const uploadAttendanceCSV = async (req, res) => {
   try {
@@ -15,7 +28,13 @@ const uploadAttendanceCSV = async (req, res) => {
       });
     }
 
-    const records = await csv().fromFile(req.file.path);
+    const records = await parseAttendanceCsvFile(req.file.path);
+
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (_) {
+      /* ignore temp file cleanup */
+    }
 
     if (records.length === 0) {
       return res.status(400).json({
@@ -25,92 +44,111 @@ const uploadAttendanceCSV = async (req, res) => {
     }
 
     let insertedCount = 0;
+    let updatedCount = 0;
     let skippedCount = 0;
+    const skippedRows = [];
+    const processedDates = new Set();
 
-    for (const row of records) {
-      // 🔑 CSV columns: employee_id | date | employee_name | inTime | outTime | workingHc status | Holidays | Day off | Leave
-      // workingHc status = working hours status (maps to workingHours and/or status)
+    const num = (v) => {
+      const n = normalizeCsvCell(v);
+      if (n == null) return null;
+      const x = Number(n);
+      return Number.isNaN(x) ? null : x;
+    };
 
-      const empId = row.employee_id || row.employeeId;
-      const empName = row.employee_name || row.name;
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const rowNum = i + 2;
 
-      if (!empId || !row.date) {
+      const empId = normalizeCsvCell(getCsvField(row, "employee_id", "employeeId", "employee id"));
+      const date = parseCsvDate(getCsvField(row, "date"));
+
+      if (!empId) {
         skippedCount++;
+        const headers = Object.keys(row).join(", ") || "(no columns detected)";
+        skippedRows.push({
+          row: rowNum,
+          employee_id: "",
+          reason: `Missing employee_id. CSV columns: ${headers}`,
+        });
+        continue;
+      }
+      if (!date) {
+        skippedCount++;
+        skippedRows.push({ row: rowNum, employee_id: empId, reason: "Invalid or missing date" });
         continue;
       }
 
-      let employee = await Employee.findOne({
-        employee_id: empId,
-      });
-
-      // Fallback: try to find by employee name
-      if (!employee && empName) {
-        const user = await User.findOne({ name: empName });
-        if (user) {
-          employee = await Employee.findOne({ userId: user._id });
-        }
-      }
-
+      const employee = await findEmployeeForAttendanceRow(row, Employee, User);
       if (!employee) {
         skippedCount++;
+        skippedRows.push({
+          row: rowNum,
+          employee_id: empId,
+          reason: `No employee found with ID "${empId}"`,
+        });
         continue;
       }
 
-      // 📅 Attendance date from CSV
-      const date = new Date(row.date);
-      date.setHours(0, 0, 0, 0);
+      const { isAbsent } = parseAttendanceStatus(row);
+      const workingHours = resolveWorkingHoursForRow(row, isAbsent);
+      const inTime = isAbsent ? null : normalizeCsvCell(getCsvField(row, "inTime", "intime"));
+      const outTime = isAbsent ? null : normalizeCsvCell(getCsvField(row, "outTime", "outtime"));
 
-      // 🚫 Prevent duplicate upload
-      const existingAttendance = await Attendance.findOne({
-        employee: employee._id,
-        date,
-      });
-
-      if (existingAttendance) {
-        skippedCount++;
-        continue;
-      }
-
-      // workingHc status = "working hours status" column (may contain hours or status text)
-      const workingHcStatus = row["workingHc status"] != null ? String(row["workingHc status"]).trim() : null;
-      const workingHours = row.workingHours ?? workingHcStatus ?? null;
-      const statusRaw = (row.status ?? workingHcStatus ?? "").toString().toLowerCase();
-      const dayOffVal = row["Day off"];
-      const leaveVal = row.Leave;
-      const isDayOff = dayOffVal !== undefined && dayOffVal !== null && dayOffVal !== "" && String(dayOffVal).toLowerCase() !== "0";
-      const isOnLeave = leaveVal !== undefined && leaveVal !== null && leaveVal !== "" && String(leaveVal).toLowerCase() !== "0";
-      const isAbsent =
-        statusRaw === "day off" ||
-        statusRaw === "absent" ||
-        isDayOff ||
-        isOnLeave;
-
-      const num = (v) => (v !== undefined && v !== null && v !== "" ? Number(v) : null);
-      const holidaysVal = num(row.Holidays);
-      const dayOffNum = num(row["Day off"]);
-      const leaveNum = num(row.Leave);
-
-      await Attendance.create({
+      const payload = {
         employee: employee._id,
         employee_id: employee.employee_id,
         date,
-        inTime: isAbsent ? null : (row.inTime ?? null),
-        outTime: isAbsent ? null : (row.outTime ?? null),
+        inTime,
+        outTime,
         workingHours: isAbsent ? null : workingHours,
         status: isAbsent ? "Absent" : "Present",
-        holidays: holidaysVal,
-        dayOff: dayOffNum,
-        leave: leaveNum,
+        holidays: num(getCsvField(row, "Holidays", "holidays")),
+        dayOff: num(getCsvField(row, "Day off", "day_off", "dayoff")),
+        leave: num(getCsvField(row, "Leave", "leave")),
+        source: "CSV",
+        uploadedBy: req.user?._id ?? req.user?.id ?? null,
+      };
+
+      const existing = await Attendance.findOne({
+        employee: employee._id,
+        date,
       });
 
-      insertedCount++;
+      if (existing) {
+        await Attendance.updateOne({ _id: existing._id }, { $set: payload });
+        updatedCount++;
+      } else {
+        await Attendance.create(payload);
+        insertedCount++;
+      }
+
+      processedDates.add(formatLocalDateKey(date));
+    }
+
+    const dates = [...processedDates].sort();
+    const totalSaved = insertedCount + updatedCount;
+
+    if (totalSaved === 0 && skippedCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No attendance rows were saved. Check employee IDs and dates match employees in the system.",
+        inserted: 0,
+        updated: 0,
+        skipped: skippedCount,
+        skippedRows: skippedRows.slice(0, 20),
+        dates: [],
+      });
     }
 
     res.json({
       success: true,
       message: "Attendance upload completed",
       inserted: insertedCount,
+      updated: updatedCount,
       skipped: skippedCount,
+      skippedRows: skippedRows.slice(0, 20),
+      dates,
     });
   } catch (error) {
     console.error("Attendance Upload Error:", error);
@@ -126,8 +164,10 @@ const uploadAttendanceCSV = async (req, res) => {
 ========================= */
 const getAttendanceByDate = async (req, res) => {
   try {
-    const date = new Date(req.query.date || Date.now());
-    date.setHours(0, 0, 0, 0);
+    const date =
+      parseQueryDateLocal(req.query.date) ||
+      parseQueryDateLocal(formatLocalDateKey(new Date())) ||
+      new Date();
 
     const nextDate = new Date(date);
     nextDate.setDate(date.getDate() + 1);
