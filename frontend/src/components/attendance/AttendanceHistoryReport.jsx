@@ -3,6 +3,9 @@ import { jsPDF } from "jspdf";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FaHistory, FaTimes } from "react-icons/fa";
 import { reportTableTheme } from "../../utils/LeaveHelper";
+import DateInput from "../ui/DateInput.jsx";
+import { usePagination } from "../../hooks/usePagination.js";
+import TablePagination from "../ui/TablePagination.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -619,6 +622,14 @@ const AttendanceHistoryReport = () => {
     return list;
   }, [historyRecords, historyStatusFilter, historyMonthFilter]);
 
+  const summaryPagination = usePagination(summaryByEmployee, {
+    resetKey: `${from}|${to}|${employeeQueryDebounced}`,
+  });
+
+  const historyPagination = usePagination(filteredHistoryRows, {
+    resetKey: `${historyEmployee?._id}|${historyStatusFilter}|${historyMonthFilter}|${historyFrom}|${historyTo}`,
+  });
+
   const handleExportHistoryPdf = useCallback(() => {
     if (!historyEmployee || historyLoading) return;
     downloadEmployeeHistoryModalPdf({
@@ -742,20 +753,20 @@ const AttendanceHistoryReport = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
-            <input
-              type="date"
+            <DateInput
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
+              placeholder="From date"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-            <input
-              type="date"
+            <DateInput
               value={to}
               onChange={(e) => setTo(e.target.value)}
               className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
+              placeholder="To date"
             />
           </div>
           <div className="md:col-span-2 flex items-center justify-start md:justify-end flex-col md:flex-row md:items-end md:gap-3">
@@ -809,12 +820,12 @@ const AttendanceHistoryReport = () => {
                   </td>
                 </tr>
               ) : (
-                summaryByEmployee.map((emp, i) => (
+                summaryPagination.paginatedItems.map((emp, i) => (
                   <tr
                     key={emp.employee_db_id}
                     className={`${reportTableTheme.tbodyRow} ${i % 2 === 1 ? reportTableTheme.tbodyRowStripe : ""}`}
                   >
-                    <td className={`${reportTableTheme.td} font-medium`}>{i + 1}</td>
+                    <td className={`${reportTableTheme.td} font-medium`}>{summaryPagination.rowOffset + i + 1}</td>
                     <td className={reportTableTheme.td}>{emp.employee_id || "—"}</td>
                     <td className={`${reportTableTheme.td} font-semibold text-gray-900`}>{emp.employee_name || "—"}</td>
                     <td className={reportTableTheme.td}>{emp.department || "—"}</td>
@@ -842,12 +853,23 @@ const AttendanceHistoryReport = () => {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={summaryPagination.page}
+          perPage={summaryPagination.perPage}
+          totalItems={summaryPagination.totalItems}
+          totalPages={summaryPagination.totalPages}
+          onPageChange={summaryPagination.setPage}
+          onPerPageChange={(n) => {
+            summaryPagination.setPerPage(n);
+            summaryPagination.setPage(1);
+          }}
+        />
       </div>
 
       {historyEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeHistory}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={closeHistory}>
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-200"
+            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[min(90vh,calc(100vh-2rem))] flex flex-col overflow-hidden border border-gray-200 my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-blue-50 shrink-0 rounded-t-2xl">
@@ -858,20 +880,20 @@ const AttendanceHistoryReport = () => {
                 <FaTimes className="text-xl" />
               </button>
             </div>
-            <div className="p-6 overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-white rounded-b-2xl">
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <span className="text-sm font-medium text-gray-700">Date range:</span>
-                <input
-                  type="date"
+                <DateInput
                   value={historyFrom}
                   onChange={(e) => setHistoryFrom(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="From"
                 />
-                <input
-                  type="date"
+                <DateInput
                   value={historyTo}
                   onChange={(e) => setHistoryTo(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="To"
                 />
                 <button
                   type="button"
@@ -946,6 +968,7 @@ const AttendanceHistoryReport = () => {
                     </div>
                   )}
 
+                  <h4 className="text-sm font-bold text-gray-800 mb-2">Daily records</h4>
                   <div className="flex flex-wrap items-center gap-3 mb-3">
                     <span className="text-sm font-medium text-gray-700">Filter:</span>
                     <select
@@ -978,15 +1001,12 @@ const AttendanceHistoryReport = () => {
                       />
                       <span>Show extra columns (Holidays, Day off, Leave)</span>
                     </label>
-                    <span className="text-xs text-gray-500">
-                      Showing {filteredHistoryRows.length} of {historyRecords.length} records
-                    </span>
                   </div>
 
-                  <div className={`flex-1 min-h-0 flex flex-col ${reportTableTheme.outerCard}`}>
-                    <div className="overflow-auto flex-1 min-h-0">
+                  <div className={`${reportTableTheme.outerCard}`}>
+                    <div className="overflow-x-auto">
                       <table className={reportTableTheme.table}>
-                        <thead className="sticky top-0 z-10 shadow-[0_1px_0_#e2e8f0]">
+                        <thead>
                           <tr className={reportTableTheme.theadRow}>
                             <th className={reportTableTheme.th}>Date</th>
                             <th className={reportTableTheme.th}>In Time</th>
@@ -1010,7 +1030,7 @@ const AttendanceHistoryReport = () => {
                               </td>
                             </tr>
                           ) : (
-                            filteredHistoryRows.map((r, ri) => (
+                            historyPagination.paginatedItems.map((r, ri) => (
                               <tr
                                 key={r._id || `${r.date}-${r.inTime}`}
                                 className={`${reportTableTheme.tbodyRow} ${ri % 2 === 1 ? reportTableTheme.tbodyRowStripe : ""}`}
@@ -1043,6 +1063,17 @@ const AttendanceHistoryReport = () => {
                         </tbody>
                       </table>
                     </div>
+                    <TablePagination
+                      page={historyPagination.page}
+                      perPage={historyPagination.perPage}
+                      totalItems={historyPagination.totalItems}
+                      totalPages={historyPagination.totalPages}
+                      onPageChange={historyPagination.setPage}
+                      onPerPageChange={(n) => {
+                        historyPagination.setPerPage(n);
+                        historyPagination.setPage(1);
+                      }}
+                    />
                   </div>
                 </>
               )}

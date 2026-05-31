@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import DateInput from "../ui/DateInput.jsx";
 
 const RequestLeave = () => {
   const navigate = useNavigate();
@@ -243,8 +244,7 @@ const RequestLeave = () => {
                 <label className="block font-medium text-gray-700 mb-2">
                   From Date <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   name="startDate"
                   value={leave.startDate}
                   onChange={handleChange}
@@ -258,8 +258,7 @@ const RequestLeave = () => {
                 <label className="block font-medium text-gray-700 mb-2">
                   To Date <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   name="endDate"
                   value={leave.endDate}
                   onChange={handleChange}

@@ -65,7 +65,7 @@ const DashboardLayout = ({ sidebar, showWelcome = true }) => {
         </div>
 
         <main className="mt-14 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6 h-[calc(100dvh-3.5rem)]">
-          <div className="mx-auto w-full max-w-[100rem]">
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-[100rem] flex-col">
             <Outlet />
           </div>
         </main>

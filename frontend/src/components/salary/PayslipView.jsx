@@ -337,7 +337,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   addSignatureAndSave();
 }
 
-const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, initialSignatureDate = null, onSavePayslip = null, savingPayslip = false }) => {
+const PayslipView = ({ employee, data, month, year, monthName, onClose, initialSignature = null, initialSignatureDate = null, onSavePayslip = null, savingPayslip = false, readOnly = false }) => {
   const printRef = useRef(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState(initialSignature ?? null);
   const [signatureDate] = useState(() => (initialSignatureDate && String(initialSignatureDate).trim()) ? String(initialSignatureDate).trim() : new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
@@ -469,28 +469,32 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 cursor-pointer transition-colors text-sm">
-              <FaPenFancy className="text-blue-600 shrink-0" />
-              <span>{signatureDataUrl ? "Change signature" : "Add signature"}</span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleSignatureFile} />
-            </label>
-            {signatureDataUrl && (
+            {!readOnly && (
               <>
-                <button
-                  type="button"
-                  onClick={() => onSavePayslip?.(signatureDataUrl)}
-                  disabled={savingPayslip}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  <FaSave className="shrink-0" /> {savingPayslip ? "Saving…" : "Save payslip"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSignatureDataUrl(null)}
-                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium"
-                >
-                  Clear
-                </button>
+                <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 cursor-pointer transition-colors text-sm">
+                  <FaPenFancy className="text-blue-600 shrink-0" />
+                  <span>{signatureDataUrl ? "Change signature" : "Add signature"}</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleSignatureFile} />
+                </label>
+                {signatureDataUrl && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onSavePayslip?.(signatureDataUrl)}
+                      disabled={savingPayslip}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      <FaSave className="shrink-0" /> {savingPayslip ? "Saving…" : "Save payslip"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureDataUrl(null)}
+                      className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
               </>
             )}
             <button

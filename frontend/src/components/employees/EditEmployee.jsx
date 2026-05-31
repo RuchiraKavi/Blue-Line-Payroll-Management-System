@@ -5,6 +5,7 @@ import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./AllowancesSection";
 import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
+import DateInput from "../ui/DateInput.jsx";
 
 const EditEmployee = () => {
   const { user, loading } = useAuth();
@@ -351,8 +352,7 @@ const EditEmployee = () => {
       {/* Date of Birth */}
       <div className="flex flex-col">
         <label htmlFor="dob" className="mb-1 font-medium">Date of Birth</label>
-        <input
-          type="date"
+        <DateInput
           name="dob"
           id="dob"
           value={employee.dob}
@@ -399,8 +399,7 @@ const EditEmployee = () => {
       {/* Joined Date */}
       <div className="flex flex-col">
         <label htmlFor="joined_date" className="mb-1 font-medium">Joined Date</label>
-        <input
-          type="date"
+        <DateInput
           name="joined_date"
           id="joined_date"
           value={employee.joined_date}
@@ -413,8 +412,7 @@ const EditEmployee = () => {
       {/* Resigned Date */}
       <div className="flex flex-col">
         <label htmlFor="resigned_date" className="mb-1 font-medium">Resigned Date</label>
-        <input
-          type="date"
+        <DateInput
           name="resigned_date"
           id="resigned_date"
           value={employee.resigned_date}

@@ -1,6 +1,7 @@
 import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import DateInput from "../ui/DateInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -168,7 +169,7 @@ const EditProfile = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">DOB</label>
-              <input type="date" name="dob" value={form.dob} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
+              <DateInput name="dob" value={form.dob} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
             </div>
           </div>
 

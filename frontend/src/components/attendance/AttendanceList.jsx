@@ -2,6 +2,9 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 import { downloadAttendanceUploadTemplate } from "../../utils/attendanceCsvTemplate.js";
+import DateInput from "../ui/DateInput.jsx";
+import { usePagination } from "../../hooks/usePagination.js";
+import TablePagination from "../ui/TablePagination.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -13,6 +16,8 @@ const AttendanceList = () => {
   const [loading, setLoading] = useState(false);
   const [showExtraColumns, setShowExtraColumns] = useState(false);
   const fileInputRef = useRef(null);
+
+  const attendancePagination = usePagination(attendance, { resetKey: date });
 
   /* =========================
      Fetch Attendance (MEMOIZED)
@@ -240,19 +245,11 @@ const AttendanceList = () => {
             {/* Date Picker */}
             <div className="relative w-full lg:w-auto">
               <label className="block text-sm font-medium text-gray-700 mb-2">Select Date</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                  </svg>
-                </div>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md w-full lg:w-64"
-                />
-              </div>
+              <DateInput
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="py-3 w-full lg:w-64 hover:shadow-md"
+              />
             </div>
 
             {/* File Upload Section */}
@@ -318,11 +315,7 @@ const AttendanceList = () => {
             </div>
           ) : (
             <>
-              {/* Results Summary */}
-              <div className="mb-6 flex items-center justify-between">
-                <div className="text-sm text-gray-600">
-                  Showing <span className="font-semibold text-gray-900">{attendance.length}</span> attendance records
-                </div>
+              <div className="mb-6 flex items-center justify-end">
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -357,9 +350,9 @@ const AttendanceList = () => {
                   </thead>
                   <tbody>
                     {attendance.length > 0 ? (
-                      attendance.map((a, index) => (
+                      attendancePagination.paginatedItems.map((a, index) => (
                         <tr key={a._id || `${a.employeeId}-${a.date}`} className="border-t border-gray-100 hover:bg-blue-50 transition-colors duration-150">
-                          <td className="px-6 py-4 font-medium text-gray-700">{index + 1}</td>
+                          <td className="px-6 py-4 font-medium text-gray-700">{attendancePagination.rowOffset + index + 1}</td>
                           <td className="px-6 py-4 text-gray-600">{a.employee_id}</td>
                           <td className="px-6 py-4 font-semibold text-gray-900">{a.employeeName}</td>
                           <td className="px-6 py-4 text-gray-600">
@@ -405,6 +398,17 @@ const AttendanceList = () => {
                     )}
                   </tbody>
                 </table>
+                <TablePagination
+                  page={attendancePagination.page}
+                  perPage={attendancePagination.perPage}
+                  totalItems={attendancePagination.totalItems}
+                  totalPages={attendancePagination.totalPages}
+                  onPageChange={attendancePagination.setPage}
+                  onPerPageChange={(n) => {
+                    attendancePagination.setPerPage(n);
+                    attendancePagination.setPage(1);
+                  }}
+                />
               </div>
             </>
           )}

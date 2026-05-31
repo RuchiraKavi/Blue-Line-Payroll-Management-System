@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { FaHandHoldingUsd, FaCheck, FaTimes, FaUndo } from "react-icons/fa";
+import { usePagination } from "../../hooks/usePagination.js";
+import TablePagination from "../ui/TablePagination.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -70,6 +72,8 @@ const AdvanceRequestList = () => {
     return "bg-amber-100 text-amber-800";
   };
 
+  const pagination = usePagination(requests);
+
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-indigo-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl mb-8 p-8 border border-gray-100">
@@ -116,7 +120,7 @@ const AdvanceRequestList = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => (
+                  {pagination.paginatedItems.map((r) => (
                     <tr key={r._id} className="border-t border-gray-100 hover:bg-blue-50/50">
                       <td className="px-6 py-4">
                         <p className="font-medium text-gray-900">{name(r)}</p>
@@ -174,6 +178,17 @@ const AdvanceRequestList = () => {
                   ))}
                 </tbody>
               </table>
+              <TablePagination
+                page={pagination.page}
+                perPage={pagination.perPage}
+                totalItems={pagination.totalItems}
+                totalPages={pagination.totalPages}
+                onPageChange={pagination.setPage}
+                onPerPageChange={(n) => {
+                  pagination.setPerPage(n);
+                  pagination.setPage(1);
+                }}
+              />
             </div>
           )}
         </div>

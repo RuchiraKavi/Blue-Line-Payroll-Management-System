@@ -86,3 +86,19 @@
     transform: scaleY(1);
   }
 }
+
+@keyframes date-picker-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.date-picker-popover {
+  animation: date-picker-enter 0.18s ease-out;
+  transform-origin: top left;
+}

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { jsPDF } from "jspdf";
 import { FaTimes, FaHistory, FaFileAlt, FaPrint, FaFilePdf } from "react-icons/fa";
+import { usePagination } from "../../hooks/usePagination.js";
+import TablePagination from "../ui/TablePagination.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -63,6 +65,11 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
     const dEnd = reportToYear * 12 + reportToMonth;
     const d = h.year * 12 + h.month;
     return d >= dStart && d <= dEnd;
+  });
+
+  const historyPagination = usePagination(history, { resetKey: employeeId });
+  const reportPagination = usePagination(reportEntries, {
+    resetKey: `${reportFromMonth}-${reportFromYear}-${reportToMonth}-${reportToYear}-${employeeId}`,
   });
 
   const handlePrintReport = () => {
@@ -228,7 +235,7 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                       </tr>
                     </thead>
                     <tbody>
-                      {history.map((h, i) => (
+                      {historyPagination.paginatedItems.map((h, i) => (
                         <tr key={`${h.year}-${h.month}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                           <td className="px-4 py-3 border-t border-gray-200">{h.monthName} {h.year}</td>
                           <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(h.epf_payment).toFixed(2)}</td>
@@ -238,6 +245,17 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                       ))}
                     </tbody>
                   </table>
+                  <TablePagination
+                    page={historyPagination.page}
+                    perPage={historyPagination.perPage}
+                    totalItems={historyPagination.totalItems}
+                    totalPages={historyPagination.totalPages}
+                    onPageChange={historyPagination.setPage}
+                    onPerPageChange={(n) => {
+                      historyPagination.setPerPage(n);
+                      historyPagination.setPage(1);
+                    }}
+                  />
                 </div>
               )}
             </>
@@ -306,7 +324,7 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500">No data for selected range.</td>
                       </tr>
                     ) : (
-                      reportEntries.map((h, i) => (
+                      reportPagination.paginatedItems.map((h, i) => (
                         <tr key={`${h.year}-${h.month}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                           <td className="px-4 py-3 border-t border-gray-200">{h.monthName} {h.year}</td>
                           <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(h.epf_payment).toFixed(2)}</td>
@@ -317,6 +335,17 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                     )}
                   </tbody>
                 </table>
+                <TablePagination
+                  page={reportPagination.page}
+                  perPage={reportPagination.perPage}
+                  totalItems={reportPagination.totalItems}
+                  totalPages={reportPagination.totalPages}
+                  onPageChange={reportPagination.setPage}
+                  onPerPageChange={(n) => {
+                    reportPagination.setPerPage(n);
+                    reportPagination.setPage(1);
+                  }}
+                />
               </div>
               {reportEntries.length > 0 && (
                 <div className="flex flex-wrap gap-2">

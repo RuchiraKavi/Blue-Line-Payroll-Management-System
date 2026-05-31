@@ -2,6 +2,7 @@ import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "react-data-table-component";
 import { leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHelper";
+import DateInput from "../ui/DateInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -220,6 +221,8 @@ const LeaveHistoryReport = () => {
     setAppliedTo("");
   };
 
+  const filterKey = `${search}|${status}|${leaveType}|${appliedFrom}|${appliedTo}`;
+
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -250,20 +253,20 @@ const LeaveHistoryReport = () => {
 
       {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm mb-4">{error}</div>}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 overflow-visible">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 gap-3 overflow-visible">
           <input
             type="text"
             placeholder="Search employee name / employee id / reason / type..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm"
+            className="xl:col-span-4 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm min-w-0"
           />
 
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
+            className="xl:col-span-2 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white min-w-0"
           >
             <option value="all">All statuses</option>
             <option value="Pending">Pending</option>
@@ -274,7 +277,7 @@ const LeaveHistoryReport = () => {
           <select
             value={leaveType}
             onChange={(e) => setLeaveType(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
+            className="xl:col-span-2 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white min-w-0"
           >
             <option value="all">All leave types</option>
             <option value="casual">Casual</option>
@@ -283,19 +286,22 @@ const LeaveHistoryReport = () => {
             <option value="nopay">No Pay</option>
           </select>
 
-          <input
-            type="date"
-            value={appliedFrom}
-            onChange={(e) => setAppliedFrom(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
-          />
+          <div className="xl:col-span-2 min-w-40">
+            <DateInput
+              value={appliedFrom}
+              onChange={(e) => setAppliedFrom(e.target.value)}
+              placeholder="From date"
+            />
+          </div>
 
-          <input
-            type="date"
-            value={appliedTo}
-            onChange={(e) => setAppliedTo(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white"
-          />
+          <div className="xl:col-span-2 min-w-40">
+            <DateInput
+              value={appliedTo}
+              onChange={(e) => setAppliedTo(e.target.value)}
+              placeholder="To date"
+              min={appliedFrom || undefined}
+            />
+          </div>
         </div>
       </div>
 
@@ -307,67 +313,71 @@ const LeaveHistoryReport = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="w-full min-w-0 overflow-x-auto">
-            <div style={{ minWidth: 1900 }}>
-              <DataTable
-                columns={reportColumns}
-                data={filteredLeaves}
-                highlightOnHover
-                responsive
-                pagination
-                paginationPerPage={10}
-                paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
-                striped
-                noDataComponent={
-                  <div className="py-20 text-center">
-                    <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1"
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-                      ></path>
-                    </svg>
-                    <h3 className="text-xl font-semibold text-gray-500 mb-2">No leave records found</h3>
-                    <p className="text-gray-400">Try adjusting your search or filter criteria</p>
-                  </div>
-                }
-                customStyles={{
-                  ...leaveDataTableCustomStyles,
-                  headCells: {
-                    style: {
-                      ...(leaveDataTableCustomStyles?.headCells?.style || {}),
-                      whiteSpace: "nowrap",
-                      overflow: "visible",
-                      textOverflow: "clip",
-                    },
-                  },
-                  table: {
-                    style: {
-                      ...(leaveDataTableCustomStyles?.table?.style || {}),
-                      width: "100%",
-                      minWidth: "1900px",
-                      tableLayout: "auto",
-                    },
-                  },
-                  tableWrapper: {
-                    style: {
-                      overflowX: "auto",
-                      overflowY: "hidden",
-                    },
-                  },
-                  responsiveWrapper: {
-                    style: {
-                      ...(leaveDataTableCustomStyles?.responsiveWrapper?.style || {}),
-                      overflowX: "auto",
-                      overflowY: "hidden",
-                    },
-                  },
-                }}
-              />
-            </div>
-          </div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <DataTable
+            key={filterKey}
+            columns={reportColumns}
+            data={filteredLeaves}
+            highlightOnHover
+            responsive
+            pagination
+            paginationServer={false}
+            paginationResetDefaultPage
+            paginationPerPage={10}
+            paginationRowsPerPageOptions={[5, 10, 15, 20, 25, 50]}
+            paginationComponentOptions={{
+              rowsPerPageText: "Rows per page:",
+              rangeSeparatorText: "of",
+              selectAllRowsItem: false,
+            }}
+            striped
+            noDataComponent={
+              <div className="py-20 text-center">
+                <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                  ></path>
+                </svg>
+                <h3 className="text-xl font-semibold text-gray-500 mb-2">No leave records found</h3>
+                <p className="text-gray-400">Try adjusting your search or filter criteria</p>
+              </div>
+            }
+            customStyles={{
+              ...leaveDataTableCustomStyles,
+              headCells: {
+                style: {
+                  ...(leaveDataTableCustomStyles?.headCells?.style || {}),
+                  whiteSpace: "nowrap",
+                  overflow: "visible",
+                  textOverflow: "clip",
+                },
+              },
+              table: {
+                style: {
+                  ...(leaveDataTableCustomStyles?.table?.style || {}),
+                  width: "100%",
+                  minWidth: "1900px",
+                  tableLayout: "auto",
+                },
+              },
+              tableWrapper: {
+                style: {
+                  overflowX: "auto",
+                  overflowY: "hidden",
+                },
+              },
+              responsiveWrapper: {
+                style: {
+                  ...(leaveDataTableCustomStyles?.responsiveWrapper?.style || {}),
+                  overflowX: "auto",
+                  overflowY: "hidden",
+                },
+              },
+            }}
+          />
         </div>
       )}
     </div>

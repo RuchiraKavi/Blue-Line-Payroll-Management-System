@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import axios from "axios";
 import LeaveBalance from "./LeaveBalance";
+import { usePagination } from "../../hooks/usePagination.js";
+import TablePagination from "../ui/TablePagination.jsx";
 
 const LeaveList = ({ employeeId, isAdminView = false }) => {
   const { user } = useAuth();
@@ -53,6 +55,8 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
   const filteredLeaves = leaves.filter((leave) =>
     leave.status.toLowerCase().includes(search.toLowerCase())
   );
+
+  const pagination = usePagination(filteredLeaves, { resetKey: search });
 
   // Calculate total days taken per type (approved leaves only)
   const calculateDaysTaken = () => {
@@ -184,7 +188,7 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
       </div>
 
       {/* TABLE */}
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
+      <div className="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
             <tr>
@@ -201,9 +205,9 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
 
           <tbody>
             {filteredLeaves.length > 0 ? (
-              filteredLeaves.map((leave, index) => (
+              pagination.paginatedItems.map((leave, index) => (
                 <tr key={leave._id} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-3">{index + 1}</td>
+                  <td className="px-4 py-3">{pagination.rowOffset + index + 1}</td>
                   <td className="px-4 py-3 font-medium">
                     {formatLeaveType(leave.leaveType)}
                   </td>
@@ -242,6 +246,17 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
             )}
           </tbody>
         </table>
+        <TablePagination
+          page={pagination.page}
+          perPage={pagination.perPage}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.setPage}
+          onPerPageChange={(n) => {
+            pagination.setPerPage(n);
+            pagination.setPage(1);
+          }}
+        />
       </div>
     </div>
   );

@@ -63,6 +63,27 @@ export const leaveDataTableCustomStyles = {
       fontSize: "14px",
       color: "#374151",
       padding: "16px",
+      minHeight: "56px",
+    },
+    pageButtonsStyle: {
+      borderRadius: "8px",
+      height: "36px",
+      width: "36px",
+      padding: "4px",
+      margin: "0 4px",
+      cursor: "pointer",
+      transition: "all 0.2s",
+      color: "#374151",
+      fill: "#374151",
+      backgroundColor: "transparent",
+      "&:hover:not(:disabled)": {
+        backgroundColor: "#eff6ff",
+        color: "#2563eb",
+      },
+      "&:disabled": {
+        cursor: "not-allowed",
+        opacity: 0.4,
+      },
     },
   },
 };

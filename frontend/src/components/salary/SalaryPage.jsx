@@ -5,6 +5,7 @@ import { FaMoneyBillWave, FaFileInvoiceDollar, FaListUl, FaCheck, FaTimes, FaSav
 import PayslipView from "./PayslipView.jsx";
 import ContributionModal from "./ContributionModal.jsx";
 import AllContributionsModal from "./AllContributionsModal.jsx";
+import SalarySummaryTable from "./SalarySummaryTable.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
 import { resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
@@ -1149,70 +1150,20 @@ const SalaryPage = () => {
                   </div>
                 </div>
                 <div className="p-8 overflow-x-auto">
-                  <div className="rounded-xl border border-gray-200 overflow-hidden">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-linear-to-r from-gray-50 to-blue-50 text-gray-700 uppercase text-xs border-b-2 border-gray-200">
-                        <tr>
-                          <th className="px-6 py-4 text-left font-semibold">Employee</th>
-                          <th className="px-6 py-4 text-left font-semibold">NIC</th>
-                          <th className="px-6 py-4 text-left font-semibold">EPF No.</th>
-                          <th className="px-6 py-4 text-left font-semibold">Department</th>
-                          <th className="px-6 py-4 text-right font-semibold">Gross Salary</th>
-                          <th className="px-6 py-4 text-right font-semibold">Total Deduction</th>
-                          <th className="px-6 py-4 text-right font-semibold">Net Pay</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summaryLoading ? (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                              Loading {monthNames[summaryMonth - 1]} {summaryYear}…
-                            </td>
-                          </tr>
-                        ) : filteredRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                              {approvedRows.length === 0 ? (!isSummaryCurrentPeriod ? `No saved run for ${monthNames[summaryMonth - 1]} ${summaryYear}.` : "Approve salary entries below to include them in the summary.") : "No employees match the filter."}
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredRows.map((row) => {
-                            const c = getSummaryAmounts(row);
-                            return (
-                              <tr key={row._id || row.employee} className="border-t border-gray-100 hover:bg-blue-50 transition-colors duration-150">
-                                <td className="px-6 py-4">
-                                  <div className="font-semibold text-gray-900">{row.name}</div>
-                                  <div className="text-xs text-gray-500">{row.employee_id}{row.designation ? ` · ${row.designation}` : ""}</div>
-                                </td>
-                                <td className="px-6 py-4 text-gray-700 font-mono text-xs">{row.nic || "—"}</td>
-                                <td className="px-6 py-4 text-gray-700 font-mono text-xs">{row.epf_number || "—"}</td>
-                                <td className="px-6 py-4 text-gray-700">{row.department}</td>
-                                <td className="px-6 py-4 text-right font-medium">{Number(c.gross_salary).toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right">{Number(c.total_deduction).toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right font-semibold text-green-700">{Number(c.net_pay).toFixed(2)}</td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                      {!summaryLoading && filteredRows.length > 0 && (
-                        <tfoot>
-                          <tr className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-200">
-                            <td className="px-6 py-4" colSpan={4}>Total{filteredRows.length < approvedRows.length ? ` (${filteredRows.length} shown)` : ""}</td>
-                            <td className="px-6 py-4 text-right">
-                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).gross_salary), 0).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).total_deduction), 0).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 text-right text-green-700">
-                              {filteredRows.reduce((sum, r) => sum + Number(getSummaryAmounts(r).net_pay), 0).toFixed(2)}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      )}
-                    </table>
-                  </div>
+                  <SalarySummaryTable
+                    filteredRows={filteredRows}
+                    approvedRows={approvedRows}
+                    summaryLoading={summaryLoading}
+                    loadingLabel={`Loading ${monthNames[summaryMonth - 1]} ${summaryYear}…`}
+                    emptyNoApprovedMessage={
+                      !isSummaryCurrentPeriod
+                        ? `No saved run for ${monthNames[summaryMonth - 1]} ${summaryYear}.`
+                        : "Approve salary entries below to include them in the summary."
+                    }
+                    emptyNoMatchMessage="No employees match the filter."
+                    getSummaryAmounts={getSummaryAmounts}
+                    resetKey={`${summarySearch}|${summaryDepartment}|${summaryMonth}|${summaryYear}`}
+                  />
                 </div>
               </div>
             );
