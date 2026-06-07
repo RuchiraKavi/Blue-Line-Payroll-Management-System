@@ -1,5 +1,4 @@
 import {
-  countInclusiveCalendarDays,
   getPayrollDivisor,
   toLocalDateOnly,
 } from "./payrollAttendance.js";
@@ -35,24 +34,57 @@ export function isEmployeeEligibleForPayPeriod(joinedDate, month, year) {
   return true;
 }
 
-/** Inclusive calendar days worked in join month (join date → month end). */
-export function getJoinMonthWorkedDays(joinedDate, joinMonth, joinYear) {
+/**
+ * Present attendance days in join month on/after join date.
+ * Uses join-month attendance only (status Present) — not calendar days.
+ */
+export function getJoinMonthWorkedDays(joinedDate, joinMonth, joinYear, presentDates = []) {
   const join = toLocalDateOnly(joinedDate);
   const monthStart = new Date(Number(joinYear), Number(joinMonth) - 1, 1);
   const monthEnd = new Date(Number(joinYear), Number(joinMonth), 0);
   if (!join || join < monthStart || join > monthEnd) return 0;
-  return countInclusiveCalendarDays(join, monthEnd);
+  if (!Array.isArray(presentDates) || presentDates.length === 0) return 0;
+
+  const joinTime = join.getTime();
+  const monthEndTime = monthEnd.getTime();
+  const seen = new Set();
+  let count = 0;
+
+  for (const raw of presentDates) {
+    const day = toLocalDateOnly(raw);
+    if (!day) continue;
+    const t = day.getTime();
+    if (t < joinTime || t > monthEndTime) continue;
+    const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    count += 1;
+  }
+
+  return count;
+}
+
+function presentDatesForEmployee(presentDatesMap, employee) {
+  if (!presentDatesMap) return [];
+  const id = String(employee?._id ?? employee);
+  return presentDatesMap.get(id) || [];
 }
 
 /**
- * Pro-rated earnings for join-month days (basic + fixed allowances, excludes bonus).
+ * Pro-rated earnings for join-month attendance days (basic + fixed allowances, excludes bonus).
  * Paid with the following month's salary.
  */
-export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear) {
+export function calculateJoinMonthCarryForward(
+  employee,
+  joinMonth,
+  joinYear,
+  presentDates = []
+) {
   const workedDays = getJoinMonthWorkedDays(
     employee?.joined_date,
     joinMonth,
-    joinYear
+    joinYear,
+    presentDates
   );
   if (workedDays <= 0) {
     return { amount: 0, workedDays: 0, joinMonth, joinYear };
@@ -72,7 +104,13 @@ export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear) {
   return { amount, workedDays, joinMonth, joinYear };
 }
 
-export function applyJoinMonthCarryToSalaryInput(input, employee, month, year) {
+export function applyJoinMonthCarryToSalaryInput(
+  input,
+  employee,
+  month,
+  year,
+  presentDatesMap = null
+) {
   if (!isFirstPayMonth(employee?.joined_date, month, year)) {
     return {
       ...input,
@@ -82,7 +120,13 @@ export function applyJoinMonthCarryToSalaryInput(input, employee, month, year) {
   }
 
   const prev = getPreviousPayPeriod(month, year);
-  const carry = calculateJoinMonthCarryForward(employee, prev.month, prev.year);
+  const presentDates = presentDatesForEmployee(presentDatesMap, employee);
+  const carry = calculateJoinMonthCarryForward(
+    employee,
+    prev.month,
+    prev.year,
+    presentDates
+  );
   return {
     ...input,
     join_month_carry_forward: carry.amount,
@@ -90,7 +134,7 @@ export function applyJoinMonthCarryToSalaryInput(input, employee, month, year) {
   };
 }
 
-export function buildDeferredEmployeeSummary(employee, month, year) {
+export function buildDeferredEmployeeSummary(employee, month, year, presentDatesMap = null) {
   const emp = employee?.toObject ? employee.toObject() : employee;
   const join = toLocalDateOnly(emp.joined_date);
   const monthEnd = new Date(Number(year), Number(month), 0);
@@ -108,7 +152,13 @@ export function buildDeferredEmployeeSummary(employee, month, year) {
     };
   }
 
-  const carry = calculateJoinMonthCarryForward(emp, month, year);
+  const presentDates = presentDatesForEmployee(presentDatesMap, emp);
+  const carry = calculateJoinMonthCarryForward(emp, month, year, presentDates);
+  const message =
+    carry.workedDays > 0
+      ? `Salary starts next month. Join-month pay for ${carry.workedDays} attendance day(s) (Rs. ${carry.amount.toLocaleString("en-LK")}) will be paid with next month's salary.`
+      : "Salary starts next month. Join-month pay will be calculated from join-month attendance when it is uploaded.";
+
   return {
     _id: emp._id,
     employee_id: emp.employee_id,
@@ -117,6 +167,6 @@ export function buildDeferredEmployeeSummary(employee, month, year) {
     join_month_worked_days: carry.workedDays,
     join_month_carry_forward: carry.amount,
     reason: "join_month",
-    message: `Salary starts next month. Join-month work pay (Rs. ${carry.amount.toLocaleString("en-LK")}) will be paid with next month's salary.`,
+    message,
   };
 }

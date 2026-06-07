@@ -9,7 +9,7 @@ import SalarySummaryTable from "./SalarySummaryTable.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
 import { resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
-import { applyJoinMonthCarryToSalaryInput, hasJoinMonthPay } from "../../utils/joinMonthPayroll.js";
+import { hasJoinMonthPay } from "../../utils/joinMonthPayroll.js";
 import { getCurrentPayPeriod, isFuturePayPeriod } from "../../utils/payPeriod.js";
 import SelectInput from "../ui/SelectInput.jsx";
 
@@ -90,17 +90,8 @@ function computeRow(row, payrollMonth, payrollYear) {
   const holiday = Number(row.holiday_payment) || 0;
   const allowanceNs = Number(row.allowance_ns) || 0;
   const bonus = Number(row.bonus) || 0;
-  const joinFromRow = applyJoinMonthCarryToSalaryInput(
-    {
-      join_month_carry_forward: Number(row.join_month_carry_forward) || 0,
-      join_month_worked_days: Number(row.join_month_worked_days) || 0,
-    },
-    row.employee ?? row,
-    payrollMonth ?? row.payroll_month,
-    payrollYear ?? row.payroll_year
-  );
-  const joinCarryForward = Number(joinFromRow.join_month_carry_forward) || 0;
-  const joinMonthWorkedDays = Number(joinFromRow.join_month_worked_days) || 0;
+  const joinCarryForward = Number(row.join_month_carry_forward) || 0;
+  const joinMonthWorkedDays = Number(row.join_month_worked_days) || 0;
   const role = row.role || row.employee?.role || "";
   const noPayResolved = resolveNoPayDeduction({
     basicSalary: basic,
@@ -1239,7 +1230,7 @@ const SalaryPage = () => {
                     Join month — salary deferred to next period
                   </h3>
                   <p className="text-sm text-indigo-800 mb-3">
-                    Employees who joined in {monthNames[month - 1]} {year} are not paid this month. Their join-month work pay is added to next month&apos;s salary.
+                    Employees who joined in {monthNames[month - 1]} {year} are not paid this month. Their join-month pay (from attendance) is added to next month&apos;s salary.
                   </p>
                   <ul className="space-y-2 text-sm text-indigo-900">
                     {deferredEmployees.filter((d) => d.reason === "join_month" && hasJoinMonthPay(d.join_month_carry_forward)).map((d) => (
@@ -1248,7 +1239,7 @@ const SalaryPage = () => {
                         {" · "}
                         Joined {d.joined_date ? String(d.joined_date).slice(0, 10) : "—"}
                         {" · "}
-                        {d.join_month_worked_days} day(s) work → Rs. {(d.join_month_carry_forward ?? 0).toLocaleString("en-LK")} next month
+                        {d.join_month_worked_days} attendance day(s) → Rs. {(d.join_month_carry_forward ?? 0).toLocaleString("en-LK")} next month
                       </li>
                     ))}
                   </ul>
@@ -1364,8 +1355,8 @@ const SalaryPage = () => {
                           </label>
                           {hasJoinMonthPay(computed.join_month_carry_forward) && (
                             <label className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
-                              <span className="text-indigo-900" title="Work days from join month, paid with this salary">
-                                Join Month Pay ({computed.join_month_worked_days} days)
+                              <span className="text-indigo-900" title="Present days from join-month attendance, paid with this salary">
+                                Join Month Pay ({computed.join_month_worked_days} attendance days)
                               </span>
                               <input type="number" readOnly value={computed.join_month_carry_forward} className="w-24 px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
                             </label>
@@ -1772,7 +1763,7 @@ const SalaryPage = () => {
                         {hasJoinMonthPay(computed.join_month_carry_forward) && (
                           <div className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
                             <span className="text-indigo-900" title="Work days from join month, paid with this salary">
-                              Join Month Pay ({computed.join_month_worked_days} days)
+                              Join Month Pay ({computed.join_month_worked_days} attendance days)
                             </span>
                             <span className="w-24 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200">
                               {computed.join_month_carry_forward.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

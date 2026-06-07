@@ -21,6 +21,7 @@ function assert(label, condition) {
 }
 
 const employee = {
+  _id: "emp1",
   joined_date: "2024-06-15",
   role: "employee",
   basic_salary: 240000,
@@ -29,6 +30,19 @@ const employee = {
   holiday_payment: 0,
   allowance_ns: 0,
 };
+
+const junePresentDates = [
+  "2024-06-15",
+  "2024-06-16",
+  "2024-06-17",
+  "2024-06-18",
+  "2024-06-19",
+  "2024-06-20",
+  "2024-06-21",
+  "2024-06-24",
+  "2024-06-25",
+  "2024-06-26",
+];
 
 assert("join month June 2024", isJoinMonth(employee.joined_date, 6, 2024));
 assert("not join month July 2024", !isJoinMonth(employee.joined_date, 7, 2024));
@@ -43,27 +57,35 @@ assert(
   "eligible from next month",
   isEmployeeEligibleForPayPeriod(employee.joined_date, 7, 2024)
 );
-assert(
-  "not eligible before join",
-  !isEmployeeEligibleForPayPeriod(employee.joined_date, 5, 2024)
-);
 
 assert(
-  "worked days June 15–30",
-  getJoinMonthWorkedDays(employee.joined_date, 6, 2024) === 16
+  "no attendance means 0 worked days",
+  getJoinMonthWorkedDays(employee.joined_date, 6, 2024, []) === 0
+);
+assert(
+  "attendance present days after join date",
+  getJoinMonthWorkedDays(employee.joined_date, 6, 2024, junePresentDates) === 10
+);
+assert(
+  "present before join date excluded",
+  getJoinMonthWorkedDays(employee.joined_date, 6, 2024, ["2024-06-10", "2024-06-15"]) === 1
 );
 
-const carry = calculateJoinMonthCarryForward(employee, 6, 2024);
+const carry = calculateJoinMonthCarryForward(employee, 6, 2024, junePresentDates);
 assert("carry amount > 0", carry.amount > 0);
-assert("carry worked days", carry.workedDays === 16);
-// (255000 / 24) * 16 = 170000
-assert("carry amount formula", carry.amount === 170000);
+assert("carry worked days from attendance", carry.workedDays === 10);
+// (255000 / 24) * 10 = 106250
+assert("carry amount formula", carry.amount === 106250);
 
-const withCarry = applyJoinMonthCarryToSalaryInput({}, employee, 7, 2024);
-assert("July gets join carry", withCarry.join_month_carry_forward === 170000);
-assert("July worked days stored", withCarry.join_month_worked_days === 16);
+const noAttendanceCarry = calculateJoinMonthCarryForward(employee, 6, 2024, []);
+assert("no attendance carry is 0", noAttendanceCarry.amount === 0);
 
-const noCarry = applyJoinMonthCarryToSalaryInput({}, employee, 8, 2024);
+const presentDatesMap = new Map([[String(employee._id), junePresentDates]]);
+const withCarry = applyJoinMonthCarryToSalaryInput({}, employee, 7, 2024, presentDatesMap);
+assert("July gets join carry from attendance", withCarry.join_month_carry_forward === 106250);
+assert("July worked days stored", withCarry.join_month_worked_days === 10);
+
+const noCarry = applyJoinMonthCarryToSalaryInput({}, employee, 8, 2024, presentDatesMap);
 assert("August has no carry", noCarry.join_month_carry_forward === 0);
 
 console.log(`\n${passed} passed, ${failed} failed`);

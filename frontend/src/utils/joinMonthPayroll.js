@@ -1,5 +1,4 @@
 import {
-  countInclusiveCalendarDays,
   getPayrollDivisor,
   toLocalDateOnly,
 } from "./payrollAttendance.js";
@@ -31,16 +30,35 @@ export function isEmployeeEligibleForPayPeriod(joinedDate, month, year) {
   return true;
 }
 
-export function getJoinMonthWorkedDays(joinedDate, joinMonth, joinYear) {
+/** Present attendance days in join month on/after join date. */
+export function getJoinMonthWorkedDays(joinedDate, joinMonth, joinYear, presentDates = []) {
   const join = toLocalDateOnly(joinedDate);
   const monthStart = new Date(Number(joinYear), Number(joinMonth) - 1, 1);
   const monthEnd = new Date(Number(joinYear), Number(joinMonth), 0);
   if (!join || join < monthStart || join > monthEnd) return 0;
-  return countInclusiveCalendarDays(join, monthEnd);
+  if (!Array.isArray(presentDates) || presentDates.length === 0) return 0;
+
+  const joinTime = join.getTime();
+  const monthEndTime = monthEnd.getTime();
+  const seen = new Set();
+  let count = 0;
+
+  for (const raw of presentDates) {
+    const day = toLocalDateOnly(raw);
+    if (!day) continue;
+    const t = day.getTime();
+    if (t < joinTime || t > monthEndTime) continue;
+    const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    count += 1;
+  }
+
+  return count;
 }
 
-export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear) {
-  const workedDays = getJoinMonthWorkedDays(employee?.joined_date, joinMonth, joinYear);
+export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear, presentDates = []) {
+  const workedDays = getJoinMonthWorkedDays(employee?.joined_date, joinMonth, joinYear, presentDates);
   if (workedDays <= 0) {
     return { amount: 0, workedDays: 0, joinMonth, joinYear };
   }
@@ -54,23 +72,6 @@ export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear) {
   const monthlyEarnings = basic + travel + food + holiday + allowanceNs;
   const amount = Math.round((monthlyEarnings / divisor) * workedDays * 100) / 100;
   return { amount, workedDays, joinMonth, joinYear };
-}
-
-export function applyJoinMonthCarryToSalaryInput(input, employee, month, year) {
-  if (!isFirstPayMonth(employee?.joined_date, month, year)) {
-    return {
-      ...input,
-      join_month_carry_forward: 0,
-      join_month_worked_days: 0,
-    };
-  }
-  const prev = getPreviousPayPeriod(month, year);
-  const carry = calculateJoinMonthCarryForward(employee, prev.month, prev.year);
-  return {
-    ...input,
-    join_month_carry_forward: carry.amount,
-    join_month_worked_days: carry.workedDays,
-  };
 }
 
 /** True when join-month carry-forward should appear on salary card / payslip. */

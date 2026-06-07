@@ -242,6 +242,36 @@ export async function getAttendanceHoursByEmployeeForMonth(month, year) {
 }
 
 /**
+ * Present attendance dates per employee for a calendar month (local boundaries).
+ * @returns {Promise<Map<string, Date[]>>}
+ */
+export async function getPresentAttendanceDatesByEmployeeForMonth(month, year) {
+  const monthNum = Number(month);
+  const yearNum = Number(year);
+  if (!monthNum || !yearNum || monthNum < 1 || monthNum > 12) {
+    return new Map();
+  }
+
+  const from = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
+  const to = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
+
+  const rows = await Attendance.find({
+    date: { $gte: from, $lte: to },
+    status: "Present",
+  })
+    .select("employee date")
+    .lean();
+
+  const map = new Map();
+  for (const row of rows) {
+    const empId = String(row.employee);
+    if (!map.has(empId)) map.set(empId, []);
+    map.get(empId).push(row.date);
+  }
+  return map;
+}
+
+/**
  * Build no-pay payload for one employee (leave + attendance shortfall).
  */
 export function buildNoPayPayloadForEmployee(

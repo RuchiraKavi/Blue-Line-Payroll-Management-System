@@ -7,11 +7,13 @@ import {
   buildNoPayPayloadForEmployee,
   countNoPayLeaveDaysInMonth,
   getAttendanceHoursByEmployeeForMonth,
+  getPresentAttendanceDatesByEmployeeForMonth,
 } from "../utils/payrollAttendance.js";
 import { isFuturePayPeriod, assertPayPeriodStarted } from "../utils/payPeriod.js";
 import {
   applyJoinMonthCarryToSalaryInput,
   buildDeferredEmployeeSummary,
+  getPreviousPayPeriod,
   isEmployeeEligibleForPayPeriod,
 } from "../utils/joinMonthPayroll.js";
 
@@ -56,13 +58,17 @@ function resolveAmount(entry, employee, field) {
   return Number(employee?.[field]) || 0;
 }
 
-/** Load leave no-pay days and attendance hours for a payroll month. */
+/** Load leave no-pay days, attendance hours, and present-day dates for join-month pay. */
 async function loadPayrollPeriodContext(month, year) {
-  const [noPayDaysMap, hoursMap] = await Promise.all([
-    getNoPayDaysByEmployeeForMonth(month, year),
-    getAttendanceHoursByEmployeeForMonth(month, year),
-  ]);
-  return { noPayDaysMap, hoursMap };
+  const prev = getPreviousPayPeriod(month, year);
+  const [noPayDaysMap, hoursMap, prevPresentDatesMap, currentPresentDatesMap] =
+    await Promise.all([
+      getNoPayDaysByEmployeeForMonth(month, year),
+      getAttendanceHoursByEmployeeForMonth(month, year),
+      getPresentAttendanceDatesByEmployeeForMonth(prev.month, prev.year),
+      getPresentAttendanceDatesByEmployeeForMonth(month, year),
+    ]);
+  return { noPayDaysMap, hoursMap, prevPresentDatesMap, currentPresentDatesMap };
 }
 
 /** Resolve no-pay (leave vs attendance shortfall) and attach breakdown fields to salary input. */
@@ -91,8 +97,14 @@ function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap, month, year
   };
 }
 
-function prepareSalaryInput(input, employee, noPayDaysMap, hoursMap, month, year) {
-  const withJoin = applyJoinMonthCarryToSalaryInput(input, employee, month, year);
+function prepareSalaryInput(input, employee, noPayDaysMap, hoursMap, month, year, prevPresentDatesMap) {
+  const withJoin = applyJoinMonthCarryToSalaryInput(
+    input,
+    employee,
+    month,
+    year,
+    prevPresentDatesMap
+  );
   return applyResolvedNoPay(withJoin, employee, noPayDaysMap, hoursMap, month, year);
 }
 
@@ -230,13 +242,14 @@ export const getEmployeesForSalary = async (req, res) => {
           message: "Salary for this pay period is not available until the month has started.",
         });
       }
-      const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
+      const { noPayDaysMap, hoursMap, prevPresentDatesMap, currentPresentDatesMap } =
+        await loadPayrollPeriodContext(month, year);
       const eligible = withUser.filter((emp) =>
         isEmployeeEligibleForPayPeriod(emp.joined_date, month, year)
       );
       const deferredEmployees = withUser
         .filter((emp) => !isEmployeeEligibleForPayPeriod(emp.joined_date, month, year))
-        .map((emp) => buildDeferredEmployeeSummary(emp, month, year));
+        .map((emp) => buildDeferredEmployeeSummary(emp, month, year, currentPresentDatesMap));
 
       const employeesWithNoPay = eligible.map((emp) => {
         const empObj = emp.toObject ? emp.toObject() : emp;
@@ -247,7 +260,13 @@ export const getEmployeesForSalary = async (req, res) => {
           month,
           year
         );
-        const withJoin = applyJoinMonthCarryToSalaryInput({}, empObj, month, year);
+        const withJoin = applyJoinMonthCarryToSalaryInput(
+          {},
+          empObj,
+          month,
+          year,
+          prevPresentDatesMap
+        );
         return { ...empObj, ...payload, ...withJoin };
       });
       return res.status(200).json({
@@ -346,7 +365,8 @@ export const calculateSalary = async (req, res) => {
             periodContext.noPayDaysMap,
             periodContext.hoursMap,
             monthNum,
-            yearNum
+            yearNum,
+            periodContext.prevPresentDatesMap
           )
         : { ...input, no_pay: Number(entry.no_pay) || 0 };
 
@@ -389,7 +409,7 @@ export const saveSalaryRun = async (req, res) => {
     }
     assertPayPeriodStarted(month, year);
 
-    const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
+    const { noPayDaysMap, hoursMap, prevPresentDatesMap } = await loadPayrollPeriodContext(month, year);
 
     const storedEntries = [];
     for (const entry of entries) {
@@ -432,7 +452,8 @@ export const saveSalaryRun = async (req, res) => {
         noPayDaysMap,
         hoursMap,
         month,
-        year
+        year,
+        prevPresentDatesMap
       );
 
       const computed = calculateEntry(input);
@@ -546,7 +567,7 @@ export const saveOneSalaryEntry = async (req, res) => {
     const depName = (employee.department && typeof employee.department === "object" && "dep_name" in employee.department)
       ? employee.department.dep_name
       : (employee.department?.dep_name ?? "N/A");
-    const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
+    const { noPayDaysMap, hoursMap, prevPresentDatesMap } = await loadPayrollPeriodContext(month, year);
     const input = prepareSalaryInput(
       {
         _id: employee._id,
@@ -572,7 +593,8 @@ export const saveOneSalaryEntry = async (req, res) => {
       noPayDaysMap,
       hoursMap,
       month,
-      year
+      year,
+      prevPresentDatesMap
     );
     const computed = calculateEntry(input);
     const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
