@@ -33,7 +33,6 @@ const AddEmployee = () => {
     gender: "",
     marital_status: "",
     joined_date: "",
-    resigned_date: "",
     designation: "",
     department: "",
     basic_salary: "",
@@ -472,19 +471,6 @@ const AddEmployee = () => {
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
-            />
-          </div>
-
-          {/* Resigned Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Resigned Date
-            </label>
-            <DateInput
-              name="resigned_date"
-              value={formData.resigned_date}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
           </div>
 
