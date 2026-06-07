@@ -183,21 +183,25 @@ const getAttendanceByDate = async (req, res) => {
       },
     });
 
-    const mappedAttendance = attendance.map((record) => ({
-      _id: record._id,
-      employeeId: record.employee._id,
-      employee_id: record.employee.employee_id,
-      employeeName: record.employee.userId?.name || "Unknown",
-      designation: record.employee.designation,
-      date: record.date,
-      inTime: record.inTime,
-      outTime: record.outTime,
-      workingHours: record.workingHours,
-      status: record.status,
-      holidays: record.holidays,
-      dayOff: record.dayOff,
-      leave: record.leave,
-    }));
+    const mappedAttendance = attendance.map((record) => {
+      const employee = record.employee;
+
+      return {
+        _id: record._id,
+        employeeId: employee?._id ?? record.employee ?? null,
+        employee_id: employee?.employee_id ?? record.employee_id ?? "—",
+        employeeName: employee?.userId?.name ?? "Unknown",
+        designation: employee?.designation ?? "—",
+        date: record.date,
+        inTime: record.inTime,
+        outTime: record.outTime,
+        workingHours: record.workingHours,
+        status: record.status,
+        holidays: record.holidays,
+        dayOff: record.dayOff,
+        leave: record.leave,
+      };
+    });
 
     res.json({
       success: true,

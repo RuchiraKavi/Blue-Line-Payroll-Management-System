@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import DateInput from "../ui/DateInput.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const RequestLeave = () => {
   const navigate = useNavigate();
@@ -195,41 +196,32 @@ const RequestLeave = () => {
               <label className="block font-medium text-gray-700 mb-2">
                 Leave Type <span className="text-red-500">*</span>
               </label>
-              <select
+              <SelectInput
                 name="leaveType"
                 value={leave.leaveType}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Select Leave Type --</option>
-
-                <option
-                  value="casual"
-                  disabled={(leaveBalance.casual ?? 0) === 0}
-                >
-                  Casual Leave ({leaveBalance.casual ?? 0} days left)
-                  {(leaveBalance.casual ?? 0) === 0 && " - No Balance"}
-                </option>
-
-                <option
-                  value="annual"
-                  disabled={(leaveBalance.annual ?? 0) === 0}
-                >
-                  Annual Leave ({leaveBalance.annual ?? 0} days left)
-                  {(leaveBalance.annual ?? 0) === 0 && " - No Balance"}
-                </option>
-
-                <option
-                  value="sick"
-                  disabled={(leaveBalance.sick ?? 0) === 0}
-                >
-                  Sick Leave ({leaveBalance.sick ?? 0} days left)
-                  {(leaveBalance.sick ?? 0) === 0 && " - No Balance"}
-                </option>
-
-                <option value="nopay">No Pay</option>
-              </select>
+                placeholder="-- Select Leave Type --"
+                options={[
+                  { value: "", label: "-- Select Leave Type --" },
+                  {
+                    value: "casual",
+                    label: `Casual Leave (${leaveBalance.casual ?? 0} days left)${(leaveBalance.casual ?? 0) === 0 ? " - No Balance" : ""}`,
+                    disabled: (leaveBalance.casual ?? 0) === 0,
+                  },
+                  {
+                    value: "annual",
+                    label: `Annual Leave (${leaveBalance.annual ?? 0} days left)${(leaveBalance.annual ?? 0) === 0 ? " - No Balance" : ""}`,
+                    disabled: (leaveBalance.annual ?? 0) === 0,
+                  },
+                  {
+                    value: "sick",
+                    label: `Sick Leave (${leaveBalance.sick ?? 0} days left)${(leaveBalance.sick ?? 0) === 0 ? " - No Balance" : ""}`,
+                    disabled: (leaveBalance.sick ?? 0) === 0,
+                  },
+                  { value: "nopay", label: "No Pay" },
+                ]}
+              />
 
               {leave.leaveType && leave.leaveType !== "nopay" && (leaveBalance[leave.leaveType] ?? 0) === 0 && (
                 <p className="text-sm text-red-600 mt-2 font-medium">

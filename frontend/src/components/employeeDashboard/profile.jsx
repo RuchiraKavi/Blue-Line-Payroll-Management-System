@@ -71,6 +71,8 @@ const Profile = () => {
                   <p><b>Name:</b> {employee.userId?.name}</p>
                   <p><b>Email:</b> {employee.userId?.email}</p>
                   <p><b>NIC:</b> {employee.nic}</p>
+                  <p><b>Mobile:</b> {employee.mobile_number || "—"}</p>
+                  <p className="md:col-span-2"><b>Address:</b> {employee.address || "—"}</p>
                   <p><b>EPF Number:</b> {employee.epf_number || "—"}</p>
                   <p><b>DOB:</b> {employee.dob?.slice(0, 10)}</p>
                   <p><b>Gender:</b> {employee.gender}</p>

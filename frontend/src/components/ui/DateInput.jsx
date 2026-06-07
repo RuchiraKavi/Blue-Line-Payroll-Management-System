@@ -209,7 +209,7 @@ const DateInput = ({
           <select
             value={viewMonth}
             onChange={(e) => setViewMonth(Number(e.target.value))}
-            className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="min-w-0 flex-1 rounded-lg border-2 border-gray-200 bg-white px-2 py-1.5 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
             aria-label="Month"
           >
             {MONTHS.map((label, i) => (
@@ -221,7 +221,7 @@ const DateInput = ({
           <select
             value={viewYear}
             onChange={(e) => setViewYear(Number(e.target.value))}
-            className="w-19 shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="w-19 shrink-0 rounded-lg border-2 border-gray-200 bg-white px-2 py-1.5 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
             aria-label="Year"
           >
             {yearOptions.map((y) => (

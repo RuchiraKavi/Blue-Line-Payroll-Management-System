@@ -8,6 +8,16 @@ import Department from "../models/Department.js";
 import { validateDesignationForDepartment } from "../utils/designationValidation.js";
 import { parseAllowance } from "../utils/parseAllowance.js";
 import { getNextEpfNumber, resolveEpfNumberForNewEmployee } from "../utils/epfValidation.js";
+import { getAllRoleKeys } from "../utils/roleMigration.js";
+import {
+  validateEmployeeRegistrationFields,
+  validateNic,
+  validateEmail,
+  validateMobileNumber,
+  validateAddress,
+  validateDobMinimumAge,
+} from "../utils/employeeFieldValidation.js";
+import { sendEmployeeRegistrationEmail } from "../utils/employeeRegistrationEmail.js";
 
 /* ================= MULTER SETUP ================= */
 const storage = multer.diskStorage({
@@ -90,6 +100,8 @@ const addEmployee = async (req, res) => {
       resigned_date,
       designation,
       department,
+      address,
+      mobile_number,
       basic_salary,
       role,
       bank_name,
@@ -115,17 +127,6 @@ const addEmployee = async (req, res) => {
 
     const assignerRole = normalizeRole(req.user?.role);
 
-    const adminAllowed = [
-      "admin",
-      "hr",
-      "accountant",
-      "manager",
-      "employee",
-      "intern",
-    ];
-
-    const hrAllowed = ["hr", "manager", "employee", "intern"];
-
     if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
       return res.status(403).json({
         success: false,
@@ -133,16 +134,8 @@ const addEmployee = async (req, res) => {
       });
     }
 
-    const assignedRole = normalizeRole(role) || "employee";
-    const allowedForAssigner =
-      assignerRole === "admin" ? adminAllowed : hrAllowed;
-
-    if (!allowedForAssigner.includes(assignedRole)) {
-      return res.status(403).json({
-        success: false,
-        message: `Forbidden: you cannot assign role '${role}'`,
-      });
-    }
+    // New employees always start as employee; use Role Management to change roles.
+    const assignedRole = "employee";
 
     /* ---------------- VALIDATION ---------------- */
     if (
@@ -151,6 +144,8 @@ const addEmployee = async (req, res) => {
       !password ||
       !nic ||
       !dob ||
+      !address ||
+      !mobile_number ||
       !joined_date ||
       !designation ||
       !department ||
@@ -164,6 +159,28 @@ const addEmployee = async (req, res) => {
         message: "All required fields must be filled",
       });
     }
+
+    const fieldValidation = validateEmployeeRegistrationFields({
+      nic,
+      email,
+      mobile_number,
+      address,
+      dob,
+    });
+    if (!fieldValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        message: fieldValidation.message,
+      });
+    }
+
+    const {
+      nic: validatedNic,
+      email: validatedEmail,
+      mobile_number: validatedMobile,
+      address: validatedAddress,
+      dob: validatedDob,
+    } = fieldValidation.values;
 
     /* ---------------- EMPLOYEE ID GENERATION ---------------- */
     let finalEmployeeId = employee_id;
@@ -187,13 +204,13 @@ const addEmployee = async (req, res) => {
     }
 
     /* ---------------- DUPLICATE CHECKS ---------------- */
-    if (await User.findOne({ email }))
+    if (await User.findOne({ email: validatedEmail }))
       return res.status(400).json({ success: false, message: "Email already exists" });
 
     if (await Employee.findOne({ employee_id: finalEmployeeId }))
       return res.status(400).json({ success: false, message: "Employee ID already exists" });
 
-    if (await Employee.findOne({ nic }))
+    if (await Employee.findOne({ nic: validatedNic }))
       return res.status(400).json({ success: false, message: "NIC already exists" });
 
     const epfCheck = await resolveEpfNumberForNewEmployee(Employee, epf_number);
@@ -225,7 +242,7 @@ const addEmployee = async (req, res) => {
 
     const newUser = new User({
       name,
-      email,
+      email: validatedEmail,
       password: hashedPassword,
       role: assignedRole,
       profileImage: req.file ? req.file.filename : null,
@@ -254,12 +271,14 @@ const addEmployee = async (req, res) => {
     const newEmployee = new Employee({
       userId: savedUser._id,
       employee_id: finalEmployeeId,
-      email,
-      nic,
+      email: validatedEmail,
+      nic: validatedNic,
       epf_number: epfCheck.value,
-      dob,
+      dob: validatedDob,
       gender,
       marital_status,
+      address: validatedAddress,
+      mobile_number: validatedMobile,
       joined_date,
       resigned_date: resigned_date || null,
       designation,
@@ -284,10 +303,53 @@ const addEmployee = async (req, res) => {
 
     await newEmployee.save();
 
+    /* ---------------- SEND REGISTRATION EMAIL ---------------- */
+    let registrationEmailSent = false;
+    try {
+      await sendEmployeeRegistrationEmail({
+        name,
+        email: validatedEmail,
+        password,
+        employeeId: finalEmployeeId,
+        epfNumber: epfCheck.value,
+        nic: validatedNic,
+        mobileNumber: validatedMobile,
+        address: validatedAddress,
+        dob: validatedDob,
+        gender,
+        maritalStatus: marital_status,
+        designation,
+        departmentName: departmentExists.dep_name,
+        joinedDate: joined_date,
+        resignedDate: resigned_date || null,
+        role: assignedRole,
+        basicSalary: basic_salary,
+        travelAllowance: parseAllowance(travel_allowance),
+        foodAllowance: parseAllowance(food_allowance),
+        holidayPayment: parseAllowance(holiday_payment),
+        allowanceNs: parseAllowance(allowance_ns),
+        bonus: parseAllowance(bonus),
+        stampDuty: parseAllowance(stamp_duty),
+        mobileDeduction: parseAllowance(mobile_deduction),
+        bankName: bank_name,
+        bankBranch: bank_branch,
+        bankAccountNumber: bank_account_number,
+        casualLeave: leaveBalance.casual,
+        annualLeave: leaveBalance.annual,
+        sickLeave: leaveBalance.sick,
+      });
+      registrationEmailSent = true;
+    } catch (emailError) {
+      console.error("Employee registration email failed:", emailError);
+    }
+
     /* ---------------- RESPONSE ---------------- */
     res.status(201).json({
       success: true,
-      message: "Employee created successfully",
+      message: registrationEmailSent
+        ? "Employee created successfully and registration details emailed"
+        : "Employee created successfully, but registration email could not be sent",
+      emailSent: registrationEmailSent,
     });
 
   } catch (error) {
@@ -421,6 +483,8 @@ const updateEmployee = async (req, res) => {
       resigned_date,
       designation,
       department,
+      address,
+      mobile_number,
       basic_salary,
       role,
       bank_name,
@@ -474,39 +538,71 @@ const updateEmployee = async (req, res) => {
 
       const updateUser = {};
       if (typeof name === "string" && name.trim() !== "") updateUser.name = name.trim();
-      if (typeof email === "string" && email.trim() !== "") updateUser.email = email.trim();
+      if (typeof email === "string" && email.trim() !== "") {
+        const emailResult = validateEmail(email);
+        if (!emailResult.ok) {
+          return res.status(400).json({ success: false, message: emailResult.message });
+        }
+        updateUser.email = emailResult.value;
+      }
       if (req.file) updateUser.profileImage = imagePath;
 
       if (Object.keys(updateUser).length > 0) {
         await User.findByIdAndUpdate(employee.userId, updateUser, { new: true });
       }
 
-      const updateEmployee = {};
-      if (typeof nic === "string" && nic.trim() !== "") updateEmployee.nic = nic.trim();
-      if (typeof email === "string" && email.trim() !== "") updateEmployee.email = email.trim();
-      if (dob !== undefined) {
-        const parsedDob = new Date(dob);
-        if (Number.isNaN(parsedDob.getTime())) {
-          return res.status(400).json({ success: false, message: "Invalid DOB" });
+      const updateEmployeePayload = {};
+      if (typeof nic === "string" && nic.trim() !== "") {
+        const nicResult = validateNic(nic);
+        if (!nicResult.ok) {
+          return res.status(400).json({ success: false, message: nicResult.message });
         }
-        updateEmployee.dob = parsedDob;
+        updateEmployeePayload.nic = nicResult.value;
       }
-      if (typeof gender === "string" && gender.trim() !== "") updateEmployee.gender = gender.trim();
-      if (typeof marital_status === "string" && marital_status.trim() !== "") updateEmployee.marital_status = marital_status.trim();
+      if (typeof email === "string" && email.trim() !== "") {
+        updateEmployeePayload.email = updateUser.email || email.trim().toLowerCase();
+      }
+      if (dob !== undefined) {
+        const dobResult = validateDobMinimumAge(dob);
+        if (!dobResult.ok) {
+          return res.status(400).json({ success: false, message: dobResult.message });
+        }
+        updateEmployeePayload.dob = dobResult.value;
+      }
+      if (typeof gender === "string" && gender.trim() !== "") {
+        updateEmployeePayload.gender = gender.trim();
+      }
+      if (typeof marital_status === "string" && marital_status.trim() !== "") {
+        updateEmployeePayload.marital_status = marital_status.trim();
+      }
+      if (typeof address === "string") {
+        const addressResult = validateAddress(address);
+        if (!addressResult.ok) {
+          return res.status(400).json({ success: false, message: addressResult.message });
+        }
+        updateEmployeePayload.address = addressResult.value;
+      }
+      if (typeof mobile_number === "string") {
+        const mobileResult = validateMobileNumber(mobile_number);
+        if (!mobileResult.ok) {
+          return res.status(400).json({ success: false, message: mobileResult.message });
+        }
+        updateEmployeePayload.mobile_number = mobileResult.value;
+      }
 
       const hasAnyBankField =
         bank_name !== undefined || bank_branch !== undefined || bank_account_number !== undefined;
       if (hasAnyBankField) {
-        updateEmployee.bank_details = {
+        updateEmployeePayload.bank_details = {
           bank_name: bank_name ?? employee.bank_details?.bank_name,
           bank_branch: bank_branch ?? employee.bank_details?.bank_branch,
           bank_account_number: bank_account_number ?? employee.bank_details?.bank_account_number,
         };
       }
 
-      if (req.file) updateEmployee.image = imagePath;
+      if (req.file) updateEmployeePayload.image = imagePath;
 
-      await Employee.findByIdAndUpdate(id, updateEmployee, { new: true });
+      await Employee.findByIdAndUpdate(id, updateEmployeePayload, { new: true });
 
       return res.status(200).json({
         success: true,
@@ -543,8 +639,30 @@ const updateEmployee = async (req, res) => {
       }
     }
 
+    const fieldValidation = validateEmployeeRegistrationFields({
+      nic: nic ?? employee.nic,
+      email: email ?? user.email,
+      mobile_number: mobile_number ?? employee.mobile_number,
+      address: address ?? employee.address,
+      dob: dob ?? employee.dob,
+    });
+    if (!fieldValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        message: fieldValidation.message,
+      });
+    }
+
+    const {
+      nic: validatedNic,
+      email: validatedEmail,
+      mobile_number: validatedMobile,
+      address: validatedAddress,
+      dob: validatedDob,
+    } = fieldValidation.values;
+
     /* ================= UPDATE USER ================= */
-    const userPayload = { name, email, role };
+    const userPayload = { name, email: validatedEmail };
     if (req.file) {
       userPayload.profileImage = imagePath;
     }
@@ -559,10 +677,13 @@ const updateEmployee = async (req, res) => {
     }
 
     const employeeUpdate = {
-      nic,
+      nic: validatedNic,
+      email: validatedEmail,
+      mobile_number: validatedMobile,
+      address: validatedAddress,
       epf_number: resolvedEpfNumber,
       employee_id,
-      dob,
+      dob: validatedDob,
       gender,
       marital_status,
       joined_date,
@@ -675,6 +796,8 @@ const updateMyEmployeeProfile = async (req, res) => {
       dob,
       gender,
       marital_status,
+      address,
+      mobile_number,
       bank_name,
       bank_branch,
       bank_account_number,
@@ -687,9 +810,11 @@ const updateMyEmployeeProfile = async (req, res) => {
       updateUser.name = v;
     }
     if (typeof email === "string") {
-      const v = email.trim();
-      if (!v) return res.status(400).json({ success: false, message: "Email is required" });
-      updateUser.email = v;
+      const emailResult = validateEmail(email);
+      if (!emailResult.ok) {
+        return res.status(400).json({ success: false, message: emailResult.message });
+      }
+      updateUser.email = emailResult.value;
     }
     if (req.file) {
       updateUser.profileImage = req.file.filename;
@@ -697,23 +822,23 @@ const updateMyEmployeeProfile = async (req, res) => {
 
     const updateEmployee = {};
     if (typeof nic === "string") {
-      const v = nic.trim();
-      if (!v) return res.status(400).json({ success: false, message: "NIC is required" });
-      updateEmployee.nic = v;
+      const nicResult = validateNic(nic);
+      if (!nicResult.ok) {
+        return res.status(400).json({ success: false, message: nicResult.message });
+      }
+      updateEmployee.nic = nicResult.value;
     }
 
     if (typeof email === "string") {
-      const v = email.trim();
-      if (!v) return res.status(400).json({ success: false, message: "Email is required" });
-      updateEmployee.email = v;
+      updateEmployee.email = updateUser.email;
     }
 
     if (dob !== undefined) {
-      const parsedDob = new Date(dob);
-      if (Number.isNaN(parsedDob.getTime())) {
-        return res.status(400).json({ success: false, message: "Invalid DOB" });
+      const dobResult = validateDobMinimumAge(dob);
+      if (!dobResult.ok) {
+        return res.status(400).json({ success: false, message: dobResult.message });
       }
-      updateEmployee.dob = parsedDob;
+      updateEmployee.dob = dobResult.value;
     }
 
     if (typeof gender === "string") {
@@ -726,6 +851,22 @@ const updateMyEmployeeProfile = async (req, res) => {
       const v = marital_status.trim();
       if (!v) return res.status(400).json({ success: false, message: "Marital status is required" });
       updateEmployee.marital_status = v;
+    }
+
+    if (typeof address === "string") {
+      const addressResult = validateAddress(address);
+      if (!addressResult.ok) {
+        return res.status(400).json({ success: false, message: addressResult.message });
+      }
+      updateEmployee.address = addressResult.value;
+    }
+
+    if (typeof mobile_number === "string") {
+      const mobileResult = validateMobileNumber(mobile_number);
+      if (!mobileResult.ok) {
+        return res.status(400).json({ success: false, message: mobileResult.message });
+      }
+      updateEmployee.mobile_number = mobileResult.value;
     }
 
     const hasAnyBankField =
@@ -779,6 +920,104 @@ const updateMyEmployeeProfile = async (req, res) => {
 };
 
 
+/* ================= UPDATE EMPLOYEE ROLE ================= */
+const updateEmployeeRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    const normalizeRole = (r) => {
+      if (!r) return r;
+      const x = String(r).toLowerCase();
+      if (x === "hr_manager") return "hr";
+      if (x === "account_manager" || x === "accountant") return "accountant";
+      return x;
+    };
+
+    const assignerRole = normalizeRole(req.user?.role);
+    const adminAllowed = ["admin", "hr", "accountant", "employee", "intern"];
+    const hrAllowed = ["hr", "accountant", "employee", "intern"];
+
+    if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: you are not allowed to manage roles",
+      });
+    }
+
+    const assignedRole = normalizeRole(role);
+    if (!assignedRole) {
+      return res.status(400).json({
+        success: false,
+        message: "Role is required",
+      });
+    }
+
+    const validRoleKeys = await getAllRoleKeys();
+    if (!validRoleKeys.includes(assignedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role selected",
+      });
+    }
+
+    const allowedForAssigner =
+      assignerRole === "admin" ? adminAllowed : hrAllowed;
+
+    if (!allowedForAssigner.includes(assignedRole)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: you cannot assign role '${role}'`,
+      });
+    }
+
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const userRecord = await User.findById(employee.userId);
+    if (!userRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const callerUserId = req.user?.id
+      ? String(req.user.id)
+      : String(req.user?._id);
+    if (
+      String(employee.userId) === callerUserId &&
+      assignedRole !== normalizeRole(userRecord.role)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot change your own role",
+      });
+    }
+
+    userRecord.role = assignedRole;
+    userRecord.updatedAt = new Date();
+    await userRecord.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Role updated successfully",
+      role: assignedRole,
+    });
+  } catch (error) {
+    console.error("Update Employee Role Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
+  }
+};
+
 /* ================= EXPORTS ================= */
 export {
   addEmployee,
@@ -786,6 +1025,7 @@ export {
   viewEmployee,
   removeEmployee,
   updateEmployee,
+  updateEmployeeRole,
   getLastEmployeeId,
   getMyEmployeeProfile,
   updateMyEmployeeProfile,

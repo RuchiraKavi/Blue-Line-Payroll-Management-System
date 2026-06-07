@@ -15,6 +15,8 @@ const payslipEntrySchema = new Schema(
     holiday_payment: { type: Number, default: 0 },
     allowance_ns: { type: Number, default: 0 },
     bonus: { type: Number, default: 0 },
+    join_month_carry_forward: { type: Number, default: 0 },
+    join_month_worked_days: { type: Number, default: 0 },
     no_pay: { type: Number, default: 0 },
     no_pay_days: { type: Number, default: 0 },
     no_pay_leave: { type: Number, default: 0 },

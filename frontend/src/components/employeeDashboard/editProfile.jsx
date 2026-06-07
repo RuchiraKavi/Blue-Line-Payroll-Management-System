@@ -2,6 +2,14 @@ import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DateInput from "../ui/DateInput.jsx";
+import {
+  getMaxDobForMinimumAge,
+  validateAddress,
+  validateDobMinimumAge,
+  validateEmail,
+  validateMobileNumber,
+  validateNic,
+} from "../../utils/employeeFieldValidation.js";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -27,6 +35,8 @@ const EditProfile = () => {
     name: "",
     email: "",
     nic: "",
+    address: "",
+    mobile_number: "",
     dob: "",
     gender: "",
     marital_status: "",
@@ -55,6 +65,8 @@ const EditProfile = () => {
             name: emp.userId?.name || "",
             email: emp.userId?.email || "",
             nic: emp.nic || "",
+            address: emp.address || "",
+            mobile_number: emp.mobile_number || "",
             dob: toDateInputValue(emp.dob),
             gender: emp.gender || "",
             marital_status: emp.marital_status || "",
@@ -89,9 +101,22 @@ const EditProfile = () => {
 
     // Basic client-side validation (server will still validate).
     if (!form.name.trim()) return setError("Name is required");
-    if (!form.email.trim()) return setError("Email is required");
-    if (!form.nic.trim()) return setError("NIC is required");
-    if (!form.dob.trim()) return setError("DOB is required");
+
+    const nicError = validateNic(form.nic);
+    if (nicError) return setError(nicError);
+
+    const emailError = validateEmail(form.email);
+    if (emailError) return setError(emailError);
+
+    const mobileError = validateMobileNumber(form.mobile_number);
+    if (mobileError) return setError(mobileError);
+
+    const addressError = validateAddress(form.address);
+    if (addressError) return setError(addressError);
+
+    const dobError = validateDobMinimumAge(form.dob);
+    if (dobError) return setError(dobError);
+
     if (!form.gender.trim()) return setError("Gender is required");
     if (!form.marital_status.trim()) return setError("Marital status is required");
     if (!form.bank_name.trim()) return setError("Bank name is required");
@@ -105,6 +130,8 @@ const EditProfile = () => {
       fd.append("name", form.name);
       fd.append("email", form.email);
       fd.append("nic", form.nic);
+      fd.append("address", form.address);
+      fd.append("mobile_number", form.mobile_number);
       fd.append("dob", form.dob);
       fd.append("gender", form.gender);
       fd.append("marital_status", form.marital_status);
@@ -165,19 +192,32 @@ const EditProfile = () => {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">NIC</label>
-              <input name="nic" value={form.nic} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
+              <input name="nic" value={form.nic} onChange={handleChange} placeholder="e.g. 200012345678 or 991234567V" className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">DOB</label>
-              <DateInput name="dob" value={form.dob} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Number</label>
+              <input name="mobile_number" type="tel" value={form.mobile_number} onChange={handleChange} placeholder="e.g. 0771234567" className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+            <textarea name="address" rows={3} value={form.address} onChange={handleChange} placeholder="Permanent / residential address" className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm resize-y" />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">DOB</label>
+              <DateInput name="dob" value={form.dob} onChange={handleChange} max={getMaxDobForMinimumAge(18)} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" />
+              <p className="mt-1 text-xs text-gray-500">Must be at least 18 years old</p>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
               <input name="gender" value={form.gender} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" placeholder="e.g. Male/Female" />
             </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Marital Status</label>
               <input name="marital_status" value={form.marital_status} onChange={handleChange} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm" placeholder="e.g. Single/Married" />

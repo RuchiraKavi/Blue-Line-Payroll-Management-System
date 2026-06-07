@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import DataTable from 'react-data-table-component'
-import { columns } from '../../utils/DepartmentHelper'
+import { columns, fetchDesignations } from '../../utils/DepartmentHelper'
 import axios from 'axios'
 
 const DepartmentList = () => {
+  const navigate = useNavigate();
   const [departments, setDepartments] = useState([]);
   const [filteredDepartments, setFilteredDepartments] = useState([]);
   const [depLoading, setDepLoading] = useState(true);
+  const [expandedRowId, setExpandedRowId] = useState(null);
+  const [designationsCache, setDesignationsCache] = useState({});
+  const [desLoadingId, setDesLoadingId] = useState(null);
 
   const fetchDepartments = async () => {
     setDepLoading(true);
@@ -49,6 +53,70 @@ const DepartmentList = () => {
       dep.dep_name.toLowerCase().includes(keyword)
     );
     setFilteredDepartments(filtered);
+  };
+
+  const handleToggleExpand = async (row) => {
+    if (expandedRowId === row._id) {
+      setExpandedRowId(null);
+      return;
+    }
+
+    setExpandedRowId(row._id);
+
+    if (!designationsCache[row._id]) {
+      setDesLoadingId(row._id);
+      const list = await fetchDesignations(row._id);
+      setDesignationsCache((prev) => ({ ...prev, [row._id]: list }));
+      setDesLoadingId(null);
+    }
+  };
+
+  const ExpandedDesignations = ({ data }) => {
+    const designations = designationsCache[data._id];
+    const loading = desLoadingId === data._id;
+
+    return (
+      <div className="px-6 py-5 bg-linear-to-r from-indigo-50 to-blue-50 border-t border-indigo-100">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800">
+              Assigned Designations
+            </h4>
+            <p className="text-xs text-gray-500 mt-0.5">{data.dep_name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                `/admin-dashboard/assign-designation?departmentId=${data._id}`
+              )
+            }
+            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50"
+          >
+            Manage Designations
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-gray-500">Loading designations...</p>
+        ) : !designations?.length ? (
+          <p className="text-sm text-gray-500 italic">
+            No designations assigned to this department.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {designations.map((des) => (
+              <div
+                key={des._id}
+                className="px-3 py-2 text-sm font-medium text-gray-800 bg-white border border-gray-200 rounded-lg shadow-sm"
+              >
+                {des.title}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -126,7 +194,10 @@ const DepartmentList = () => {
               </div>
 
               <DataTable
-                columns={columns(fetchDepartments)}
+                columns={columns(fetchDepartments, {
+                  expandedRowId,
+                  onToggleExpand: handleToggleExpand,
+                })}
                 data={filteredDepartments}
                 highlightOnHover
                 responsive
@@ -134,6 +205,17 @@ const DepartmentList = () => {
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 15, 20]}
                 striped
+                expandableRows
+                expandableRowsHideExpander
+                expandableRowExpanded={(row) => row._id === expandedRowId}
+                onRowExpandToggled={(expanded, row) => {
+                  if (expanded) {
+                    handleToggleExpand(row);
+                  } else {
+                    setExpandedRowId(null);
+                  }
+                }}
+                expandableRowsComponent={ExpandedDesignations}
                 noDataComponent={
                   <div className="py-20 text-center">
                     <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -210,6 +292,22 @@ const DepartmentList = () => {
                       fontSize: '14px',
                       color: '#374151',
                       padding: '16px',
+                    },
+                  },
+                  expanderRow: {
+                    style: {
+                      backgroundColor: '#f8fafc',
+                      padding: 0,
+                    },
+                  },
+                  expanderCell: {
+                    style: {
+                      padding: 0,
+                      flex: '0 0 0',
+                      minWidth: 0,
+                      maxWidth: 0,
+                      width: 0,
+                      overflow: 'hidden',
                     },
                   },
                 }}

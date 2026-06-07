@@ -6,6 +6,7 @@ import { reportTableTheme } from "../../utils/LeaveHelper";
 import DateInput from "../ui/DateInput.jsx";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -971,27 +972,34 @@ const AttendanceHistoryReport = () => {
                   <h4 className="text-sm font-bold text-gray-800 mb-2">Daily records</h4>
                   <div className="flex flex-wrap items-center gap-3 mb-3">
                     <span className="text-sm font-medium text-gray-700">Filter:</span>
-                    <select
+                    <SelectInput
                       value={historyStatusFilter}
                       onChange={(e) => setHistoryStatusFilter(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                      <option value="all">All status</option>
-                      <option value="Present">Present</option>
-                      <option value="Absent">Absent</option>
-                    </select>
-                    <select
+                      size="sm"
+                      className="min-w-[9rem]"
+                      options={[
+                        { value: "all", label: "All status" },
+                        { value: "Present", label: "Present" },
+                        { value: "Absent", label: "Absent" },
+                      ]}
+                    />
+                    <SelectInput
                       value={historyMonthFilter}
                       onChange={(e) => setHistoryMonthFilter(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                      <option value="all">All months</option>
-                      {availableMonths.map((m) => (
-                        <option key={m} value={m}>
-                          {new Date(m + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                        </option>
-                      ))}
-                    </select>
+                      size="sm"
+                      className="min-w-[10rem]"
+                      searchable={availableMonths.length > 7}
+                      options={[
+                        { value: "all", label: "All months" },
+                        ...availableMonths.map((m) => ({
+                          value: m,
+                          label: new Date(`${m}-01`).toLocaleDateString("en-US", {
+                            month: "long",
+                            year: "numeric",
+                          }),
+                        })),
+                      ]}
+                    />
                     <label className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
                       <input
                         type="checkbox"

@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import { FaTimes, FaFileAlt, FaPrint, FaFilePdf, FaUsers } from "react-icons/fa";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -224,20 +225,28 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-medium text-gray-700">Period:</span>
-                <select
+                <SelectInput
                   value={periodMonth}
                   onChange={(e) => setPeriodMonth(Number(e.target.value))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                >
-                  {monthNames.map((m, i) => (
-                    <option key={i} value={i + 1}>{m}</option>
-                  ))}
-                </select>
-                <select value={periodYear} onChange={(e) => setPeriodYear(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
+                  size="sm"
+                  searchable={false}
+                  className="min-w-[9rem]"
+                  options={monthNames.map((m, i) => ({
+                    value: i + 1,
+                    label: m,
+                  }))}
+                />
+                <SelectInput
+                  value={periodYear}
+                  onChange={(e) => setPeriodYear(Number(e.target.value))}
+                  size="sm"
+                  searchable={false}
+                  className="min-w-[5rem]"
+                  options={[currentYear, currentYear - 1, currentYear - 2].map((y) => ({
+                    value: y,
+                    label: String(y),
+                  }))}
+                />
               </div>
               {loading ? (
                 <p className="text-gray-500">Loading…</p>
@@ -289,29 +298,53 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
               <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">From</span>
-                  <select value={reportFromMonth} onChange={(e) => setReportFromMonth(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                  <select value={reportFromYear} onChange={(e) => setReportFromYear(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+                  <SelectInput
+                    value={reportFromMonth}
+                    onChange={(e) => setReportFromMonth(Number(e.target.value))}
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[9rem]"
+                    options={monthNames.map((m, i) => ({
+                      value: i + 1,
+                      label: m,
+                    }))}
+                  />
+                  <SelectInput
+                    value={reportFromYear}
+                    onChange={(e) => setReportFromYear(Number(e.target.value))}
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[5rem]"
+                    options={[currentYear, currentYear - 1, currentYear - 2].map((y) => ({
+                      value: y,
+                      label: String(y),
+                    }))}
+                  />
                 </label>
                 <label className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">To</span>
-                  <select value={reportToMonth} onChange={(e) => setReportToMonth(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                  <select value={reportToYear} onChange={(e) => setReportToYear(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+                  <SelectInput
+                    value={reportToMonth}
+                    onChange={(e) => setReportToMonth(Number(e.target.value))}
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[9rem]"
+                    options={monthNames.map((m, i) => ({
+                      value: i + 1,
+                      label: m,
+                    }))}
+                  />
+                  <SelectInput
+                    value={reportToYear}
+                    onChange={(e) => setReportToYear(Number(e.target.value))}
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[5rem]"
+                    options={[currentYear, currentYear - 1, currentYear - 2].map((y) => ({
+                      value: y,
+                      label: String(y),
+                    }))}
+                  />
                 </label>
                 <button
                   type="button"

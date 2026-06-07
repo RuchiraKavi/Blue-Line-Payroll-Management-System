@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "react-data-table-component";
 import { leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHelper";
 import DateInput from "../ui/DateInput.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -263,28 +264,34 @@ const LeaveHistoryReport = () => {
             className="xl:col-span-4 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm min-w-0"
           />
 
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="xl:col-span-2 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white min-w-0"
-          >
-            <option value="all">All statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-          </select>
+          <div className="xl:col-span-2 min-w-0">
+            <SelectInput
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              size="sm"
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "Pending", label: "Pending" },
+                { value: "Approved", label: "Approved" },
+                { value: "Rejected", label: "Rejected" },
+              ]}
+            />
+          </div>
 
-          <select
-            value={leaveType}
-            onChange={(e) => setLeaveType(e.target.value)}
-            className="xl:col-span-2 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white min-w-0"
-          >
-            <option value="all">All leave types</option>
-            <option value="casual">Casual</option>
-            <option value="annual">Annual</option>
-            <option value="sick">Sick</option>
-            <option value="nopay">No Pay</option>
-          </select>
+          <div className="xl:col-span-2 min-w-0">
+            <SelectInput
+              value={leaveType}
+              onChange={(e) => setLeaveType(e.target.value)}
+              size="sm"
+              options={[
+                { value: "all", label: "All leave types" },
+                { value: "casual", label: "Casual" },
+                { value: "annual", label: "Annual" },
+                { value: "sick", label: "Sick" },
+                { value: "nopay", label: "No Pay" },
+              ]}
+            />
+          </div>
 
           <div className="xl:col-span-2 min-w-40">
             <DateInput

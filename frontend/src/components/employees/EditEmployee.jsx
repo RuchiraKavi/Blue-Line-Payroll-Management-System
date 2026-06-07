@@ -6,6 +6,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./AllowancesSection";
 import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
 import DateInput from "../ui/DateInput.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
+import {
+  getMaxDobForMinimumAge,
+  validateAddress,
+  validateDobMinimumAge,
+  validateEmail,
+  validateMobileNumber,
+  validateNic,
+} from "../../utils/employeeFieldValidation.js";
 
 const EditEmployee = () => {
   const { user, loading } = useAuth();
@@ -14,6 +23,8 @@ const EditEmployee = () => {
     email: "",
     nic: "",
     epf_number: "",
+    address: "",
+    mobile_number: "",
     employee_id: "",
     dob: "",
     gender: "",
@@ -25,7 +36,6 @@ const EditEmployee = () => {
     basic_salary: "",
     ...emptyAllowances(),
     ...emptyServiceCharges(),
-    role: "",
     bank_name: "",
     bank_branch: "",
     bank_account_number: "",
@@ -39,15 +49,6 @@ const EditEmployee = () => {
   const [designationsLoading, setDesignationsLoading] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
-
-  // Available roles based on user permissions
-  const AVAILABLE_ROLES = {
-    admin: ["admin", "hr", "accountant", "employee", "intern"],
-    hr: ["hr", "accountant", "employee", "intern"],
-    accountant: [],
-    employee: [],
-    intern: [],
-  };
 
   // Check authorization - only admin and hr can edit employees
   useEffect(() => {
@@ -87,6 +88,8 @@ const EditEmployee = () => {
           email: emp.userId?.email || "",
           nic: emp.nic || "",
           epf_number: emp.epf_number || "",
+          address: emp.address || "",
+          mobile_number: emp.mobile_number || "",
           employee_id: emp.employee_id || "",
           dob: emp.dob ? emp.dob.slice(0, 10) : "",
           gender: emp.gender || "",
@@ -103,7 +106,6 @@ const EditEmployee = () => {
           bonus: emp.bonus ?? "",
           stamp_duty: emp.stamp_duty ?? "",
           mobile_deduction: emp.mobile_deduction ?? "",
-          role: emp.userId?.role || "",
           bank_name: emp.bank_details?.bank_name || "",
           bank_branch: emp.bank_details?.bank_branch || "",
           bank_account_number: emp.bank_details?.bank_account_number || "",
@@ -180,20 +182,20 @@ const EditEmployee = () => {
     e.preventDefault();
     setError("");
 
-    // Check role permission
-    const normalizeRole = (r) => {
-      if (!r) return r;
-      const x = String(r).toLowerCase();
-      if (x === "hr_manager") return "hr";
-      if (x === "account_manager" || x === "accountant") return "accountant";
-      return x;
-    };
-    const userRole = normalizeRole(user?.role);
-    const allowedRoles = AVAILABLE_ROLES[userRole];
-    if (!allowedRoles?.includes(employee.role)) {
-      setError(`You cannot assign role: ${employee.role}`);
-      return;
-    }
+    const nicError = validateNic(employee.nic);
+    if (nicError) return setError(nicError);
+
+    const emailError = validateEmail(employee.email);
+    if (emailError) return setError(emailError);
+
+    const mobileError = validateMobileNumber(employee.mobile_number);
+    if (mobileError) return setError(mobileError);
+
+    const addressError = validateAddress(employee.address);
+    if (addressError) return setError(addressError);
+
+    const dobError = validateDobMinimumAge(employee.dob);
+    if (dobError) return setError(dobError);
 
     // Validate bank details are not empty
     if (!employee.bank_name?.trim() || !employee.bank_branch?.trim() || !employee.bank_account_number?.trim()) {
@@ -298,10 +300,45 @@ const EditEmployee = () => {
           type="text"
           id="nic"
           name="nic"
+          placeholder="e.g. 200012345678 or 991234567V"
           value={employee.nic}
           onChange={handleChange}
           required
           className="input"
+        />
+      </div>
+
+      {/* Mobile Number */}
+      <div className="flex flex-col">
+        <label htmlFor="mobile_number" className="mb-1 font-medium">
+          Mobile Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="tel"
+          id="mobile_number"
+          name="mobile_number"
+          placeholder="e.g. 0771234567"
+          value={employee.mobile_number}
+          onChange={handleChange}
+          required
+          className="input"
+        />
+      </div>
+
+      {/* Address */}
+      <div className="flex flex-col md:col-span-2">
+        <label htmlFor="address" className="mb-1 font-medium">
+          Address <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          id="address"
+          name="address"
+          rows={3}
+          placeholder="Permanent / residential address"
+          value={employee.address}
+          onChange={handleChange}
+          required
+          className="input resize-y"
         />
       </div>
 
@@ -357,43 +394,49 @@ const EditEmployee = () => {
           id="dob"
           value={employee.dob}
           onChange={handleChange}
+          max={getMaxDobForMinimumAge(18)}
           required
           className="input"
         />
+        <p className="mt-1 text-xs text-gray-500">
+          Employee must be at least 18 years old
+        </p>
       </div>
 
       {/* Gender */}
       <div className="flex flex-col">
         <label htmlFor="gender" className="mb-1 font-medium">Gender</label>
-        <select
+        <SelectInput
           name="gender"
           id="gender"
           value={employee.gender}
           onChange={handleChange}
           required
-          className="input"
-        >
-          <option value="">Select Gender</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-        </select>
+          placeholder="Select Gender"
+          options={[
+            { value: "", label: "Select Gender" },
+            { value: "Male", label: "Male" },
+            { value: "Female", label: "Female" },
+          ]}
+        />
       </div>
 
       {/* Marital Status */}
       <div className="flex flex-col">
         <label htmlFor="marital_status" className="mb-1 font-medium">Marital Status</label>
-        <select
+        <SelectInput
           name="marital_status"
           id="marital_status"
           value={employee.marital_status}
           onChange={handleChange}
           required
-          className="input"
-        >
-          <option value="">Select Status</option>
-          <option value="Single">Single</option>
-          <option value="Married">Married</option>
-        </select>
+          placeholder="Select Status"
+          options={[
+            { value: "", label: "Select Status" },
+            { value: "Single", label: "Single" },
+            { value: "Married", label: "Married" },
+          ]}
+        />
       </div>
 
       {/* Joined Date */}
@@ -424,50 +467,48 @@ const EditEmployee = () => {
       {/* Department */}
       <div className="flex flex-col">
         <label htmlFor="department" className="mb-1 font-medium">Department</label>
-        <select
+        <SelectInput
           name="department"
           id="department"
           value={employee.department}
           onChange={handleChange}
           required
-          className="input"
-        >
-          <option value="">Select Department</option>
-          {departments.map((dep) => (
-            <option key={dep._id} value={dep._id}>
-              {dep.dep_name}
-            </option>
-          ))}
-        </select>
+          placeholder="Select Department"
+          searchable={departments.length > 7}
+          options={[
+            { value: "", label: "Select Department" },
+            ...departments.map((dep) => ({
+              value: dep._id,
+              label: dep.dep_name,
+            })),
+          ]}
+        />
       </div>
 
       {/* Designation */}
       <div className="flex flex-col">
         <label htmlFor="designation" className="mb-1 font-medium">Designation</label>
-        <select
+        <SelectInput
           name="designation"
           id="designation"
           value={employee.designation}
           onChange={handleChange}
           required
           disabled={!employee.department || designationsLoading}
-          className="input disabled:bg-gray-100"
-        >
-          <option value="">
-            {!employee.department
+          placeholder={
+            !employee.department
               ? "Select a department first"
               : designationsLoading
               ? "Loading designations..."
               : designations.length === 0
               ? "No designations — add them in department settings"
-              : "Select Designation"}
-          </option>
-          {designations.map((des) => (
-            <option key={des._id} value={des.title}>
-              {des.title}
-            </option>
-          ))}
-        </select>
+              : "Select Designation"
+          }
+          options={designations.map((des) => ({
+            value: des.title,
+            label: des.title,
+          }))}
+        />
         {employee.department && !designationsLoading && designations.length === 0 && (
           <p className="mt-1 text-xs text-amber-600">
             Add designations for this department under Departments → Edit.
@@ -541,36 +582,6 @@ const EditEmployee = () => {
         />
       </div>
 
-
-      {/* Role */}
-      <div className="flex flex-col">
-        <label htmlFor="role" className="mb-1 font-medium">Role</label>
-        <select
-          name="role"
-          id="role"
-          value={employee.role}
-          onChange={handleChange}
-          required
-          className="input"
-        >
-          <option value="">Select Role</option>
-          {(() => {
-            const normalizeRole = (r) => {
-              if (!r) return r;
-              const x = String(r).toLowerCase();
-              if (x === "hr_manager") return "hr";
-              if (x === "account_manager" || x === "accountant") return "accountant";
-              return x;
-            };
-            const userRole = normalizeRole(user?.role);
-            return AVAILABLE_ROLES[userRole]?.map((role) => (
-              <option key={role} value={role}>
-                {role.charAt(0).toUpperCase() + role.slice(1)}
-              </option>
-            ));
-          })()}
-        </select>
-      </div>
 
       {/* Image Upload */}
       <div className="flex flex-col md:col-span-2">

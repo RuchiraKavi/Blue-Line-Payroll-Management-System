@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import { FaTimes, FaHistory, FaFileAlt, FaPrint, FaFilePdf } from "react-icons/fa";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -267,45 +268,53 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
               <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">From</span>
-                  <select
+                  <SelectInput
                     value={reportFromMonth}
                     onChange={(e) => setReportFromMonth(Number(e.target.value))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                  <select
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[9rem]"
+                    options={monthNames.map((m, i) => ({
+                      value: i + 1,
+                      label: m,
+                    }))}
+                  />
+                  <SelectInput
                     value={reportFromYear}
                     onChange={(e) => setReportFromYear(Number(e.target.value))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[5rem]"
+                    options={[currentYear, currentYear - 1, currentYear - 2].map((y) => ({
+                      value: y,
+                      label: String(y),
+                    }))}
+                  />
                 </label>
                 <label className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">To</span>
-                  <select
+                  <SelectInput
                     value={reportToMonth}
                     onChange={(e) => setReportToMonth(Number(e.target.value))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                  <select
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[9rem]"
+                    options={monthNames.map((m, i) => ({
+                      value: i + 1,
+                      label: m,
+                    }))}
+                  />
+                  <SelectInput
                     value={reportToYear}
                     onChange={(e) => setReportToYear(Number(e.target.value))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+                    size="sm"
+                    searchable={false}
+                    className="min-w-[5rem]"
+                    options={[currentYear, currentYear - 1, currentYear - 2].map((y) => ({
+                      value: y,
+                      label: String(y),
+                    }))}
+                  />
                 </label>
               </div>
               <div ref={reportRef} className="border border-gray-200 rounded-lg overflow-hidden">

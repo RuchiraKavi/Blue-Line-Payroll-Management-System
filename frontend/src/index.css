@@ -102,3 +102,8 @@
   animation: date-picker-enter 0.18s ease-out;
   transform-origin: top left;
 }
+
+.select-dropdown-popover {
+  animation: date-picker-enter 0.18s ease-out;
+  transform-origin: top left;
+}

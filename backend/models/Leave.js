@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { countInclusiveCalendarDays } from "../utils/payrollAttendance.js";
 
 const leaveSchema = new Schema(
   {
@@ -83,10 +84,7 @@ leaveSchema.pre("validate", function (next) {
       return next(new Error("End date cannot be before start date"));
     }
 
-    const diffTime = end.getTime() - start.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-    this.totalDays = diffDays;
+    this.totalDays = countInclusiveCalendarDays(start, end);
   }
   next();
 });

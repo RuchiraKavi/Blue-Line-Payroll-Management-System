@@ -3,16 +3,17 @@ import mongoose from "mongoose";
 const designationSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
-    department: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Department",
-      required: true,
-    },
   },
   { timestamps: true }
 );
 
-designationSchema.index({ department: 1, title: 1 }, { unique: true });
+designationSchema.index(
+  { title: 1 },
+  {
+    unique: true,
+    collation: { locale: "en", strength: 2 },
+  }
+);
 
 const Designation = mongoose.model("Designation", designationSchema);
 

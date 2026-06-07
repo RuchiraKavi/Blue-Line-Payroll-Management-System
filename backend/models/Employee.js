@@ -40,6 +40,8 @@ const employeeSchema = new mongoose.Schema(
     dob: { type: Date, required: true },
     gender: { type: String, required: true },
     marital_status: { type: String, required: true },
+    address: { type: String, trim: true, default: "" },
+    mobile_number: { type: String, trim: true, default: "" },
 
     // 💼 EMPLOYMENT DETAILS
     joined_date: { type: Date, required: true },

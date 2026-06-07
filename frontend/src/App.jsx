@@ -10,6 +10,9 @@ import EmployeeSummary from "./components/dashboard/EmployeeSummary.jsx";
 import DepartmentList from "./components/departments/DepartmentList.jsx";
 import AddDepartment from "./components/departments/AddDepartment.jsx";
 import EditDepartment from "./components/departments/EditDepartment.jsx";
+import DesignationList from "./components/designations/DesignationList.jsx";
+import AddDesignation from "./components/designations/AddDesignation.jsx";
+import AssignDesignation from "./components/designations/AssignDesignation.jsx";
 import EmployeeList from "./components/employees/EmployeeList.jsx";
 import AddEmployee from "./components/employees/AddEmployee.jsx";
 import ViewEmployee from "./components/employees/ViewEmployee.jsx";
@@ -32,6 +35,10 @@ import AttendanceHistoryReport from "./components/attendance/AttendanceHistoryRe
 import SalaryPage from "./components/salary/SalaryPage.jsx";
 import EmployeeSalaryHistory from "./components/salary/EmployeeSalaryHistory.jsx";
 import AdminEmployeeSalaryHistory from "./components/salary/AdminEmployeeSalaryHistory.jsx";
+import RoleManagement from "./components/roles/RoleManagement.jsx";
+import RoleList from "./components/roles/RoleList.jsx";
+import AddSystemRole from "./components/roles/AddSystemRole.jsx";
+import AddRole from "./components/roles/AddRole.jsx";
 
 function App() {
   const { user, loading } = useAuth();
@@ -91,6 +98,33 @@ function App() {
           <Route index element={<AdminSummary />} />
 
           {/* Departments → Admin & HR */}
+          <Route
+            path="designations"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <DesignationList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="add-designation"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AddDesignation />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="assign-designation"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AssignDesignation />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="departments"
             element={
@@ -160,6 +194,42 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["admin", "hr"]}>
                 <EditEmployee />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="roles"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <RoleList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="roles/add"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AddSystemRole />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="role-management"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <RoleManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="add-role"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "hr"]}>
+                <AddRole />
               </ProtectedRoute>
             }
           />

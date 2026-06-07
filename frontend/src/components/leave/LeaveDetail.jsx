@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const LeaveDetail = () => {
   const { id } = useParams(); // leave ID from route
@@ -207,19 +208,21 @@ const LeaveDetail = () => {
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                 <div className="font-semibold text-gray-800 mb-2">Assign (same department)</div>
                 <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-                  <select
-                    className="w-full md:flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white"
+                  <SelectInput
                     value={selectedAssignee}
                     onChange={(e) => setSelectedAssignee(e.target.value)}
                     disabled={assigning || updating}
-                  >
-                    <option value="">Select employee…</option>
-                    {assignees.map((a) => (
-                      <option key={a.employeeMongoId} value={a.employeeMongoId}>
-                        {a.name} ({a.employee_id})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select employee…"
+                    searchable={assignees.length > 7}
+                    className="md:flex-1"
+                    options={[
+                      { value: "", label: "Select employee…" },
+                      ...assignees.map((a) => ({
+                        value: a.employeeMongoId,
+                        label: `${a.name} (${a.employee_id})`,
+                      })),
+                    ]}
+                  />
 
                   <button
                     onClick={handleAssign}

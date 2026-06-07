@@ -1,6 +1,62 @@
 /** Standard working hours per day (matches backend payrollAttendance.js). */
 export const HOURS_PER_DAY = 8;
 
+export function toLocalDateOnly(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export function countInclusiveCalendarDays(startDate, endDate) {
+  const start = toLocalDateOnly(startDate);
+  const end = toLocalDateOnly(endDate);
+  if (!start || !end || end < start) return 0;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1;
+}
+
+export function countNoPayLeaveDaysInMonth(leaveStart, leaveEnd, month, year) {
+  const monthNum = Number(month);
+  const yearNum = Number(year);
+  if (!monthNum || !yearNum || monthNum < 1 || monthNum > 12) return 0;
+
+  const monthStart = new Date(yearNum, monthNum - 1, 1);
+  const monthEnd = new Date(yearNum, monthNum, 0);
+  const leaveStartDay = toLocalDateOnly(leaveStart);
+  const leaveEndDay = toLocalDateOnly(leaveEnd);
+  if (!leaveStartDay || !leaveEndDay) return 0;
+
+  const overlapStart =
+    leaveStartDay.getTime() > monthStart.getTime() ? leaveStartDay : monthStart;
+  const overlapEnd =
+    leaveEndDay.getTime() < monthEnd.getTime() ? leaveEndDay : monthEnd;
+
+  return countInclusiveCalendarDays(overlapStart, overlapEnd);
+}
+
+export function getExpectedHoursToDate(role, month, year, asOfDate = new Date()) {
+  const monthNum = Number(month);
+  const yearNum = Number(year);
+  if (!monthNum || !yearNum || monthNum < 1 || monthNum > 12) return 0;
+
+  const monthStart = new Date(yearNum, monthNum - 1, 1);
+  const monthEnd = new Date(yearNum, monthNum, 0);
+  const standard = getStandardMonthlyHours(role);
+  const divisor = getPayrollDivisor(role);
+
+  if (asOfDate < monthStart) return 0;
+
+  const effectiveEnd = asOfDate > monthEnd ? monthEnd : asOfDate;
+  const elapsedDays = countInclusiveCalendarDays(monthStart, effectiveEnd);
+  const cappedDays = Math.min(elapsedDays, divisor);
+  return Math.min(standard, cappedDays * HOURS_PER_DAY);
+}
+
+export function getPayrollAsOfDate(month, year, now = new Date()) {
+  const monthEnd = new Date(Number(year), Number(month), 0, 23, 59, 59, 999);
+  return now > monthEnd ? monthEnd : now;
+}
+
 export function getPayrollDivisor(role) {
   return String(role || "").toLowerCase() === "intern" ? 30 : 24;
 }
@@ -45,15 +101,32 @@ export function resolveNoPayDeduction({
   noPayDays = 0,
   actualHours = 0,
   hasAttendanceRecords = false,
+  payrollMonth = null,
+  payrollYear = null,
+  asOfDate = new Date(),
 }) {
   const no_pay_leave = calculateNoPayFromLeave(basicSalary, role, noPayDays);
-  const hoursPart = calculateNoPayFromHoursShortfall(
-    basicSalary,
-    role,
-    hasAttendanceRecords ? actualHours : getStandardMonthlyHours(role)
-  );
-  const no_pay_from_hours = hasAttendanceRecords ? hoursPart.no_pay_from_hours : 0;
-  const shortfall_hours = hasAttendanceRecords ? hoursPart.shortfall_hours : 0;
+  const standard_hours = getStandardMonthlyHours(role);
+
+  let no_pay_from_hours = 0;
+  let shortfall_hours = 0;
+  let effective_actual = 0;
+
+  if (hasAttendanceRecords) {
+    const hoursPart = calculateNoPayFromHoursShortfall(basicSalary, role, actualHours);
+    no_pay_from_hours = hoursPart.no_pay_from_hours;
+    shortfall_hours = hoursPart.shortfall_hours;
+    effective_actual = hoursPart.actual_hours;
+  } else if (payrollMonth && payrollYear) {
+    const payrollAsOf = getPayrollAsOfDate(payrollMonth, payrollYear, asOfDate);
+    const expectedToDate = getExpectedHoursToDate(role, payrollMonth, payrollYear, payrollAsOf);
+    shortfall_hours = Math.max(0, expectedToDate);
+    if (shortfall_hours > 0 && Number(basicSalary) > 0) {
+      const hourlyRate = Number(basicSalary) / standard_hours;
+      no_pay_from_hours = Math.round(hourlyRate * shortfall_hours * 100) / 100;
+    }
+  }
+
   const no_pay = Math.round(Math.max(no_pay_leave, no_pay_from_hours) * 100) / 100;
 
   return {
@@ -61,9 +134,10 @@ export function resolveNoPayDeduction({
     no_pay_leave,
     no_pay_from_hours,
     no_pay,
-    standard_hours: hoursPart.standard_hours,
-    actual_hours: hasAttendanceRecords ? hoursPart.actual_hours : 0,
-    shortfall_hours,
+    standard_hours,
+    actual_hours: effective_actual,
+    shortfall_hours: Math.round(shortfall_hours * 10) / 10,
     has_attendance_records: Boolean(hasAttendanceRecords),
+    attendance_missing: !hasAttendanceRecords && Boolean(payrollMonth && payrollYear),
   };
 }

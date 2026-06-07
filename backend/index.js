@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import authRouter from './routes/auth.js';
 import departmentRouter from './routes/department.js';
+import designationRouter from './routes/designation.js';
 import employeeRouter from './routes/employee.js';
 import attendanceRouter from './routes/attendance.js';
 import connectToDatabase from './db/db.js';
@@ -10,6 +11,7 @@ import passwordRouter from './routes/password.js';
 import salaryRouter from './routes/salary.js';
 import dashboardRouter from './routes/dashboard.js';
 import advanceRouter from './routes/advance.js';
+import roleRouter from './routes/role.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -25,6 +27,8 @@ app.use(express.json({ limit: "5mb" }));
 
 app.use('/api/auth', authRouter);
 app.use('/api/departments', departmentRouter);
+app.use('/api/designations', designationRouter);
+app.use('/api/roles', roleRouter);
 app.use('/api/employees', employeeRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/leaves', leaveRouter);

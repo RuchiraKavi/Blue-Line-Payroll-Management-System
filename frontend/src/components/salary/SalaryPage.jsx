@@ -9,7 +9,9 @@ import SalarySummaryTable from "./SalarySummaryTable.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
 import { resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
+import { applyJoinMonthCarryToSalaryInput, hasJoinMonthPay } from "../../utils/joinMonthPayroll.js";
 import { getCurrentPayPeriod, isFuturePayPeriod } from "../../utils/payPeriod.js";
+import SelectInput from "../ui/SelectInput.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -44,8 +46,8 @@ const defaultRow = (emp) => ({
   holiday_payment: Number(emp.holiday_payment) || 0,
   allowance_ns: Number(emp.allowance_ns) || 0,
   bonus: Number(emp.bonus) || 0,
-  no_pay: Number(emp.no_pay) ?? 0,
-  no_pay_days: emp.no_pay_days != null ? emp.no_pay_days : 0,
+  no_pay: Number(emp.no_pay) || 0,
+  no_pay_days: Number(emp.no_pay_days) || 0,
   salary_advance: 0,
   stamp_duty: Number(emp.stamp_duty) || 0,
   mobile_deduction: Number(emp.mobile_deduction) || 0,
@@ -59,6 +61,8 @@ const defaultRow = (emp) => ({
   actual_hours: Number(emp.actual_hours) || 0,
   shortfall_hours: Number(emp.shortfall_hours) || 0,
   has_attendance_records: Boolean(emp.has_attendance_records),
+  join_month_carry_forward: Number(emp.join_month_carry_forward) || 0,
+  join_month_worked_days: Number(emp.join_month_worked_days) || 0,
   approvalStatus: APPROVAL.PENDING,
   employee: emp,
 });
@@ -79,13 +83,24 @@ const mergeNoPayApiIntoRow = (row, np) => {
 };
 
 /** Compute totals (Sri Lanka: EPF/ETF base excludes bonus; Employee EPF 8%, Employer EPF 12%, ETF 3%). */
-function computeRow(row) {
+function computeRow(row, payrollMonth, payrollYear) {
   const basic = Number(row.basic_salary) || 0;
   const travel = Number(row.travel_allowance) || 0;
   const food = Number(row.food_allowance) || 0;
   const holiday = Number(row.holiday_payment) || 0;
   const allowanceNs = Number(row.allowance_ns) || 0;
   const bonus = Number(row.bonus) || 0;
+  const joinFromRow = applyJoinMonthCarryToSalaryInput(
+    {
+      join_month_carry_forward: Number(row.join_month_carry_forward) || 0,
+      join_month_worked_days: Number(row.join_month_worked_days) || 0,
+    },
+    row.employee ?? row,
+    payrollMonth ?? row.payroll_month,
+    payrollYear ?? row.payroll_year
+  );
+  const joinCarryForward = Number(joinFromRow.join_month_carry_forward) || 0;
+  const joinMonthWorkedDays = Number(joinFromRow.join_month_worked_days) || 0;
   const role = row.role || row.employee?.role || "";
   const noPayResolved = resolveNoPayDeduction({
     basicSalary: basic,
@@ -93,6 +108,8 @@ function computeRow(row) {
     noPayDays: row.no_pay_days,
     actualHours: row.actual_hours,
     hasAttendanceRecords: row.has_attendance_records,
+    payrollMonth: payrollMonth ?? row.payroll_month,
+    payrollYear: payrollYear ?? row.payroll_year,
   });
   const noPay = noPayResolved.no_pay;
   const stampDuty = Number(row.stamp_duty) || 0;
@@ -100,11 +117,14 @@ function computeRow(row) {
   const salaryAdvance = Number(row.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
-  const grossSalary = basic + totalAllowances;
+  const grossSalary = basic + totalAllowances + joinCarryForward;
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  // EPF/ETF base: basic + fixed allowances only (exclude bonus, after no-pay)
-  const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
+  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
+  const totalForEpf = Math.max(
+    0,
+    basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
+  );
   const employeeEpfPayment = (totalForEpf * 8) / 100;
   const employerEpfPayment = (totalForEpf * 12) / 100;
   const etfPayment = (totalForEpf * 3) / 100;
@@ -114,6 +134,8 @@ function computeRow(row) {
 
   return {
     ...row,
+    join_month_carry_forward: joinCarryForward,
+    join_month_worked_days: joinMonthWorkedDays,
     paye,
     no_pay: noPay,
     no_pay_leave: noPayResolved.no_pay_leave,
@@ -122,6 +144,7 @@ function computeRow(row) {
     actual_hours: noPayResolved.actual_hours,
     shortfall_hours: noPayResolved.shortfall_hours,
     has_attendance_records: noPayResolved.has_attendance_records,
+    attendance_missing: noPayResolved.attendance_missing,
     total_allowances: totalAllowances,
     total_service_charges: totalServiceCharges,
     gross_salary: grossSalary,
@@ -167,6 +190,7 @@ const SalaryPage = () => {
   const [currentCalculateIndex, setCurrentCalculateIndex] = useState(0); // which employee card to show in "Salary to Calculate" (single-card flow)
   const [calculatedPopupRow, setCalculatedPopupRow] = useState(null); // row for salary card popup in Calculated Salary tab
   const [expandedCalculatedDepts, setExpandedCalculatedDepts] = useState(() => new Set()); // department names expanded in Calculated Salary list
+  const [deferredEmployees, setDeferredEmployees] = useState([]);
   const employeesRef = useRef([]); // base employee list to reset rows when month/year changes
   const prevPeriodRef = useRef({ month: null, year: null }); // so we only reset rows when period actually changes, not on first load
   const monthYearRef = useRef({ month, year }); // current period for use inside fetchEmployees
@@ -203,6 +227,8 @@ const SalaryPage = () => {
         // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
         stamp_duty: entry.stamp_duty ?? 0,
         mobile_deduction: entry.mobile_deduction ?? 0,
+        join_month_carry_forward: entry.join_month_carry_forward ?? row.join_month_carry_forward ?? 0,
+        join_month_worked_days: entry.join_month_worked_days ?? row.join_month_worked_days ?? 0,
         epf_percent: entry.epf_percent ?? 8,
         etf_percent: entry.etf_percent ?? 3,
       };
@@ -228,9 +254,10 @@ const SalaryPage = () => {
           throw salaryErr;
         }
       }
-      if (res.data.success && res.data.employees?.length) {
-        const employees = res.data.employees;
+      if (res.data.success) {
+        const employees = res.data.employees || [];
         employeesRef.current = employees;
+        setDeferredEmployees(Array.isArray(res.data.deferredEmployees) ? res.data.deferredEmployees : []);
         setRows(employees.map((emp) => defaultRow(emp)));
         // Fetch no-pay from DB (approved nopay leave count) and merge into rows so no pay field is never zero by mistake
         const { month: m, year: y } = monthYearRef.current;
@@ -270,11 +297,13 @@ const SalaryPage = () => {
         } catch (_) { /* ignore */ }
       } else {
         employeesRef.current = [];
+        setDeferredEmployees([]);
         setRows([]);
       }
     } catch (err) {
       console.error(err);
       employeesRef.current = [];
+      setDeferredEmployees([]);
       const msg = err.response?.data?.message || err.response?.data?.error || (err.code === "ERR_NETWORK" ? "Cannot reach server. Is the backend running on port 5000?" : "Failed to load employees");
       setError(msg);
       setRows([]);
@@ -302,35 +331,36 @@ const SalaryPage = () => {
       setSavedForPeriod(null);
       setPayslipSignature(null);
       setPayslipSignatureDate("");
-      if (employeesRef.current?.length) {
-        axios.get(`${API_BASE}/salary/employees`, {
-          params: { month: currentMonth, year: currentYear },
-          headers: getAuthHeader(),
-        }).then((res) => {
-          if (cancelled) return;
-          if (res.data?.success && res.data.employees?.length) {
-            employeesRef.current = res.data.employees;
-            setRows(res.data.employees.map((emp) => defaultRow(emp)));
-          } else {
-            setRows(employeesRef.current.map((emp) => defaultRow(emp)));
-          }
-          // Merge no-pay from DB for selected period
-          axios.get(`${API_BASE}/salary/no-pay`, { params: { month: currentMonth, year: currentYear }, headers: getAuthHeader() })
-            .then((noPayRes) => {
-              if (cancelled) return;
-              if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
-                const byId = {};
-                noPayRes.data.data.forEach((o) => { byId[o.employeeId] = o; });
-                setRows((prev) => prev.map((r) => mergeNoPayApiIntoRow(r, byId[r._id] || byId[String(r._id)])));
-              }
-            })
-            .catch(() => {});
-        }).catch(() => {
-          if (!cancelled && employeesRef.current?.length) {
-            setRows(employeesRef.current.map((emp) => defaultRow(emp)));
-          }
-        });
-      }
+      axios.get(`${API_BASE}/salary/employees`, {
+        params: { month: currentMonth, year: currentYear },
+        headers: getAuthHeader(),
+      }).then((res) => {
+        if (cancelled) return;
+        if (res.data?.success) {
+          const employees = res.data.employees || [];
+          employeesRef.current = employees;
+          setDeferredEmployees(Array.isArray(res.data.deferredEmployees) ? res.data.deferredEmployees : []);
+          setRows(employees.map((emp) => defaultRow(emp)));
+        } else {
+          setDeferredEmployees([]);
+          setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+        }
+        // Merge no-pay from DB for selected period
+        axios.get(`${API_BASE}/salary/no-pay`, { params: { month: currentMonth, year: currentYear }, headers: getAuthHeader() })
+          .then((noPayRes) => {
+            if (cancelled) return;
+            if (noPayRes.data?.success && Array.isArray(noPayRes.data.data)) {
+              const byId = {};
+              noPayRes.data.data.forEach((o) => { byId[o.employeeId] = o; });
+              setRows((prev) => prev.map((r) => mergeNoPayApiIntoRow(r, byId[r._id] || byId[String(r._id)])));
+            }
+          })
+          .catch(() => {});
+      }).catch(() => {
+        if (!cancelled && employeesRef.current?.length) {
+          setRows(employeesRef.current.map((emp) => defaultRow(emp)));
+        }
+      });
     }
     if (periodChanged) {
       axios.get(`${API_BASE}/advance/accepted-totals`, { headers: getAuthHeader() }).then((advRes) => {
@@ -494,7 +524,7 @@ const SalaryPage = () => {
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
         mobile_deduction: row.mobile_deduction,
-        paye: computeRow(row).paye,
+        paye: computeRow(row, month, year).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
       };
@@ -529,7 +559,7 @@ const SalaryPage = () => {
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
           mobile_deduction: row.mobile_deduction,
-          paye: computeRow(row).paye,
+          paye: computeRow(row, month, year).paye,
           epf_percent: row.epf_percent,
           etf_percent: row.etf_percent,
         };
@@ -558,7 +588,7 @@ const SalaryPage = () => {
 
   const openPayslip = (row) => {
     if (row.approvalStatus !== APPROVAL.APPROVED) return;
-    const computed = computeRow(row);
+    const computed = computeRow(row, month, year);
     setPayslipData(computed);
     setPayslipEmployee(row.employee);
   };
@@ -568,7 +598,7 @@ const SalaryPage = () => {
     if (row.gross_salary != null && row.total_deduction != null && row.net_pay != null) {
       return { gross_salary: row.gross_salary, total_deduction: row.total_deduction, net_pay: row.net_pay };
     }
-    return computeRow(row);
+    return computeRow(row, month, year);
   };
 
   /** Download salary summary as PDF; uses provided rows (filtered or all approved). */
@@ -798,7 +828,7 @@ const SalaryPage = () => {
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
         mobile_deduction: row.mobile_deduction,
-        paye: computeRow(row).paye,
+        paye: computeRow(row, month, year).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
       };
@@ -842,7 +872,7 @@ const SalaryPage = () => {
       setError("");
       setSaving(true);
       const entries = rows.map((row) => {
-        const computed = computeRow(row);
+        const computed = computeRow(row, month, year);
         return {
           employeeId: row._id,
           approval_status: row.approvalStatus ?? "pending",
@@ -938,30 +968,33 @@ const SalaryPage = () => {
           <div className="flex flex-col lg:flex-row flex-wrap items-center justify-between gap-6">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-gray-700">Pay period:</span>
-              <select
+              <SelectInput
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
-                className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white shadow-sm text-sm font-medium"
-              >
-                {monthNames.map((m, i) => {
+                size="sm"
+                searchable={false}
+                className="min-w-[9.5rem] shadow-sm font-medium"
+                options={monthNames.map((m, i) => {
                   const mNum = i + 1;
                   const future = isFuturePayPeriod(mNum, year);
-                  return (
-                    <option key={i} value={mNum} disabled={future}>
-                      {m}{future ? " (not started)" : ""}
-                    </option>
-                  );
+                  return {
+                    value: mNum,
+                    label: `${m}${future ? " (not started)" : ""}`,
+                    disabled: future,
+                  };
                 })}
-              </select>
-              <select
+              />
+              <SelectInput
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white shadow-sm text-sm font-medium"
-              >
-                {payPeriodYearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+                size="sm"
+                searchable={false}
+                className="min-w-[5.5rem] shadow-sm font-medium"
+                options={payPeriodYearOptions.map((y) => ({
+                  value: y,
+                  label: String(y),
+                }))}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-3 shrink-0">
               <button
@@ -1085,31 +1118,34 @@ const SalaryPage = () => {
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <span className="text-sm font-medium text-gray-700">Month:</span>
-                    <select
+                    <SelectInput
                       value={summaryMonth}
                       onChange={(e) => setSummaryMonth(Number(e.target.value))}
-                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
-                    >
-                      {monthNames.map((m, i) => {
+                      size="sm"
+                      searchable={false}
+                      className="min-w-[9.5rem]"
+                      options={monthNames.map((m, i) => {
                         const mNum = i + 1;
                         const future = isFuturePayPeriod(mNum, summaryYear);
-                        return (
-                          <option key={i} value={mNum} disabled={future}>
-                            {m}{future ? " (not started)" : ""}
-                          </option>
-                        );
+                        return {
+                          value: mNum,
+                          label: `${m}${future ? " (not started)" : ""}`,
+                          disabled: future,
+                        };
                       })}
-                    </select>
+                    />
                     <span className="text-sm font-medium text-gray-700">Year:</span>
-                    <select
+                    <SelectInput
                       value={summaryYear}
                       onChange={(e) => setSummaryYear(Number(e.target.value))}
-                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
-                    >
-                      {payPeriodYearOptions.map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
+                      size="sm"
+                      searchable={false}
+                      className="min-w-[5.5rem]"
+                      options={payPeriodYearOptions.map((y) => ({
+                        value: y,
+                        label: String(y),
+                      }))}
+                    />
                     <input
                       type="text"
                       placeholder="Search by name, ID, NIC, EPF no. or department..."
@@ -1117,16 +1153,18 @@ const SalaryPage = () => {
                       onChange={(e) => setSummarySearch(e.target.value)}
                       className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm min-w-[200px]"
                     />
-                    <select
+                    <SelectInput
                       value={summaryDepartment}
                       onChange={(e) => setSummaryDepartment(e.target.value)}
-                      className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white text-sm"
-                    >
-                      <option value="">All departments</option>
-                      {departments.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
+                      size="sm"
+                      searchable={departments.length > 7}
+                      className="min-w-[11rem]"
+                      placeholder="All departments"
+                      options={[
+                        { value: "", label: "All departments" },
+                        ...departments.map((d) => ({ value: d, label: d })),
+                      ]}
+                    />
                     {(summarySearch || summaryDepartment) && (
                       <button
                         type="button"
@@ -1189,18 +1227,39 @@ const SalaryPage = () => {
                 Go to {monthNames[currentPayPeriod.month - 1]} {currentPayPeriod.year}
               </button>
             </div>
-          ) : rows.length === 0 ? (
+          ) : rows.length === 0 && deferredEmployees.length === 0 ? (
             <div className="rounded-2xl border-2 border-gray-200 bg-gray-50 p-12 text-center">
               <p className="text-gray-500 font-medium">No employees found. Add employees first to manage salary.</p>
             </div>
           ) : (
             <div className="space-y-6">
+              {deferredEmployees.filter((d) => d.reason === "join_month" && hasJoinMonthPay(d.join_month_carry_forward)).length > 0 && (
+                <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/80 p-5">
+                  <h3 className="text-sm font-bold text-indigo-900 uppercase tracking-wide mb-2">
+                    Join month — salary deferred to next period
+                  </h3>
+                  <p className="text-sm text-indigo-800 mb-3">
+                    Employees who joined in {monthNames[month - 1]} {year} are not paid this month. Their join-month work pay is added to next month&apos;s salary.
+                  </p>
+                  <ul className="space-y-2 text-sm text-indigo-900">
+                    {deferredEmployees.filter((d) => d.reason === "join_month" && hasJoinMonthPay(d.join_month_carry_forward)).map((d) => (
+                      <li key={d._id} className="rounded-lg bg-white/70 border border-indigo-100 px-3 py-2">
+                        <span className="font-semibold">{d.employee_id} — {d.name}</span>
+                        {" · "}
+                        Joined {d.joined_date ? String(d.joined_date).slice(0, 10) : "—"}
+                        {" · "}
+                        {d.join_month_worked_days} day(s) work → Rs. {(d.join_month_carry_forward ?? 0).toLocaleString("en-LK")} next month
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {activeTab === "calculate" ? (
                 (() => {
                   const idx = currentCalculateIndex;
                   const row = rows[idx];
                   if (!row) return null;
-                  const computed = computeRow(row);
+                  const computed = computeRow(row, month, year);
                   const gross = computed.gross_salary;
                   const totalAllow = computed.total_allowances;
                   const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
@@ -1303,6 +1362,14 @@ const SalaryPage = () => {
                             <span className="text-gray-700">Bonus</span>
                             <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
+                          {hasJoinMonthPay(computed.join_month_carry_forward) && (
+                            <label className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
+                              <span className="text-indigo-900" title="Work days from join month, paid with this salary">
+                                Join Month Pay ({computed.join_month_worked_days} days)
+                              </span>
+                              <input type="number" readOnly value={computed.join_month_carry_forward} className="w-24 px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
+                            </label>
+                          )}
                           <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
                         </div>
                       </div>
@@ -1325,7 +1392,7 @@ const SalaryPage = () => {
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Max(no-pay leave, shortfall from attendance hours)" />
+                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : "Max(no-pay leave, shortfall from attendance hours)"} />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
@@ -1573,7 +1640,7 @@ const SalaryPage = () => {
       )}
 
       {contributionRow && (() => {
-        const comp = computeRow(contributionRow);
+        const comp = computeRow(contributionRow, month, year);
         return (
           <ContributionModal
             employee={{ _id: contributionRow._id, name: contributionRow.name, employee_id: contributionRow.employee_id, userId: contributionRow.employee?.userId }}
@@ -1600,7 +1667,7 @@ const SalaryPage = () => {
         const row = rows.find((r) => r._id === calculatedPopupRow._id) ?? calculatedPopupRow;
         const idx = rows.findIndex((r) => r._id === row._id);
         if (idx < 0) return null;
-        const computed = computeRow(row);
+        const computed = computeRow(row, month, year);
         const gross = computed.gross_salary;
         const totalAllow = computed.total_allowances;
         const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
@@ -1702,6 +1769,16 @@ const SalaryPage = () => {
                           <span className="text-gray-700">Bonus</span>
                           <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
+                        {hasJoinMonthPay(computed.join_month_carry_forward) && (
+                          <div className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
+                            <span className="text-indigo-900" title="Work days from join month, paid with this salary">
+                              Join Month Pay ({computed.join_month_worked_days} days)
+                            </span>
+                            <span className="w-24 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200">
+                              {computed.join_month_carry_forward.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
                         <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
                       </div>
                     </div>
@@ -1723,7 +1800,7 @@ const SalaryPage = () => {
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
-                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Max(no-pay leave, shortfall from attendance hours)" />
+                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : "Max(no-pay leave, shortfall from attendance hours)"} />
                             </label>
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>

@@ -1,5 +1,5 @@
 import Department from '../models/Department.js';
-import Designation from '../models/Designation.js';
+import DepartmentDesignation from '../models/DepartmentDesignation.js';
 
 const getDepartments = async (req, res) => {
     try{
@@ -58,7 +58,7 @@ const deleteDepartment = async (req, res) => {
         const deletedDep = await Department.findByIdAndDelete(id);
 
         if (deletedDep) {
-            await Designation.deleteMany({ department: id });
+            await DepartmentDesignation.deleteMany({ department: id });
         }
 
         if (!deletedDep) {

@@ -85,7 +85,13 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const tableWidth = pageW - margin * 2;
   const usableH = pageH - margin * 2;
   const { epfPayslipAmount, totalDeductionPayslip, netPayPayslip } = payslipPdfAmounts(data);
-  const totalEarningsPayslip = (Number(data.basic_salary) || 0) + (Number(data.total_allowances) || 0);
+  const joinMonthCarry = Number(data.join_month_carry_forward) || 0;
+  const joinMonthWorkedDays = Number(data.join_month_worked_days) || 0;
+  const showJoinMonthPay = hasPayslipAmount(joinMonthCarry);
+  const totalEarningsPayslip =
+    (Number(data.basic_salary) || 0) +
+    (Number(data.total_allowances) || 0) +
+    (showJoinMonthPay ? joinMonthCarry : 0);
   const empName = employee?.userId?.name || data?.name || "N/A";
   const empId = employee?.employee_id || data?.employee_id || "—";
   const empNic = employee?.nic || data?.nic || "—";
@@ -113,6 +119,10 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
     hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", value: n(data.holiday_payment) },
     hasPayslipAmount(data.allowance_ns) && { label: "Allowance-NS", value: n(data.allowance_ns) },
     hasPayslipAmount(data.bonus) && { label: "Bonus", value: n(data.bonus) },
+    showJoinMonthPay && {
+      label: `Join Month Pay (${joinMonthWorkedDays} days)`,
+      value: n(joinMonthCarry),
+    },
   ].filter(Boolean);
 
   const earningsRows = [
@@ -404,7 +414,13 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
   const epfPayslipAmount = totalForEpf * (epfPct / 100);
   const totalDeductionPayslip = (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
   // "Total Earnings" should include basic salary as well as allowances.
-  const totalEarningsPayslip = (Number(data.basic_salary) || 0) + (Number(data.total_allowances) || 0);
+  const joinMonthCarry = Number(data.join_month_carry_forward) || 0;
+  const joinMonthWorkedDays = Number(data.join_month_worked_days) || 0;
+  const showJoinMonthPay = hasPayslipAmount(joinMonthCarry);
+  const totalEarningsPayslip =
+    (Number(data.basic_salary) || 0) +
+    (Number(data.total_allowances) || 0) +
+    (showJoinMonthPay ? joinMonthCarry : 0);
   const netPayPayslip = (Number(data.gross_salary) || 0) - totalDeductionPayslip;
 
   const employeeDetailFields = [
@@ -423,6 +439,10 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
     hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", amount: data.holiday_payment },
     hasPayslipAmount(data.allowance_ns) && { label: "Allowance-NS", amount: data.allowance_ns },
     hasPayslipAmount(data.bonus) && { label: "Bonus", amount: data.bonus },
+    showJoinMonthPay && {
+      label: `Join Month Pay (${joinMonthWorkedDays} days)`,
+      amount: joinMonthCarry,
+    },
   ].filter(Boolean);
 
   const deductionLines = [

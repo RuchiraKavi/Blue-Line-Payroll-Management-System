@@ -5,9 +5,15 @@ import Leave from "../models/Leave.js";
 import { calculateMonthlyApit } from "../utils/sriLankaPaye.js";
 import {
   buildNoPayPayloadForEmployee,
+  countNoPayLeaveDaysInMonth,
   getAttendanceHoursByEmployeeForMonth,
 } from "../utils/payrollAttendance.js";
 import { isFuturePayPeriod, assertPayPeriodStarted } from "../utils/payPeriod.js";
+import {
+  applyJoinMonthCarryToSalaryInput,
+  buildDeferredEmployeeSummary,
+  isEmployeeEligibleForPayPeriod,
+} from "../utils/joinMonthPayroll.js";
 
 /** Normalize entry.employee to a string id (handles ObjectId, string, or BSON-style object). */
 function entryEmployeeIdString(entry) {
@@ -60,14 +66,16 @@ async function loadPayrollPeriodContext(month, year) {
 }
 
 /** Resolve no-pay (leave vs attendance shortfall) and attach breakdown fields to salary input. */
-function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap) {
+function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap, month, year) {
   const empId = String(employee._id);
   const noPayDays = noPayDaysMap.get(empId) || 0;
   const attendanceInfo = hoursMap.get(empId);
   const payload = buildNoPayPayloadForEmployee(
     { _id: employee._id, basic_salary: input.basic_salary ?? employee.basic_salary, role: employee.role },
     noPayDays,
-    attendanceInfo
+    attendanceInfo,
+    month,
+    year
   );
   return {
     ...input,
@@ -79,11 +87,16 @@ function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap) {
     actual_hours: payload.actual_hours,
     shortfall_hours: payload.shortfall_hours,
     has_attendance_records: payload.has_attendance_records,
+    attendance_missing: payload.attendance_missing,
   };
 }
 
+function prepareSalaryInput(input, employee, noPayDaysMap, hoursMap, month, year) {
+  const withJoin = applyJoinMonthCarryToSalaryInput(input, employee, month, year);
+  return applyResolvedNoPay(withJoin, employee, noPayDaysMap, hoursMap, month, year);
+}
+
 /**
- * Calculate salary for one entry (Sri Lanka rules).
  * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
  * Employee EPF: 8% (deducted from salary). Employer EPF: 12%. Employer ETF: 3%.
  */
@@ -94,18 +107,22 @@ function calculateEntry(input) {
   const holiday = Number(input.holiday_payment) || 0;
   const allowanceNs = Number(input.allowance_ns) || 0;
   const bonus = Number(input.bonus) || 0;
+  const joinCarryForward = Number(input.join_month_carry_forward) || 0;
   const noPay = Number(input.no_pay) || 0;
   const stampDuty = Number(input.stamp_duty) || 0;
   const mobileDed = Number(input.mobile_deduction) || 0;
   const salaryAdvance = Number(input.salary_advance) || 0;
 
   const totalAllowances = travel + food + holiday + allowanceNs + bonus;
-  const grossSalary = basic + totalAllowances;
+  const grossSalary = basic + totalAllowances + joinCarryForward;
   // APIT/PAYE base: monthly gross remuneration after no-pay (annualized ×12, LKR 1.8M relief, progressive slabs)
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  // EPF/ETF base: basic + fixed allowances only (exclude bonus per Sri Lanka practice, after no-pay)
-  const totalForEpf = Math.max(0, basic + travel + food + holiday + allowanceNs - noPay);
+  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
+  const totalForEpf = Math.max(
+    0,
+    basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
+  );
   const employeeEpfPayment = (totalForEpf * 8) / 100;
   const employerEpfPayment = (totalForEpf * 12) / 100;
   const etfPayment = (totalForEpf * 3) / 100;
@@ -136,7 +153,7 @@ async function getNoPayDaysByEmployeeForMonth(month, year) {
   const monthNum = Number(month) || new Date().getMonth() + 1;
   const yearNum = Number(year) || new Date().getFullYear();
   const monthStart = new Date(yearNum, monthNum - 1, 1);
-  const monthEnd = new Date(yearNum, monthNum, 0); // last day of month
+  const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
 
   const leaves = await Leave.find({
     leaveType: "nopay",
@@ -147,11 +164,13 @@ async function getNoPayDaysByEmployeeForMonth(month, year) {
 
   const daysByEmployee = new Map();
   for (const leave of leaves) {
-    const leaveStart = new Date(leave.startDate);
-    const leaveEnd = new Date(leave.endDate);
-    const start = new Date(Math.max(leaveStart.getTime(), monthStart.getTime()));
-    const end = new Date(Math.min(leaveEnd.getTime(), monthEnd.getTime()));
-    const days = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
+    const days = countNoPayLeaveDaysInMonth(
+      leave.startDate,
+      leave.endDate,
+      monthNum,
+      yearNum
+    );
+    if (days <= 0) continue;
     const eid = String(leave.employeeId);
     daysByEmployee.set(eid, (daysByEmployee.get(eid) || 0) + days);
   }
@@ -173,7 +192,13 @@ export const getNoPayForPeriod = async (req, res) => {
     const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
     const employees = await Employee.find().select("_id role basic_salary").lean();
     const data = employees.map((emp) =>
-      buildNoPayPayloadForEmployee(emp, noPayDaysMap.get(String(emp._id)) || 0, hoursMap.get(String(emp._id)))
+      buildNoPayPayloadForEmployee(
+        emp,
+        noPayDaysMap.get(String(emp._id)) || 0,
+        hoursMap.get(String(emp._id)),
+        month,
+        year
+      )
     );
     return res.status(200).json({ success: true, data });
   } catch (error) {
@@ -206,18 +231,29 @@ export const getEmployeesForSalary = async (req, res) => {
         });
       }
       const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
-      const employeesWithNoPay = withUser.map((emp) => {
+      const eligible = withUser.filter((emp) =>
+        isEmployeeEligibleForPayPeriod(emp.joined_date, month, year)
+      );
+      const deferredEmployees = withUser
+        .filter((emp) => !isEmployeeEligibleForPayPeriod(emp.joined_date, month, year))
+        .map((emp) => buildDeferredEmployeeSummary(emp, month, year));
+
+      const employeesWithNoPay = eligible.map((emp) => {
         const empObj = emp.toObject ? emp.toObject() : emp;
         const payload = buildNoPayPayloadForEmployee(
           empObj,
           noPayDaysMap.get(String(emp._id)) || 0,
-          hoursMap.get(String(emp._id))
+          hoursMap.get(String(emp._id)),
+          month,
+          year
         );
-        return { ...empObj, ...payload };
+        const withJoin = applyJoinMonthCarryToSalaryInput({}, empObj, month, year);
+        return { ...empObj, ...payload, ...withJoin };
       });
       return res.status(200).json({
         success: true,
         employees: employeesWithNoPay,
+        deferredEmployees,
       });
     }
 
@@ -273,6 +309,15 @@ export const calculateSalary = async (req, res) => {
         continue;
       }
 
+      if (!isEmployeeEligibleForPayPeriod(employee.joined_date, monthNum, yearNum)) {
+        rows.push({
+          ...entry,
+          error: "Employee joined this month — salary is processed from next month with join-month work pay.",
+          employee,
+        });
+        continue;
+      }
+
       const input = {
         _id: employee._id,
         employeeId: employee._id,
@@ -295,7 +340,14 @@ export const calculateSalary = async (req, res) => {
       };
 
       const inputWithNoPay = periodContext
-        ? applyResolvedNoPay(input, employee, periodContext.noPayDaysMap, periodContext.hoursMap)
+        ? prepareSalaryInput(
+            input,
+            employee,
+            periodContext.noPayDaysMap,
+            periodContext.hoursMap,
+            monthNum,
+            yearNum
+          )
         : { ...input, no_pay: Number(entry.no_pay) || 0 };
 
       const computed = calculateEntry(inputWithNoPay);
@@ -348,7 +400,14 @@ export const saveSalaryRun = async (req, res) => {
 
       if (!employee) continue;
 
-      const input = applyResolvedNoPay(
+      if (!isEmployeeEligibleForPayPeriod(employee.joined_date, month, year)) {
+        return res.status(400).json({
+          success: false,
+          message: `${employee.employee_id} joined this month. Salary is calculated from next month; join-month work pay is added then.`,
+        });
+      }
+
+      const input = prepareSalaryInput(
         {
           _id: employee._id,
           employeeId: employee._id,
@@ -371,7 +430,9 @@ export const saveSalaryRun = async (req, res) => {
         },
         employee,
         noPayDaysMap,
-        hoursMap
+        hoursMap,
+        month,
+        year
       );
 
       const computed = calculateEntry(input);
@@ -393,6 +454,8 @@ export const saveSalaryRun = async (req, res) => {
         holiday_payment: computed.holiday_payment,
         allowance_ns: computed.allowance_ns,
         bonus: computed.bonus,
+        join_month_carry_forward: computed.join_month_carry_forward ?? 0,
+        join_month_worked_days: computed.join_month_worked_days ?? 0,
         no_pay: computed.no_pay,
         no_pay_days: computed.no_pay_days ?? 0,
         no_pay_leave: computed.no_pay_leave ?? 0,
@@ -474,11 +537,17 @@ export const saveOneSalaryEntry = async (req, res) => {
     if (!employee) {
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
+    if (!isEmployeeEligibleForPayPeriod(employee.joined_date, month, year)) {
+      return res.status(400).json({
+        success: false,
+        message: `${employee.employee_id} joined this month. Salary is calculated from next month; join-month work pay is added then.`,
+      });
+    }
     const depName = (employee.department && typeof employee.department === "object" && "dep_name" in employee.department)
       ? employee.department.dep_name
       : (employee.department?.dep_name ?? "N/A");
     const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
-    const input = applyResolvedNoPay(
+    const input = prepareSalaryInput(
       {
         _id: employee._id,
         employeeId: employee._id,
@@ -501,7 +570,9 @@ export const saveOneSalaryEntry = async (req, res) => {
       },
       employee,
       noPayDaysMap,
-      hoursMap
+      hoursMap,
+      month,
+      year
     );
     const computed = calculateEntry(input);
     const approvalStatus = ["pending", "approved", "rejected"].includes(entry.approval_status)
@@ -522,6 +593,8 @@ export const saveOneSalaryEntry = async (req, res) => {
       holiday_payment: computed.holiday_payment,
       allowance_ns: computed.allowance_ns,
       bonus: computed.bonus,
+      join_month_carry_forward: computed.join_month_carry_forward ?? 0,
+      join_month_worked_days: computed.join_month_worked_days ?? 0,
       no_pay: computed.no_pay,
       no_pay_days: computed.no_pay_days ?? 0,
       no_pay_leave: computed.no_pay_leave ?? 0,

@@ -10,7 +10,7 @@ import {
 
 const EmployeeSidebar = () => {
   return (
-    <div className="h-screen bg-gray-900 text-white w-64 flex flex-col shadow-lg">
+    <div className="h-screen bg-gray-900 text-white w-80 shrink-0 flex flex-col shadow-lg">
 
       {/* Logo */}
       <div className="p-6 border-b border-gray-800">

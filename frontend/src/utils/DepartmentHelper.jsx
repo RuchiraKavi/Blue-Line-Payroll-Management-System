@@ -3,22 +3,61 @@ import axios from "axios";
 
 /* eslint-disable react-refresh/only-export-components */
 
-// columns now receive fetchDepartments as a parameter
-export const columns = (refreshDepartments) => [
-  {
-    name: 'Serial.No',
-    selector: row => row.sno
-  },
-  {
-    name: 'Department Name',
-    selector: row => row.dep_name
-  },
-  {
-    name: 'Actions',
-    cell: row => <DepartmentButtons _id={row._id} refresh={refreshDepartments} />
-  }
-];
+export const columns = (refreshDepartments, expandProps = {}) => {
+  const { expandedRowId, onToggleExpand } = expandProps;
 
+  return [
+    {
+      name: "",
+      width: "52px",
+      center: true,
+      cell: (row) => (
+        <button
+          type="button"
+          onClick={() => onToggleExpand?.(row)}
+          className="inline-flex items-center justify-center w-8 h-8 text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+          title={`View designations for ${row.dep_name}`}
+          aria-expanded={expandedRowId === row._id}
+        >
+          <svg
+            className={`w-4 h-4 transition-transform duration-200 ${
+              expandedRowId === row._id ? "rotate-180" : ""
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+      ),
+    },
+    {
+      name: "Serial.No",
+      selector: (row) => row.sno,
+    },
+    {
+      name: "Department Name",
+      selector: (row) => row.dep_name,
+    },
+    {
+      name: "Actions",
+      cell: (row) => (
+        <DepartmentButtons
+          _id={row._id}
+          dep_name={row.dep_name}
+          refresh={refreshDepartments}
+        />
+      ),
+      width: "280px",
+    },
+  ];
+};
 
 export const fetchDesignations = async (departmentId) => {
   if (!departmentId) return [];
@@ -40,33 +79,52 @@ export const fetchDesignations = async (departmentId) => {
   }
 };
 
-export const DepartmentButtons = ({ _id, refresh }) => {
+export const DepartmentButtons = ({ _id, dep_name, refresh }) => {
   const navigate = useNavigate();
 
   const handleDelete = async () => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this department?");
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this department?"
+    );
     if (!confirmDelete) return;
 
     try {
-      const response = await axios.delete(`http://localhost:5000/api/departments/${_id}`, {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
+      const response = await axios.delete(
+        `http://localhost:5000/api/departments/${_id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
         }
-      });
+      );
 
       if (response.data.success) {
-        refresh(); // 🔥 refresh table after delete
+        refresh();
       }
-
     } catch {
       alert("Error deleting department!");
     }
   };
 
   return (
-    <div className="flex gap-1 justify-center">
+    <div className="flex flex-wrap gap-1 justify-center">
       <button
-        className="group relative inline-flex items-center px-4 py-2 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+        type="button"
+        className="group relative inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-linear-to-r from-emerald-500 to-teal-500 rounded-md hover:from-emerald-600 hover:to-teal-600 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+        onClick={() =>
+          navigate(`/admin-dashboard/assign-designation?departmentId=${_id}`)
+        }
+        title={`Assign designations to ${dep_name}`}
+      >
+        <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        Designation
+      </button>
+
+      <button
+        type="button"
+        className="group relative inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
         onClick={() => navigate(`/admin-dashboard/departments/${_id}`)}
         title="Edit Department"
       >
@@ -75,9 +133,10 @@ export const DepartmentButtons = ({ _id, refresh }) => {
         </svg>
         Edit
       </button>
-      
+
       <button
-        className="group relative inline-flex items-center px-4 py-2 text-xs font-medium text-white bg-linear-to-r from-red-500 to-rose-500 rounded-md hover:from-red-600 hover:to-rose-600 focus:ring-2 focus:ring-red-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+        type="button"
+        className="group relative inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-linear-to-r from-red-500 to-rose-500 rounded-md hover:from-red-600 hover:to-rose-600 focus:ring-2 focus:ring-red-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
         onClick={handleDelete}
         title="Delete Department"
       >

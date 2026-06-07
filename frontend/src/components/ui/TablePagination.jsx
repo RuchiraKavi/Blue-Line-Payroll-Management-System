@@ -1,5 +1,6 @@
 import React from "react";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import SelectInput from "./SelectInput.jsx";
 
 const DEFAULT_OPTIONS = [5, 10, 15, 20, 25, 50];
 
@@ -35,17 +36,17 @@ const TablePagination = ({
       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
         <label className="flex items-center gap-2">
           <span className="whitespace-nowrap">Rows per page:</span>
-          <select
+          <SelectInput
             value={perPage}
             onChange={(e) => onPerPageChange(Number(e.target.value))}
-            className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            {perPageOptions.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+            size="sm"
+            searchable={false}
+            className="w-20"
+            options={perPageOptions.map((n) => ({
+              value: n,
+              label: String(n),
+            }))}
+          />
         </label>
         <span className="whitespace-nowrap tabular-nums">
           {from}–{to} of {totalItems}

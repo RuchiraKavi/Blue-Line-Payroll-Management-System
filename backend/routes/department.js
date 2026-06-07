@@ -4,9 +4,8 @@ import authorizeRoles from "../middleware/roleMiddleware.js";
 import { addDepartment, getDepartments, getDepartment, updateDepartment, deleteDepartment } from '../controllers/departmentController.js';
 import {
   getDesignationsByDepartment,
-  addDesignation,
-  updateDesignation,
-  deleteDesignation,
+  assignDesignationToDepartment,
+  unassignDesignationFromDepartment,
 } from '../controllers/designationController.js';
 
 const router = express.Router();
@@ -15,11 +14,10 @@ const router = express.Router();
 router.get('/', authMiddleware, authorizeRoles("admin", "hr"), getDepartments);
 router.post('/add', authMiddleware, authorizeRoles("admin", "hr"), addDepartment);
 
-// Department designations (must be before /:id routes)
+// Department designation assignments (must be before /:id routes)
 router.get('/:departmentId/designations', authMiddleware, authorizeRoles("admin", "hr"), getDesignationsByDepartment);
-router.post('/:departmentId/designations', authMiddleware, authorizeRoles("admin", "hr"), addDesignation);
-router.put('/:departmentId/designations/:designationId', authMiddleware, authorizeRoles("admin", "hr"), updateDesignation);
-router.delete('/:departmentId/designations/:designationId', authMiddleware, authorizeRoles("admin", "hr"), deleteDesignation);
+router.post('/:departmentId/designations/assign', authMiddleware, authorizeRoles("admin", "hr"), assignDesignationToDepartment);
+router.delete('/:departmentId/designations/:designationId', authMiddleware, authorizeRoles("admin", "hr"), unassignDesignationFromDepartment);
 
 router.get('/:id', authMiddleware, authorizeRoles("admin", "hr"), getDepartment);
 router.put('/:id', authMiddleware, authorizeRoles("admin", "hr"), updateDepartment);

@@ -49,7 +49,7 @@ const DashboardLayout = ({ sidebar, showWelcome = true }) => {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-80 shrink-0 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -57,7 +57,7 @@ const DashboardLayout = ({ sidebar, showWelcome = true }) => {
       </aside>
 
       <div className="flex flex-1 min-w-0 flex-col bg-white">
-        <div className="fixed top-0 left-0 right-0 z-50 lg:left-64">
+        <div className="fixed top-0 left-0 right-0 z-50 lg:left-80">
           <Navbar
             showWelcome={showWelcome}
             onMenuClick={() => setSidebarOpen(true)}

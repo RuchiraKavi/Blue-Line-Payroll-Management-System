@@ -2,6 +2,7 @@ import Leave from "../models/Leave.js";
 import Employee from "../models/Employee.js";
 import path from "path";
 import sendEmail from "../utils/sendEmail.js";
+import { countInclusiveCalendarDays } from "../utils/payrollAttendance.js";
 
 const requestLeave = async (req, res) => {
   try {
@@ -60,9 +61,7 @@ const requestLeave = async (req, res) => {
       });
     }
 
-    const diffTime = end.getTime() - start.getTime();
-    const totalDays =
-      Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays = countInclusiveCalendarDays(start, end);
 
     /* ---------------- CHECK LEAVE BALANCE (skip for nopay) ---------------- */
     if (normalizedLeaveType !== "nopay") {

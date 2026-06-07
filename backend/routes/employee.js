@@ -1,6 +1,6 @@
     import express from "express";
     import authMiddleware from "../middleware/authMiddleware.js";
-    import { addEmployee, upload, getEmployee, viewEmployee, removeEmployee, updateEmployee, getLastEmployeeId, getMyEmployeeProfile, updateMyEmployeeProfile } from "../controllers/employeeController.js";
+    import { addEmployee, upload, getEmployee, viewEmployee, removeEmployee, updateEmployee, updateEmployeeRole, getLastEmployeeId, getMyEmployeeProfile, updateMyEmployeeProfile } from "../controllers/employeeController.js";
     import { getEmployeeLeaveBalance } from "../controllers/leaveController.js";
     import authorizeRoles from "../middleware/roleMiddleware.js";
 
@@ -11,6 +11,7 @@
     router.get("/me/profile", authMiddleware, getMyEmployeeProfile);
     router.put("/me/profile", authMiddleware, upload.single("image"), updateMyEmployeeProfile);
     router.get("/:id/leave-balance", authMiddleware, getEmployeeLeaveBalance);
+    router.put("/:id/role", authMiddleware, authorizeRoles("admin", "hr"), updateEmployeeRole);
 
     // Only admin and hr can view all employees
     router.get("/", authMiddleware, authorizeRoles("admin", "hr"), getEmployee);

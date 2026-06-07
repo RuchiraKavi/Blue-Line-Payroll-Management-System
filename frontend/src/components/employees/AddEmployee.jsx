@@ -6,6 +6,15 @@ import { useNavigate } from "react-router-dom";
 import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./AllowancesSection";
 import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
 import DateInput from "../ui/DateInput.jsx";
+import SelectInput from "../ui/SelectInput.jsx";
+import {
+  getMaxDobForMinimumAge,
+  validateAddress,
+  validateDobMinimumAge,
+  validateEmail,
+  validateMobileNumber,
+  validateNic,
+} from "../../utils/employeeFieldValidation.js";
 
 const AddEmployee = () => {
   const { user, loading } = useAuth();
@@ -18,6 +27,8 @@ const AddEmployee = () => {
     email: "",
     nic: "",
     epf_number: "",
+    address: "",
+    mobile_number: "",
     dob: "",
     gender: "",
     marital_status: "",
@@ -29,7 +40,6 @@ const AddEmployee = () => {
     ...emptyAllowances(),
     ...emptyServiceCharges(),
     password: "",
-    role: "",
     bank_name: "",
     bank_branch: "",
     bank_account_number: "",
@@ -39,16 +49,6 @@ const AddEmployee = () => {
   const [submitting, setSubmitting] = useState(false);
   const [idLoading, setIdLoading] = useState(true);
   const navigate = useNavigate();
-
-  // Available roles based on user permissions
-  // Role hierarchy: admin/hr can create employees with various roles
-  const AVAILABLE_ROLES = {
-    admin: ["admin", "hr", "accountant", "employee", "intern"],
-    hr: ["hr", "accountant", "employee", "intern"],
-    accountant: [],
-    employee: [],
-    intern: [],
-  };
 
   // Fetch departments and next employee ID on component mount
   useEffect(() => {
@@ -139,12 +139,23 @@ const AddEmployee = () => {
 
   const validateForm = () => {
     if (!formData.name?.trim()) return "Name is required";
-    if (!formData.nic?.trim()) return "NIC is required";
-    if (!/^([0-9]{9}[vVxX]|[0-9]{12})$/.test(formData.nic))
-      return "Invalid NIC format";
-    if (!formData.email?.trim()) return "Email is required";
+
+    const nicError = validateNic(formData.nic);
+    if (nicError) return nicError;
+
+    const emailError = validateEmail(formData.email);
+    if (emailError) return emailError;
+
+    const mobileError = validateMobileNumber(formData.mobile_number);
+    if (mobileError) return mobileError;
+
+    const addressError = validateAddress(formData.address);
+    if (addressError) return addressError;
+
+    const dobError = validateDobMinimumAge(formData.dob);
+    if (dobError) return dobError;
+
     if (!formData.employee_id?.trim()) return "Employee ID is required";
-    if (!formData.dob) return "Date of Birth is required";
     if (!formData.gender) return "Gender is required";
     if (!formData.marital_status) return "Marital Status is required";
     if (!formData.joined_date) return "Joined Date is required";
@@ -154,7 +165,6 @@ const AddEmployee = () => {
       return "Basic Salary must be greater than 0";
     if (!formData.password?.trim()) return "Password is required";
     if (formData.password.length < 6) return "Password must be at least 6 characters";
-    if (!formData.role) return "Role is required";
     if (!formData.bank_name?.trim()) return "Bank Name is required";
     if (!formData.bank_branch?.trim()) return "Bank Branch is required";
 
@@ -186,13 +196,6 @@ const AddEmployee = () => {
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
-      return;
-    }
-
-    // Check role permission
-    const allowedRoles = AVAILABLE_ROLES[user?.role];
-    if (!allowedRoles?.includes(formData.role)) {
-      setError(`You cannot assign role: ${formData.role}`);
       return;
     }
 
@@ -273,8 +276,9 @@ const AddEmployee = () => {
           Next Employee ID: <span className="font-semibold text-indigo-600">{formData.employee_id}</span>
           {" · "}
           Next EPF No.: <span className="font-semibold text-indigo-600">{formData.epf_number}</span>
-          {" | Adding as: "}
-          <span className="font-semibold capitalize">{user?.role}</span>
+          {" · New employees are registered with the "}
+          <span className="font-semibold">Employee</span>
+          {" role. Use Role Management to change roles."}
         </p>
 
         {error && (
@@ -311,13 +315,48 @@ const AddEmployee = () => {
               <input
                 type="text"
                 name="nic"
-                placeholder="National Identity Card Number"
+                placeholder="e.g. 200012345678 or 991234567V"
                 value={formData.nic}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 required
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Old NIC: 9 digits + V/X · New NIC: 12 digits
+              </p>
             </div>
+
+          {/* Mobile Number */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mobile Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="tel"
+              name="mobile_number"
+              placeholder="e.g. 0771234567"
+              value={formData.mobile_number}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          {/* Address */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Address <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              name="address"
+              rows={3}
+              placeholder="Permanent / residential address"
+              value={formData.address}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y"
+              required
+            />
+          </div>
 
           {/* EPF Number */}
           <div>
@@ -374,9 +413,13 @@ const AddEmployee = () => {
               name="dob"
               value={formData.dob}
               onChange={handleChange}
+              max={getMaxDobForMinimumAge(18)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
+            <p className="mt-1 text-xs text-gray-500">
+              Employee must be at least 18 years old
+            </p>
           </div>
 
           {/* Gender */}
@@ -384,18 +427,19 @@ const AddEmployee = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Gender <span className="text-red-500">*</span>
             </label>
-            <select
+            <SelectInput
               name="gender"
               value={formData.gender}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
-            >
-              <option value="">Select Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
+              placeholder="Select Gender"
+              options={[
+                { value: "", label: "Select Gender" },
+                { value: "Male", label: "Male" },
+                { value: "Female", label: "Female" },
+                { value: "Other", label: "Other" },
+              ]}
+            />
           </div>
 
           {/* Marital Status */}
@@ -403,17 +447,18 @@ const AddEmployee = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Marital Status <span className="text-red-500">*</span>
             </label>
-            <select
+            <SelectInput
               name="marital_status"
               value={formData.marital_status}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
-            >
-              <option value="">Select Status</option>
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-            </select>
+              placeholder="Select Status"
+              options={[
+                { value: "", label: "Select Status" },
+                { value: "Single", label: "Single" },
+                { value: "Married", label: "Married" },
+              ]}
+            />
           </div>
 
           {/* Joined Date */}
@@ -448,20 +493,21 @@ const AddEmployee = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Department <span className="text-red-500">*</span>
             </label>
-            <select
+            <SelectInput
               name="department"
               value={formData.department}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
-            >
-              <option value="">Select Department</option>
-              {departments.map((dep) => (
-                <option key={dep._id} value={dep._id}>
-                  {dep.dep_name}
-                </option>
-              ))}
-            </select>
+              placeholder="Select Department"
+              searchable={departments.length > 7}
+              options={[
+                { value: "", label: "Select Department" },
+                ...departments.map((dep) => ({
+                  value: dep._id,
+                  label: dep.dep_name,
+                })),
+              ]}
+            />
           </div>
 
           {/* Designation */}
@@ -469,32 +515,29 @@ const AddEmployee = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Designation <span className="text-red-500">*</span>
             </label>
-            <select
+            <SelectInput
               name="designation"
               value={formData.designation}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
               required
               disabled={!formData.department || designationsLoading}
-            >
-              <option value="">
-                {!formData.department
+              placeholder={
+                !formData.department
                   ? "Select a department first"
                   : designationsLoading
                   ? "Loading designations..."
                   : designations.length === 0
                   ? "No designations — add them in department settings"
-                  : "Select Designation"}
-              </option>
-              {designations.map((des) => (
-                <option key={des._id} value={des.title}>
-                  {des.title}
-                </option>
-              ))}
-            </select>
+                  : "Select Designation"
+              }
+              options={designations.map((des) => ({
+                value: des.title,
+                label: des.title,
+              }))}
+            />
             {formData.department && !designationsLoading && designations.length === 0 && (
               <p className="mt-1 text-xs text-amber-600">
-                Add designations for this department under Departments → Edit.
+                Add designations under Department Management → Add Designation, then assign them via Assign Designation.
               </p>
             )}
           </div>
@@ -581,36 +624,6 @@ const AddEmployee = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
-          </div>
-
-          {/* Role */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Role <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="role"
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              required
-            >
-              <option value="">Select Role</option>
-              {(() => {
-                const normalizeRole = (r) => {
-                  if (!r) return r;
-                  const x = String(r).toLowerCase();
-                  if (x === "hr_manager") return "hr";
-                  if (x === "account_manager" || x === "accountant") return "accountant";
-                  return x;
-                };
-                const userRole = normalizeRole(user?.role);
-                return AVAILABLE_ROLES[userRole]?.map((role) => (
-                  <option key={role} value={role}>
-                    {role.charAt(0).toUpperCase() + role.slice(1)}
-                  </option>
-                ));
-              })()}
-            </select>
           </div>
 
           {/* Upload Image */}
