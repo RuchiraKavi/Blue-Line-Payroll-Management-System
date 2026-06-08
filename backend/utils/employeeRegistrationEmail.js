@@ -101,7 +101,7 @@ export function buildEmployeeRegistrationEmailHtml({
     row("Travel Allowance", formatCurrency(travelAllowance)),
     row("Food Allowance", formatCurrency(foodAllowance)),
     row("Holiday Payment", formatCurrency(holidayPayment)),
-    row("Allowance-NS", formatCurrency(allowanceNs)),
+    row("Attendance Allowance", formatCurrency(allowanceNs)),
     row("Bonus", formatCurrency(bonus)),
     row("Stamp Duty", formatCurrency(stampDuty)),
     row("Mobile Deduction", formatCurrency(mobileDeduction)),

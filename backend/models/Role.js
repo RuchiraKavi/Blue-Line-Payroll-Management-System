@@ -10,6 +10,10 @@ const roleSchema = new mongoose.Schema(
     },
     label: { type: String, required: true, trim: true },
     isSystem: { type: Boolean, default: false },
+    permissions: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   { timestamps: true }
 );

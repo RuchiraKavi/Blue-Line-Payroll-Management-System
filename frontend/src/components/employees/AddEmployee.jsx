@@ -16,6 +16,28 @@ import {
   validateNic,
 } from "../../utils/employeeFieldValidation.js";
 
+const FieldError = ({ message }) =>
+  message ? <p className="mt-1 text-xs text-red-600 font-medium">{message}</p> : null;
+
+const fieldInputClass = (hasError) =>
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 ${
+    hasError
+      ? "border-red-500 focus:ring-red-100 focus:border-red-500"
+      : "border-gray-300 focus:ring-indigo-500 focus:border-transparent"
+  }`;
+
+const mapServerErrorToFields = (message) => {
+  if (!message) return { formError: "Error adding employee. Please try again." };
+  const lower = message.toLowerCase();
+  if (lower.includes("email")) return { fieldErrors: { email: message } };
+  if (lower.includes("nic")) return { fieldErrors: { nic: message } };
+  if (lower.includes("employee id")) return { fieldErrors: { employee_id: message } };
+  if (lower.includes("epf")) return { fieldErrors: { epf_number: message } };
+  if (lower.includes("department")) return { fieldErrors: { department: message } };
+  if (lower.includes("designation")) return { fieldErrors: { designation: message } };
+  return { formError: message };
+};
+
 const AddEmployee = () => {
   const { user, loading } = useAuth();
   const [departments, setDepartments] = useState([]);
@@ -44,9 +66,11 @@ const AddEmployee = () => {
     bank_account_number: "",
     image: null,
   });
-  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [idLoading, setIdLoading] = useState(true);
+  const [credentialFieldsReady, setCredentialFieldsReady] = useState(false);
   const navigate = useNavigate();
 
   // Fetch departments and next employee ID on component mount
@@ -78,7 +102,7 @@ const AddEmployee = () => {
         }
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError("Failed to load form data. Please refresh.");
+        setFormError("Failed to load form data. Please refresh.");
       } finally {
         setIdLoading(false);
       }
@@ -120,9 +144,33 @@ const AddEmployee = () => {
     loadDesignations();
   }, [formData.department]);
 
+  // Clear browser autofill on email/password until the user focuses those fields
+  useEffect(() => {
+    if (idLoading || credentialFieldsReady) return;
+    const timers = [100, 400].map((ms) =>
+      setTimeout(() => {
+        setFormData((prev) => {
+          if (!prev.email && !prev.password) return prev;
+          return { ...prev, email: "", password: "" };
+        });
+      }, ms)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [idLoading, credentialFieldsReady]);
+
+  const clearFieldError = (name) => {
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    setError("");
+    setFormError("");
+    clearFieldError(name);
     if (name === "image") {
       setFormData((prevData) => ({ ...prevData, [name]: files[0] }));
     } else if (name === "department") {
@@ -137,41 +185,47 @@ const AddEmployee = () => {
   };
 
   const validateForm = () => {
-    if (!formData.name?.trim()) return "Name is required";
+    const errors = {};
+
+    if (!formData.name?.trim()) errors.name = "Name is required";
 
     const nicError = validateNic(formData.nic);
-    if (nicError) return nicError;
+    if (nicError) errors.nic = nicError;
 
     const emailError = validateEmail(formData.email);
-    if (emailError) return emailError;
+    if (emailError) errors.email = emailError;
 
     const mobileError = validateMobileNumber(formData.mobile_number);
-    if (mobileError) return mobileError;
+    if (mobileError) errors.mobile_number = mobileError;
 
     const addressError = validateAddress(formData.address);
-    if (addressError) return addressError;
+    if (addressError) errors.address = addressError;
 
     const dobError = validateDobMinimumAge(formData.dob);
-    if (dobError) return dobError;
+    if (dobError) errors.dob = dobError;
 
-    if (!formData.employee_id?.trim()) return "Employee ID is required";
-    if (!formData.gender) return "Gender is required";
-    if (!formData.marital_status) return "Marital Status is required";
-    if (!formData.joined_date) return "Joined Date is required";
-    if (!formData.designation?.trim()) return "Designation is required";
-    if (!formData.department) return "Department is required";
-    if (!formData.basic_salary || formData.basic_salary <= 0)
-      return "Basic Salary must be greater than 0";
-    if (!formData.password?.trim()) return "Password is required";
-    if (formData.password.length < 6) return "Password must be at least 6 characters";
-    if (!formData.bank_name?.trim()) return "Bank Name is required";
-    if (!formData.bank_branch?.trim()) return "Bank Branch is required";
+    if (!formData.employee_id?.trim()) errors.employee_id = "Employee ID is required";
+    if (!formData.gender) errors.gender = "Gender is required";
+    if (!formData.marital_status) errors.marital_status = "Marital Status is required";
+    if (!formData.joined_date) errors.joined_date = "Joined Date is required";
+    if (!formData.designation?.trim()) errors.designation = "Designation is required";
+    if (!formData.department) errors.department = "Department is required";
+    if (!formData.basic_salary || Number(formData.basic_salary) <= 0) {
+      errors.basic_salary = "Basic Salary must be greater than 0";
+    }
+    if (!formData.password?.trim()) {
+      errors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      errors.password = "Password must be at least 6 characters";
+    }
+    if (!formData.bank_name?.trim()) errors.bank_name = "Bank Name is required";
+    if (!formData.bank_branch?.trim()) errors.bank_branch = "Bank Branch is required";
 
-    if (!formData.bank_account_number?.trim())
-      return "Bank Account Number is required";
-
-    if (!/^[0-9]{8,18}$/.test(formData.bank_account_number))
-      return "Bank Account Number must be 8–18 digits";
+    if (!formData.bank_account_number?.trim()) {
+      errors.bank_account_number = "Bank Account Number is required";
+    } else if (!/^[0-9]{8,18}$/.test(formData.bank_account_number)) {
+      errors.bank_account_number = "Bank Account Number must be 8–18 digits";
+    }
 
     const numericProfileFields = [
       ...ALLOWANCE_FIELDS.map((f) => f.name),
@@ -180,21 +234,33 @@ const AddEmployee = () => {
     for (const field of numericProfileFields) {
       const val = formData[field];
       if (val !== "" && val != null && Number(val) < 0) {
-        return "Allowance and service charge amounts cannot be negative";
+        errors[field] = "Amount cannot be negative";
       }
     }
 
-    return null;
+    return errors;
+  };
+
+  const focusFirstFieldError = (errors) => {
+    const firstKey = Object.keys(errors)[0];
+    if (!firstKey) return;
+    requestAnimationFrame(() => {
+      document.getElementById(`field-${firstKey}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setFormError("");
+    setFieldErrors({});
 
-    // Validate form
-    const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      focusFirstFieldError(validationErrors);
       return;
     }
 
@@ -218,7 +284,7 @@ const AddEmployee = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        setError("Authentication token not found");
+        setFormError("Authentication token not found");
         navigate("/login");
         return;
       }
@@ -238,19 +304,27 @@ const AddEmployee = () => {
         alert(response.data.message);
         navigate("/admin-dashboard/employees");
       } else {
-        setError(response.data.message || "Failed to add employee");
+        const mapped = mapServerErrorToFields(response.data.message);
+        if (mapped.fieldErrors) setFieldErrors(mapped.fieldErrors);
+        else setFormError(mapped.formError || "Failed to add employee");
       }
     } catch (err) {
       if (err.response?.status === 403) {
-        setError("You don't have permission to add employees");
+        setFormError("You don't have permission to add employees");
         navigate("/unauthorized");
       } else if (err.response?.status === 401) {
-        setError("Session expired. Please login again");
+        setFormError("Session expired. Please login again");
         navigate("/login");
       } else {
-        setError(
-          err.response?.data?.message || "Error adding employee. Please try again."
-        );
+        const mapped = mapServerErrorToFields(err.response?.data?.message);
+        if (mapped.fieldErrors) {
+          setFieldErrors(mapped.fieldErrors);
+          focusFirstFieldError(mapped.fieldErrors);
+        } else {
+          setFormError(
+            mapped.formError || "Error adding employee. Please try again."
+          );
+        }
       }
     } finally {
       setSubmitting(false);
@@ -267,7 +341,7 @@ const AddEmployee = () => {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
-      <div className="w-full max-w-4xl mx-auto mt-10 bg-white shadow-lg rounded-xl p-8">
+      <div className="relative w-full max-w-4xl mx-auto mt-10 bg-white shadow-lg rounded-xl p-8">
         <h3 className="text-center text-2xl font-bold text-gray-800 mb-2">
           Register Employee
         </h3>
@@ -280,18 +354,37 @@ const AddEmployee = () => {
           {" role. Use Role Management to change roles."}
         </p>
 
-        {error && (
+        {formError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm font-medium">{error}</p>
+            <p className="text-red-700 text-sm font-medium">{formError}</p>
           </div>
         )}
 
         <form
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
           onSubmit={handleSubmit}
+          autoComplete="off"
         >
+          {/* Decoy fields — absorb browser autofill for login credentials */}
+          <input
+            type="text"
+            name="prevent_autofill_username"
+            autoComplete="username"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="absolute opacity-0 h-0 w-0 pointer-events-none"
+          />
+          <input
+            type="password"
+            name="prevent_autofill_password"
+            autoComplete="current-password"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="absolute opacity-0 h-0 w-0 pointer-events-none"
+          />
+
           {/* Name */}
-          <div>
+          <div id="field-name">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Name <span className="text-red-500">*</span>
             </label>
@@ -301,13 +394,15 @@ const AddEmployee = () => {
               value={formData.name}
               placeholder="Full Name"
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              autoComplete="off"
+              className={fieldInputClass(fieldErrors.name)}
               required
             />
+            <FieldError message={fieldErrors.name} />
           </div>
 
           {/* NIC */}
-            <div>
+            <div id="field-nic">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 NIC <span className="text-red-500">*</span>
               </label>
@@ -317,16 +412,20 @@ const AddEmployee = () => {
                 placeholder="e.g. 200012345678 or 991234567V"
                 value={formData.nic}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                autoComplete="off"
+                className={fieldInputClass(fieldErrors.nic)}
                 required
               />
-              <p className="mt-1 text-xs text-gray-500">
-                Old NIC: 9 digits + V/X · New NIC: 12 digits
-              </p>
+              <FieldError message={fieldErrors.nic} />
+              {!fieldErrors.nic && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Old NIC: 9 digits + V/X · New NIC: 12 digits
+                </p>
+              )}
             </div>
 
           {/* Mobile Number */}
-          <div>
+          <div id="field-mobile_number">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Mobile Number <span className="text-red-500">*</span>
             </label>
@@ -336,13 +435,15 @@ const AddEmployee = () => {
               placeholder="e.g. 0771234567"
               value={formData.mobile_number}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              autoComplete="off"
+              className={fieldInputClass(fieldErrors.mobile_number)}
               required
             />
+            <FieldError message={fieldErrors.mobile_number} />
           </div>
 
           {/* Address */}
-          <div className="md:col-span-2">
+          <div className="md:col-span-2" id="field-address">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Address <span className="text-red-500">*</span>
             </label>
@@ -352,13 +453,15 @@ const AddEmployee = () => {
               placeholder="Permanent / residential address"
               value={formData.address}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y"
+              autoComplete="off"
+              className={`${fieldInputClass(fieldErrors.address)} resize-y`}
               required
             />
+            <FieldError message={fieldErrors.address} />
           </div>
 
           {/* EPF Number */}
-          <div>
+          <div id="field-epf_number">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               EPF Number <span className="text-red-500">*</span>
             </label>
@@ -370,10 +473,11 @@ const AddEmployee = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed uppercase"
               required
             />
+            <FieldError message={fieldErrors.epf_number} />
           </div>
 
           {/* Email */}
-          <div>
+          <div id="field-email">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Email <span className="text-red-500">*</span>
             </label>
@@ -381,15 +485,19 @@ const AddEmployee = () => {
               type="email"
               name="email"
               value={formData.email}
-              placeholder="Email Address"
+              placeholder="Employee email address"
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              autoComplete="off"
+              readOnly={!credentialFieldsReady}
+              onFocus={() => setCredentialFieldsReady(true)}
+              className={fieldInputClass(fieldErrors.email)}
               required
             />
+            <FieldError message={fieldErrors.email} />
           </div>
 
           {/* Employee ID */}
-          <div>
+          <div id="field-employee_id">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Employee ID <span className="text-red-500">*</span>
             </label>
@@ -401,10 +509,11 @@ const AddEmployee = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
               required
             />
+            <FieldError message={fieldErrors.employee_id} />
           </div>
 
           {/* Date of Birth */}
-          <div>
+          <div id="field-dob">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Date of Birth <span className="text-red-500">*</span>
             </label>
@@ -413,55 +522,64 @@ const AddEmployee = () => {
               value={formData.dob}
               onChange={handleChange}
               max={getMaxDobForMinimumAge(18)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className={fieldInputClass(fieldErrors.dob)}
               required
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Employee must be at least 18 years old
-            </p>
+            <FieldError message={fieldErrors.dob} />
+            {!fieldErrors.dob && (
+              <p className="mt-1 text-xs text-gray-500">
+                Employee must be at least 18 years old
+              </p>
+            )}
           </div>
 
           {/* Gender */}
-          <div>
+          <div id="field-gender">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Gender <span className="text-red-500">*</span>
             </label>
-            <SelectInput
-              name="gender"
-              value={formData.gender}
-              onChange={handleChange}
-              required
-              placeholder="Select Gender"
-              options={[
-                { value: "", label: "Select Gender" },
-                { value: "Male", label: "Male" },
-                { value: "Female", label: "Female" },
-                { value: "Other", label: "Other" },
-              ]}
-            />
+            <div className={fieldErrors.gender ? "rounded-xl ring-2 ring-red-300" : ""}>
+              <SelectInput
+                name="gender"
+                value={formData.gender}
+                onChange={handleChange}
+                required
+                placeholder="Select Gender"
+                options={[
+                  { value: "", label: "Select Gender" },
+                  { value: "Male", label: "Male" },
+                  { value: "Female", label: "Female" },
+                  { value: "Other", label: "Other" },
+                ]}
+              />
+            </div>
+            <FieldError message={fieldErrors.gender} />
           </div>
 
           {/* Marital Status */}
-          <div>
+          <div id="field-marital_status">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Marital Status <span className="text-red-500">*</span>
             </label>
-            <SelectInput
-              name="marital_status"
-              value={formData.marital_status}
-              onChange={handleChange}
-              required
-              placeholder="Select Status"
-              options={[
-                { value: "", label: "Select Status" },
-                { value: "Single", label: "Single" },
-                { value: "Married", label: "Married" },
-              ]}
-            />
+            <div className={fieldErrors.marital_status ? "rounded-xl ring-2 ring-red-300" : ""}>
+              <SelectInput
+                name="marital_status"
+                value={formData.marital_status}
+                onChange={handleChange}
+                required
+                placeholder="Select Status"
+                options={[
+                  { value: "", label: "Select Status" },
+                  { value: "Single", label: "Single" },
+                  { value: "Married", label: "Married" },
+                ]}
+              />
+            </div>
+            <FieldError message={fieldErrors.marital_status} />
           </div>
 
           {/* Joined Date */}
-          <div>
+          <div id="field-joined_date">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Joined Date <span className="text-red-500">*</span>
             </label>
@@ -469,59 +587,66 @@ const AddEmployee = () => {
               name="joined_date"
               value={formData.joined_date}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className={fieldInputClass(fieldErrors.joined_date)}
               required
             />
+            <FieldError message={fieldErrors.joined_date} />
           </div>
 
           {/* Department */}
-          <div>
+          <div id="field-department">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Department <span className="text-red-500">*</span>
             </label>
-            <SelectInput
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              required
-              placeholder="Select Department"
-              searchable={departments.length > 7}
-              options={[
-                { value: "", label: "Select Department" },
-                ...departments.map((dep) => ({
-                  value: dep._id,
-                  label: dep.dep_name,
-                })),
-              ]}
-            />
+            <div className={fieldErrors.department ? "rounded-xl ring-2 ring-red-300" : ""}>
+              <SelectInput
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                required
+                placeholder="Select Department"
+                searchable={departments.length > 7}
+                options={[
+                  { value: "", label: "Select Department" },
+                  ...departments.map((dep) => ({
+                    value: dep._id,
+                    label: dep.dep_name,
+                  })),
+                ]}
+              />
+            </div>
+            <FieldError message={fieldErrors.department} />
           </div>
 
           {/* Designation */}
-          <div>
+          <div id="field-designation">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Designation <span className="text-red-500">*</span>
             </label>
-            <SelectInput
-              name="designation"
-              value={formData.designation}
-              onChange={handleChange}
-              required
-              disabled={!formData.department || designationsLoading}
-              placeholder={
-                !formData.department
-                  ? "Select a department first"
-                  : designationsLoading
-                  ? "Loading designations..."
-                  : designations.length === 0
-                  ? "No designations — add them in department settings"
-                  : "Select Designation"
-              }
-              options={designations.map((des) => ({
-                value: des.title,
-                label: des.title,
-              }))}
-            />
-            {formData.department && !designationsLoading && designations.length === 0 && (
+            <div className={fieldErrors.designation ? "rounded-xl ring-2 ring-red-300" : ""}>
+              <SelectInput
+                name="designation"
+                value={formData.designation}
+                onChange={handleChange}
+                required
+                disabled={!formData.department || designationsLoading}
+                placeholder={
+                  !formData.department
+                    ? "Select a department first"
+                    : designationsLoading
+                    ? "Loading designations..."
+                    : designations.length === 0
+                    ? "No designations — add them in department settings"
+                    : "Select Designation"
+                }
+                options={designations.map((des) => ({
+                  value: des.title,
+                  label: des.title,
+                }))}
+              />
+            </div>
+            <FieldError message={fieldErrors.designation} />
+            {formData.department && !designationsLoading && designations.length === 0 && !fieldErrors.designation && (
               <p className="mt-1 text-xs text-amber-600">
                 Add designations under Department Management → Add Designation, then assign them via Assign Designation.
               </p>
@@ -529,7 +654,7 @@ const AddEmployee = () => {
           </div>
 
           {/* Basic Salary */}
-          <div>
+          <div id="field-basic_salary">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Basic Salary <span className="text-red-500">*</span>
             </label>
@@ -539,17 +664,19 @@ const AddEmployee = () => {
               value={formData.basic_salary}
               placeholder="0.00"
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              autoComplete="off"
+              className={fieldInputClass(fieldErrors.basic_salary)}
               required
             />
+            <FieldError message={fieldErrors.basic_salary} />
           </div>
 
-          <AllowancesSection values={formData} onChange={handleChange} />
+          <AllowancesSection values={formData} onChange={handleChange} fieldErrors={fieldErrors} />
 
-          <ServiceChargesSection values={formData} onChange={handleChange} />
+          <ServiceChargesSection values={formData} onChange={handleChange} fieldErrors={fieldErrors} />
 
           {/* Bank Name */}
-            <div>
+            <div id="field-bank_name">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Bank Name <span className="text-red-500">*</span>
               </label>
@@ -559,13 +686,15 @@ const AddEmployee = () => {
                 placeholder="Bank Name"
                 value={formData.bank_name}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                autoComplete="off"
+                className={fieldInputClass(fieldErrors.bank_name)}
                 required
               />
+              <FieldError message={fieldErrors.bank_name} />
             </div>
 
             {/* Bank Branch */}
-            <div>
+            <div id="field-bank_branch">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Bank Branch <span className="text-red-500">*</span>
               </label>
@@ -575,13 +704,15 @@ const AddEmployee = () => {
                 placeholder="Branch Name"
                 value={formData.bank_branch}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                autoComplete="off"
+                className={fieldInputClass(fieldErrors.bank_branch)}
                 required
               />
+              <FieldError message={fieldErrors.bank_branch} />
             </div>
 
             {/* Bank Account Number */}
-            <div>
+            <div id="field-bank_account_number">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Bank Account Number <span className="text-red-500">*</span>
               </label>
@@ -591,25 +722,32 @@ const AddEmployee = () => {
                 placeholder="Account Number"
                 value={formData.bank_account_number}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                autoComplete="off"
+                className={fieldInputClass(fieldErrors.bank_account_number)}
                 required
               />
+              <FieldError message={fieldErrors.bank_account_number} />
             </div>
 
 
           {/* Password */}
-          <div>
+          <div id="field-password">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Password <span className="text-red-500">*</span>
             </label>
             <input
               type="password"
               name="password"
+              value={formData.password}
               placeholder="Enter password (min 6 characters)"
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              autoComplete="new-password"
+              readOnly={!credentialFieldsReady}
+              onFocus={() => setCredentialFieldsReady(true)}
+              className={fieldInputClass(fieldErrors.password)}
               required
             />
+            <FieldError message={fieldErrors.password} />
           </div>
 
           {/* Upload Image */}

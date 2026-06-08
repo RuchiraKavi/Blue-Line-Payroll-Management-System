@@ -1,6 +1,6 @@
 import express from 'express';
 import authMiddleware from "../middleware/authMiddleware.js";
-import authorizeRoles from "../middleware/roleMiddleware.js";
+import { authorizePermission } from "../middleware/permissionMiddleware.js";
 import { addDepartment, getDepartments, getDepartment, updateDepartment, deleteDepartment } from '../controllers/departmentController.js';
 import {
   getDesignationsByDepartment,
@@ -10,17 +10,15 @@ import {
 
 const router = express.Router();
 
-// Only admin and hr can access departments
-router.get('/', authMiddleware, authorizeRoles("admin", "hr"), getDepartments);
-router.post('/add', authMiddleware, authorizeRoles("admin", "hr"), addDepartment);
+router.get('/', authMiddleware, authorizePermission("departments", "read", "admin", "hr"), getDepartments);
+router.post('/add', authMiddleware, authorizePermission("departments", "create", "admin", "hr"), addDepartment);
 
-// Department designation assignments (must be before /:id routes)
-router.get('/:departmentId/designations', authMiddleware, authorizeRoles("admin", "hr"), getDesignationsByDepartment);
-router.post('/:departmentId/designations/assign', authMiddleware, authorizeRoles("admin", "hr"), assignDesignationToDepartment);
-router.delete('/:departmentId/designations/:designationId', authMiddleware, authorizeRoles("admin", "hr"), unassignDesignationFromDepartment);
+router.get('/:departmentId/designations', authMiddleware, authorizePermission("departments", "read", "admin", "hr"), getDesignationsByDepartment);
+router.post('/:departmentId/designations/assign', authMiddleware, authorizePermission("departments", "update", "admin", "hr"), assignDesignationToDepartment);
+router.delete('/:departmentId/designations/:designationId', authMiddleware, authorizePermission("departments", "delete", "admin", "hr"), unassignDesignationFromDepartment);
 
-router.get('/:id', authMiddleware, authorizeRoles("admin", "hr"), getDepartment);
-router.put('/:id', authMiddleware, authorizeRoles("admin", "hr"), updateDepartment);
-router.delete('/:id', authMiddleware, authorizeRoles("admin", "hr"), deleteDepartment);
+router.get('/:id', authMiddleware, authorizePermission("departments", "read", "admin", "hr"), getDepartment);
+router.put('/:id', authMiddleware, authorizePermission("departments", "update", "admin", "hr"), updateDepartment);
+router.delete('/:id', authMiddleware, authorizePermission("departments", "delete", "admin", "hr"), deleteDepartment);
 
 export default router;

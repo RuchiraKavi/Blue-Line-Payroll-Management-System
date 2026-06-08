@@ -1,7 +1,8 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import authorizeRoles from "../middleware/roleMiddleware.js";
+import { authorizePermission } from "../middleware/permissionMiddleware.js";
 import {
+  getPermissionSections,
   getAllRoles,
   createRole,
   updateRole,
@@ -10,9 +11,35 @@ import {
 
 const router = express.Router();
 
-router.get("/", authMiddleware, authorizeRoles("admin", "hr"), getAllRoles);
-router.post("/add", authMiddleware, authorizeRoles("admin", "hr"), createRole);
-router.put("/:id", authMiddleware, authorizeRoles("admin", "hr"), updateRole);
-router.delete("/:id", authMiddleware, authorizeRoles("admin", "hr"), deleteRole);
+router.get(
+  "/sections",
+  authMiddleware,
+  authorizePermission("roles", "read", "admin", "hr"),
+  getPermissionSections
+);
+router.get(
+  "/",
+  authMiddleware,
+  authorizePermission("roles", "read", "admin", "hr"),
+  getAllRoles
+);
+router.post(
+  "/add",
+  authMiddleware,
+  authorizePermission("roles", "create", "admin", "hr"),
+  createRole
+);
+router.put(
+  "/:id",
+  authMiddleware,
+  authorizePermission("roles", "update", "admin", "hr"),
+  updateRole
+);
+router.delete(
+  "/:id",
+  authMiddleware,
+  authorizePermission("roles", "delete", "admin", "hr"),
+  deleteRole
+);
 
 export default router;

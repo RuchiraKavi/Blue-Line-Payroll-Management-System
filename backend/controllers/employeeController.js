@@ -748,7 +748,13 @@ const updateEmployee = async (req, res) => {
 
 const getMyEmployeeProfile = async (req, res) => {
   try {
-    const userId = req.user.id; // from auth middleware
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: user not found in session",
+      });
+    }
 
     const employee = await Employee.findOne({ userId })
       .populate("userId", "name email role profileImage nic")
@@ -779,7 +785,13 @@ const getMyEmployeeProfile = async (req, res) => {
 /* ================= UPDATE MY EMPLOYEE PROFILE ================= */
 const updateMyEmployeeProfile = async (req, res) => {
   try {
-    const userId = req.user.id; // from auth middleware
+    const userId = req.user._id || req.user.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: user not found in session",
+      });
+    }
 
     const employee = await Employee.findOne({ userId });
     if (!employee) {
@@ -935,8 +947,6 @@ const updateEmployeeRole = async (req, res) => {
     };
 
     const assignerRole = normalizeRole(req.user?.role);
-    const adminAllowed = ["admin", "hr", "accountant", "employee", "intern"];
-    const hrAllowed = ["hr", "accountant", "employee", "intern"];
 
     if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
       return res.status(403).json({
@@ -961,13 +971,10 @@ const updateEmployeeRole = async (req, res) => {
       });
     }
 
-    const allowedForAssigner =
-      assignerRole === "admin" ? adminAllowed : hrAllowed;
-
-    if (!allowedForAssigner.includes(assignedRole)) {
+    if (assignerRole === "hr" && assignedRole === "admin") {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: you cannot assign role '${role}'`,
+        message: "Forbidden: you cannot assign the admin role",
       });
     }
 

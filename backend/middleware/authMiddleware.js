@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { attachPermissionsToUser } from "../utils/rolePermissions.js";
 
 const authMiddleware = async (req, res, next) => {
     try {
@@ -17,7 +18,7 @@ const authMiddleware = async (req, res, next) => {
             return res.status(404).json({ success: false, error: "User not found." });
         }
 
-        req.user = user;
+        req.user = await attachPermissionsToUser(user);
         next();
 
     } catch (error) {

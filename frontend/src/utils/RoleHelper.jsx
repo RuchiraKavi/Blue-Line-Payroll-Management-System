@@ -80,19 +80,19 @@ export const fetchAllRoles = async () => {
   }
 };
 
-export const createRole = async (key, label) => {
+export const createRole = async (key, label, permissions) => {
   const response = await axios.post(
     "http://localhost:5000/api/roles/add",
-    { key, label },
+    { key, label, permissions },
     { headers: authHeaders() }
   );
   return response.data;
 };
 
-export const updateRole = async (roleId, key, label) => {
+export const updateRole = async (roleId, key, label, permissions) => {
   const response = await axios.put(
     `http://localhost:5000/api/roles/${roleId}`,
-    { key, label },
+    { key, label, permissions },
     { headers: authHeaders() }
   );
   return response.data;

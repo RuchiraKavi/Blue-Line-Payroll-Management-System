@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
+import { attachPermissionsToUser } from "../utils/rolePermissions.js";
 
 // LOGIN CONTROLLER
 export const login = async (req, res) => {
@@ -23,14 +24,17 @@ export const login = async (req, res) => {
             { expiresIn: "1h" }
         );
 
+        const userWithPermissions = await attachPermissionsToUser(user);
+
         res.json({
             success: true,
             token,
             user: {
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
+                _id: userWithPermissions._id,
+                name: userWithPermissions.name,
+                email: userWithPermissions.email,
+                role: userWithPermissions.role,
+                permissions: userWithPermissions.permissions,
             },
         });
 
@@ -41,5 +45,6 @@ export const login = async (req, res) => {
 
 // VERIFY CONTROLLER
 export const verifyUser = async (req, res) => {
-    return res.status(200).json({ success: true, user: req.user });
+    const user = await attachPermissionsToUser(req.user);
+    return res.status(200).json({ success: true, user });
 };

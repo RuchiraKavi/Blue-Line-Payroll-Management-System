@@ -1346,7 +1346,7 @@ const SalaryPage = () => {
                             <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Allowance-NS</span>
+                            <span className="text-gray-700">Attendance Allowance</span>
                             <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
@@ -1753,7 +1753,7 @@ const SalaryPage = () => {
                           <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
-                          <span className="text-gray-700">Allowance-NS</span>
+                          <span className="text-gray-700">Attendance Allowance</span>
                           <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">

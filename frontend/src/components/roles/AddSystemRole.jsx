@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createRole } from "../../utils/RoleHelper";
+import PermissionMatrix from "./PermissionMatrix.jsx";
+import { emptyPermissions } from "../../utils/permissionSections.js";
 
 const AddSystemRole = () => {
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ const AddSystemRole = () => {
     key: "",
     label: "",
   });
+  const [permissions, setPermissions] = useState(emptyPermissions());
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -30,9 +33,21 @@ const AddSystemRole = () => {
       return;
     }
 
+    const hasAnyPermission = Object.values(permissions).some((section) =>
+      Object.values(section).some(Boolean)
+    );
+    if (!hasAnyPermission) {
+      setError("Select at least one permission for this role");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const result = await createRole(formData.key.trim(), formData.label.trim());
+      const result = await createRole(
+        formData.key.trim(),
+        formData.label.trim(),
+        permissions
+      );
       if (result.success) {
         navigate("/admin-dashboard/roles");
       } else {
@@ -51,7 +66,7 @@ const AddSystemRole = () => {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-indigo-50 p-4 md:p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           <div className="px-6 md:px-8 py-6 md:py-8 border-b border-gray-200 bg-linear-to-r from-gray-50 to-blue-50">
             <Link
@@ -75,7 +90,7 @@ const AddSystemRole = () => {
                   Add Role
                 </h1>
                 <p className="text-gray-600 mt-1 text-sm md:text-base">
-                  Add a new role to the master list. Assign it to employees separately.
+                  Add a new role and set CRUD permissions for each section.
                 </p>
               </div>
             </div>
@@ -92,46 +107,50 @@ const AddSystemRole = () => {
             )}
 
             <form className="space-y-6" onSubmit={handleSubmit}>
-              <div>
-                <label
-                  htmlFor="key"
-                  className="block text-sm font-semibold text-gray-700 mb-2"
-                >
-                  Role Key <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="key"
-                  name="key"
-                  type="text"
-                  value={formData.key}
-                  onChange={handleChange}
-                  placeholder="e.g. supervisor"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
-                  required
-                />
-                <p className="mt-2 text-xs text-gray-500">
-                  Lowercase letters, numbers, and underscores only. Used internally on user accounts.
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label
+                    htmlFor="key"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Role Key <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="key"
+                    name="key"
+                    type="text"
+                    value={formData.key}
+                    onChange={handleChange}
+                    placeholder="e.g. supervisor"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
+                    required
+                  />
+                  <p className="mt-2 text-xs text-gray-500">
+                    Lowercase letters, numbers, and underscores only.
+                  </p>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="label"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Display Label <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="label"
+                    name="label"
+                    type="text"
+                    value={formData.label}
+                    onChange={handleChange}
+                    placeholder="e.g. Supervisor"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
+                    required
+                  />
+                </div>
               </div>
 
-              <div>
-                <label
-                  htmlFor="label"
-                  className="block text-sm font-semibold text-gray-700 mb-2"
-                >
-                  Display Label <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="label"
-                  name="label"
-                  type="text"
-                  value={formData.label}
-                  onChange={handleChange}
-                  placeholder="e.g. Supervisor"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
-                  required
-                />
-              </div>
+              <PermissionMatrix value={permissions} onChange={setPermissions} />
 
               <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2 border-t border-gray-100">
                 <button
@@ -152,12 +171,7 @@ const AddSystemRole = () => {
                       Adding...
                     </>
                   ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Add Role
-                    </>
+                    "Add Role"
                   )}
                 </button>
               </div>

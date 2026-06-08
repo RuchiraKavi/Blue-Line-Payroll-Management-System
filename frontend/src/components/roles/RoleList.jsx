@@ -8,6 +8,8 @@ import {
   roleTableCustomStyles,
   updateRole,
 } from "../../utils/RoleHelper";
+import PermissionMatrix from "./PermissionMatrix.jsx";
+import { emptyPermissions, sanitizePermissions } from "../../utils/permissionSections.js";
 
 const RoleList = () => {
   const [roles, setRoles] = useState([]);
@@ -17,6 +19,7 @@ const RoleList = () => {
   const [editRow, setEditRow] = useState(null);
   const [editKey, setEditKey] = useState("");
   const [editLabel, setEditLabel] = useState("");
+  const [editPermissions, setEditPermissions] = useState(emptyPermissions());
   const [saving, setSaving] = useState(false);
 
   const loadRoles = async () => {
@@ -29,6 +32,7 @@ const RoleList = () => {
       key: role.key,
       label: role.label,
       isSystem: role.isSystem,
+      permissions: sanitizePermissions(role.permissions),
     }));
     setRoles(mapped);
     setLoading(false);
@@ -52,6 +56,7 @@ const RoleList = () => {
     setEditRow(row);
     setEditKey(row.key);
     setEditLabel(row.label);
+    setEditPermissions(sanitizePermissions(row.permissions));
     setError("");
   };
 
@@ -59,6 +64,7 @@ const RoleList = () => {
     setEditRow(null);
     setEditKey("");
     setEditLabel("");
+    setEditPermissions(emptyPermissions());
     setError("");
   };
 
@@ -81,7 +87,8 @@ const RoleList = () => {
       const result = await updateRole(
         editRow._id,
         editKey.trim(),
-        editLabel.trim()
+        editLabel.trim(),
+        editPermissions
       );
       if (result.success) {
         handleCloseEdit();
@@ -235,8 +242,8 @@ const RoleList = () => {
       </div>
 
       {editRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl p-6 my-8 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">Edit Role</h3>
 
             {error && (
@@ -282,6 +289,11 @@ const RoleList = () => {
                   required
                 />
               </div>
+
+              <PermissionMatrix
+                value={editPermissions}
+                onChange={setEditPermissions}
+              />
 
               <div className="flex gap-3 pt-2">
                 <button

@@ -115,7 +115,7 @@ const ViewEmployee = () => {
                     <p><b>Travel:</b> Rs. {(employee.travel_allowance ?? 0).toLocaleString()}</p>
                     <p><b>Food:</b> Rs. {(employee.food_allowance ?? 0).toLocaleString()}</p>
                     <p><b>Holiday:</b> Rs. {(employee.holiday_payment ?? 0).toLocaleString()}</p>
-                    <p><b>Allowance-NS:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
+                    <p><b>Attendance Allowance:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
                     <p><b>Bonus:</b> Rs. {(employee.bonus ?? 0).toLocaleString()}</p>
                   </div>
                 </div>

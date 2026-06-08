@@ -1,6 +1,6 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import authorizeRoles from "../middleware/roleMiddleware.js";
+import { authorizePermission } from "../middleware/permissionMiddleware.js";
 import {
   getEmployeesForSalary,
   getNoPayForPeriod,
@@ -27,77 +27,77 @@ router.get("/me/payslip", authMiddleware, getMyPayslip);
 router.get(
   "/employee-history/:employeeId",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getEmployeeSalaryHistory
 );
 
 router.get(
   "/employees",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getEmployeesForSalary
 );
 
 router.get(
   "/no-pay",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getNoPayForPeriod
 );
 
 router.post(
   "/calculate",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "update", ...salaryRoles),
   calculateSalary
 );
 
 router.post(
   "/save",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "update", ...salaryRoles),
   saveSalaryRun
 );
 
 router.post(
   "/save-one",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "update", ...salaryRoles),
   saveOneSalaryEntry
 );
 
 router.post(
   "/signature",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "update", ...salaryRoles),
   savePayslipSignature
 );
 
 router.post(
   "/unfinalize",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "update", ...salaryRoles),
   unfinalizeSalaryRun
 );
 
 router.get(
   "/runs",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getSalaryRuns
 );
 
 router.get(
   "/contribution-history/:employeeId",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getContributionHistory
 );
 
 router.get(
   "/payslip/:employeeId",
   authMiddleware,
-  authorizeRoles(...salaryRoles),
+  authorizePermission("salary", "read", ...salaryRoles),
   getPayslip
 );
 

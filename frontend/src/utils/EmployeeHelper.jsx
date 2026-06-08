@@ -65,28 +65,6 @@ export const fetchDepartments = async () => {
 export const EmployeeButtons = ({ _id, refresh }) => {
   const navigate = useNavigate();
 
-  const handleRemove = async () => {
-    if (!window.confirm("Are you sure you want to delete this Employee?")) return;
-
-    try {
-      const response = await axios.delete(
-        `http://localhost:5000/api/employees/${_id}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token")}`
-          }
-        }
-      );
-
-      if (response.data.success) {
-        alert("Employee removed successfully");
-        refresh();
-      }
-    } catch {
-      alert("Error deleting Employee!");
-    }
-  };
-
   return (
     <div className="flex flex-wrap gap-1 justify-center max-w-64">
       <button 
@@ -132,17 +110,6 @@ export const EmployeeButtons = ({ _id, refresh }) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
         </svg>
         Leave
-      </button>
-
-      <button 
-        className="group relative inline-flex items-center px-4 py-0.5 text-xs font-medium text-white bg-linear-to-r from-red-500 to-rose-500 rounded-md hover:from-red-600 hover:to-rose-600 focus:ring-2 focus:ring-red-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md" 
-        onClick={handleRemove}
-        title="Remove Employee"
-      >
-        <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-        </svg>
-        Remove
       </button>
     </div>
   );

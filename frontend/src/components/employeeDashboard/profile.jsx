@@ -4,10 +4,14 @@ import { Link } from "react-router-dom";
 
 const Profile = () => {
   const [employee, setEmployee] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
+        setLoading(true);
+        setError("");
         const res = await axios.get(
           "http://localhost:5000/api/employees/me/profile",
           {
@@ -19,20 +23,38 @@ const Profile = () => {
 
         if (res.data.success) {
           setEmployee(res.data.employee);
+        } else {
+          setError(res.data.message || "Failed to load profile");
         }
-      } catch (error) {
-        console.error(error);
-        alert("Profile loading error");
+      } catch (err) {
+        console.error(err);
+        setError(
+          err.response?.data?.message ||
+            "Unable to load your profile. Please try again or contact HR."
+        );
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchProfile();
   }, []);
 
-  if (!employee) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         Loading profile...
+      </div>
+    );
+  }
+
+  if (error || !employee) {
+    return (
+      <div className="flex justify-center items-center min-h-screen p-6">
+        <div className="max-w-md text-center rounded-2xl border border-red-200 bg-red-50 p-8">
+          <p className="font-semibold text-red-700 mb-2">Profile could not be loaded</p>
+          <p className="text-sm text-red-600">{error || "Employee record not found for your account."}</p>
+        </div>
       </div>
     );
   }
@@ -119,7 +141,7 @@ const Profile = () => {
                     <p><b>Travel:</b> Rs. {(employee.travel_allowance ?? 0).toLocaleString()}</p>
                     <p><b>Food:</b> Rs. {(employee.food_allowance ?? 0).toLocaleString()}</p>
                     <p><b>Holiday:</b> Rs. {(employee.holiday_payment ?? 0).toLocaleString()}</p>
-                    <p><b>Allowance-NS:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
+                    <p><b>Attendance Allowance:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
                     <p><b>Bonus:</b> Rs. {(employee.bonus ?? 0).toLocaleString()}</p>
                   </div>
                 </div>

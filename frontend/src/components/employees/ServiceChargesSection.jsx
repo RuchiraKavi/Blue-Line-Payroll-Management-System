@@ -8,7 +8,7 @@ export const SERVICE_CHARGE_FIELDS = [
 export const emptyServiceCharges = () =>
   SERVICE_CHARGE_FIELDS.reduce((acc, { name }) => ({ ...acc, [name]: "" }), {});
 
-const ServiceChargesSection = ({ values, onChange }) => {
+const ServiceChargesSection = ({ values, onChange, fieldErrors = {} }) => {
   return (
     <div className="md:col-span-2 border border-slate-300 rounded-xl p-5 bg-slate-50/60">
       <h4 className="text-lg font-semibold text-slate-900 mb-4">Service Charges</h4>
@@ -30,8 +30,15 @@ const ServiceChargesSection = ({ values, onChange }) => {
               value={values[name] ?? ""}
               onChange={onChange}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 ${
+                fieldErrors[name]
+                  ? "border-red-500 focus:ring-red-100 focus:border-red-500"
+                  : "border-gray-300 focus:ring-slate-500 focus:border-transparent"
+              }`}
             />
+            {fieldErrors[name] && (
+              <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors[name]}</p>
+            )}
           </div>
         ))}
       </div>

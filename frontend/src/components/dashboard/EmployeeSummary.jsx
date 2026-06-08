@@ -73,11 +73,14 @@ const EmployeeSummary = () => {
   const [employee, setEmployee] = useState(null);
   const [pendingLeaveList, setPendingLeaveList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        if (!user?._id) {
+        setError("");
+        const userId = user?._id || user?.id;
+        if (!userId) {
           setLoading(false);
           return;
         }
@@ -86,37 +89,46 @@ const EmployeeSummary = () => {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
 
-        if (employeeRes.data.success) {
-          setEmployee(employeeRes.data.employee);
-          const employeeId = employeeRes.data.employee._id;
-
-          const balanceRes = await axios.get(
-            `http://localhost:5000/api/leaves/employees/${employeeId}/leave-balance`,
-            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-          );
-
-          if (balanceRes.data.success) {
-            setLeaveBalance(balanceRes.data.leaveBalance);
-          }
-
-          const leavesRes = await axios.get(`http://localhost:5000/api/leaves/user/${user._id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          });
-
-          if (leavesRes.data.success) {
-            const pending = leavesRes.data.leaves.filter((l) => l.status === "Pending");
-            setPendingLeaveList(pending);
-          }
+        if (!employeeRes.data.success || !employeeRes.data.employee) {
+          setError(employeeRes.data.message || "Employee profile not found");
+          return;
         }
-      } catch (error) {
-        console.error("Error fetching data:", error);
+
+        setEmployee(employeeRes.data.employee);
+        const employeeId = employeeRes.data.employee._id;
+
+        const balanceRes = await axios.get(
+          `http://localhost:5000/api/leaves/employees/${employeeId}/leave-balance`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+
+        if (balanceRes.data.success) {
+          setLeaveBalance(balanceRes.data.leaveBalance);
+        } else {
+          setLeaveBalance({ casual: 0, annual: 0, sick: 0 });
+        }
+
+        const leavesRes = await axios.get(`http://localhost:5000/api/leaves/user/${userId}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+
+        if (leavesRes.data.success) {
+          const pending = leavesRes.data.leaves.filter((l) => l.status === "Pending");
+          setPendingLeaveList(pending);
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        setError(
+          err.response?.data?.message ||
+            "Failed to load dashboard. Please refresh or contact HR."
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [user?._id]);
+  }, [user?._id, user?.id]);
 
   if (loading) {
     return (
@@ -129,13 +141,20 @@ const EmployeeSummary = () => {
     );
   }
 
-  if (!employee || !leaveBalance) {
+  if (error || !employee) {
     return (
-      <div className={`${PAGE_H} flex items-center justify-center`}>
-        <p className="font-semibold text-red-600">Failed to load dashboard</p>
+      <div className={`${PAGE_H} flex items-center justify-center p-6`}>
+        <div className="max-w-md text-center rounded-2xl border border-red-200 bg-red-50 p-8">
+          <p className="font-semibold text-red-700 mb-2">Failed to load dashboard</p>
+          <p className="text-sm text-red-600">
+            {error || "Your employee profile could not be loaded."}
+          </p>
+        </div>
       </div>
     );
   }
+
+  const balance = leaveBalance || { casual: 0, annual: 0, sick: 0 };
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -209,7 +228,7 @@ const EmployeeSummary = () => {
             <LeaveBalanceCard
               key={type}
               type={type}
-              remaining={leaveBalance[type] ?? 0}
+              remaining={balance[type] ?? 0}
               total={LEAVE_TOTALS[type]}
             />
           ))}

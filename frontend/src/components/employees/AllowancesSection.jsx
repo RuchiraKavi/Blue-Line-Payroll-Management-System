@@ -4,14 +4,14 @@ export const ALLOWANCE_FIELDS = [
   { name: "travel_allowance", label: "Travel" },
   { name: "food_allowance", label: "Food" },
   { name: "holiday_payment", label: "Holiday" },
-  { name: "allowance_ns", label: "Allowance-NS" },
+  { name: "allowance_ns", label: "Attendance Allowance" },
   { name: "bonus", label: "Bonus" },
 ];
 
 export const emptyAllowances = () =>
   ALLOWANCE_FIELDS.reduce((acc, { name }) => ({ ...acc, [name]: "" }), {});
 
-const AllowancesSection = ({ values, onChange }) => {
+const AllowancesSection = ({ values, onChange, fieldErrors = {} }) => {
   return (
     <div className="md:col-span-2 border border-amber-200 rounded-xl p-5 bg-amber-50/40">
       <h4 className="text-lg font-semibold text-amber-900 mb-4">Allowances</h4>
@@ -33,8 +33,15 @@ const AllowancesSection = ({ values, onChange }) => {
               value={values[name] ?? ""}
               onChange={onChange}
               placeholder="0.00"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 ${
+                fieldErrors[name]
+                  ? "border-red-500 focus:ring-red-100 focus:border-red-500"
+                  : "border-gray-300 focus:ring-amber-500 focus:border-transparent"
+              }`}
             />
+            {fieldErrors[name] && (
+              <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors[name]}</p>
+            )}
           </div>
         ))}
       </div>

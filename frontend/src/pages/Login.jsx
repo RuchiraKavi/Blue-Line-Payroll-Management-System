@@ -43,12 +43,23 @@ function Login() {
         localStorage.setItem("token", response.data.token);
         localStorage.setItem("role", user.role);
 
+        const hasAdminAccess =
+          user.role === "admin" ||
+          user.role === "hr" ||
+          user.role === "accountant" ||
+          (user.permissions &&
+            Object.values(user.permissions).some((section) => section?.read));
+
         if (user.role === "admin") {
           navigate("/admin-dashboard");
-        } else if (user.role === "employee") {
+        } else if (user.role === "employee" || user.role === "intern") {
           navigate("/employee-dashboard");
         } else if (user.role === "hr" || user.role === "accountant") {
           setShowChoice(true);
+        } else if (hasAdminAccess) {
+          navigate("/admin-dashboard");
+        } else {
+          navigate("/employee-dashboard");
         }
       }
     } catch (error) {

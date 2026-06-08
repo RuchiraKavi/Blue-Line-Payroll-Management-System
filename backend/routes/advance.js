@@ -1,6 +1,6 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import authorizeRoles from "../middleware/roleMiddleware.js";
+import { authorizePermission } from "../middleware/permissionMiddleware.js";
 import {
   requestAdvance,
   getMyAdvanceRequests,
@@ -11,25 +11,27 @@ import {
 
 const router = express.Router();
 
+const advanceRoles = ["admin", "hr", "account", "accountant", "account_manager"];
+
 router.post("/request", authMiddleware, requestAdvance);
 router.get("/my-requests", authMiddleware, getMyAdvanceRequests);
 
 router.get(
   "/",
   authMiddleware,
-  authorizeRoles("admin", "hr", "account", "accountant", "account_manager"),
+  authorizePermission("advance", "read", ...advanceRoles),
   getAdvanceRequests
 );
 router.get(
   "/accepted-totals",
   authMiddleware,
-  authorizeRoles("admin", "hr", "account", "accountant", "account_manager"),
+  authorizePermission("advance", "read", ...advanceRoles),
   getAcceptedTotals
 );
 router.put(
   "/:id/status",
   authMiddleware,
-  authorizeRoles("admin", "hr", "account", "accountant", "account_manager"),
+  authorizePermission("advance", "update", ...advanceRoles),
   updateAdvanceStatus
 );
 

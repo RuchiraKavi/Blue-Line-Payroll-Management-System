@@ -1,6 +1,10 @@
 import Role from "../models/Role.js";
 import User from "../models/User.js";
 import { migrateLegacyRoles } from "../utils/roleMigration.js";
+import {
+  PERMISSION_SECTIONS,
+  sanitizePermissions,
+} from "../utils/permissionSections.js";
 
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -8,6 +12,20 @@ const escapeRegex = (value) =>
 const ROLE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 const normalizeKey = (value) => String(value || "").trim().toLowerCase();
+
+const getPermissionSections = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      sections: PERMISSION_SECTIONS,
+    });
+  } catch {
+    return res.status(500).json({
+      success: false,
+      error: "Failed to load permission sections",
+    });
+  }
+};
 
 const getAllRoles = async (req, res) => {
   try {
@@ -28,9 +46,10 @@ const createRole = async (req, res) => {
   try {
     await migrateLegacyRoles();
 
-    const { key, label } = req.body;
+    const { key, label, permissions } = req.body;
     const normalizedKey = normalizeKey(key);
     const trimmedLabel = String(label || "").trim();
+    const sanitizedPermissions = sanitizePermissions(permissions);
 
     if (!normalizedKey) {
       return res.status(400).json({
@@ -69,6 +88,7 @@ const createRole = async (req, res) => {
       key: normalizedKey,
       label: trimmedLabel,
       isSystem: false,
+      permissions: sanitizedPermissions,
     });
 
     return res.status(201).json({
@@ -94,7 +114,7 @@ const updateRole = async (req, res) => {
     await migrateLegacyRoles();
 
     const { id } = req.params;
-    const { key, label } = req.body;
+    const { key, label, permissions } = req.body;
 
     const role = await Role.findById(id);
     if (!role) {
@@ -143,6 +163,9 @@ const updateRole = async (req, res) => {
     const oldKey = role.key;
     role.key = normalizedKey;
     role.label = trimmedLabel;
+    if (permissions !== undefined) {
+      role.permissions = sanitizePermissions(permissions);
+    }
     await role.save();
 
     if (oldKey !== normalizedKey) {
@@ -211,4 +234,10 @@ const deleteRole = async (req, res) => {
   }
 };
 
-export { getAllRoles, createRole, updateRole, deleteRole };
+export {
+  getPermissionSections,
+  getAllRoles,
+  createRole,
+  updateRole,
+  deleteRole,
+};
