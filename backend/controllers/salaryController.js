@@ -109,7 +109,7 @@ function prepareSalaryInput(input, employee, noPayDaysMap, hoursMap, month, year
 }
 
 /**
- * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
+ * EPF/ETF base = basic + fixed allowances (excludes overtime, reimbursements).
  * Employee EPF: 8% (deducted from salary). Employer EPF: 12%. Employer ETF: 3%.
  */
 function calculateEntry(input) {
@@ -118,19 +118,17 @@ function calculateEntry(input) {
   const food = Number(input.food_allowance) || 0;
   const holiday = Number(input.holiday_payment) || 0;
   const allowanceNs = Number(input.allowance_ns) || 0;
-  const bonus = Number(input.bonus) || 0;
   const joinCarryForward = Number(input.join_month_carry_forward) || 0;
   const noPay = Number(input.no_pay) || 0;
   const stampDuty = Number(input.stamp_duty) || 0;
   const mobileDed = Number(input.mobile_deduction) || 0;
   const salaryAdvance = Number(input.salary_advance) || 0;
 
-  const totalAllowances = travel + food + holiday + allowanceNs + bonus;
+  const totalAllowances = travel + food + holiday + allowanceNs;
   const grossSalary = basic + totalAllowances + joinCarryForward;
   // APIT/PAYE base: monthly gross remuneration after no-pay (annualized ×12, LKR 1.8M relief, progressive slabs)
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
   const totalForEpf = Math.max(
     0,
     basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
@@ -349,7 +347,6 @@ export const calculateSalary = async (req, res) => {
         food_allowance: resolveAmount(entry, employee, "food_allowance"),
         holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
         allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
-        bonus: resolveAmount(entry, employee, "bonus"),
         salary_advance: Number(entry.salary_advance) || 0,
         stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
         mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
@@ -440,7 +437,6 @@ export const saveSalaryRun = async (req, res) => {
           food_allowance: resolveAmount(entry, employee, "food_allowance"),
           holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
           allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
-          bonus: resolveAmount(entry, employee, "bonus"),
           salary_advance: Number(entry.salary_advance) || 0,
           stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
           mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
@@ -474,7 +470,6 @@ export const saveSalaryRun = async (req, res) => {
         food_allowance: computed.food_allowance,
         holiday_payment: computed.holiday_payment,
         allowance_ns: computed.allowance_ns,
-        bonus: computed.bonus,
         join_month_carry_forward: computed.join_month_carry_forward ?? 0,
         join_month_worked_days: computed.join_month_worked_days ?? 0,
         no_pay: computed.no_pay,
@@ -581,7 +576,6 @@ export const saveOneSalaryEntry = async (req, res) => {
         food_allowance: resolveAmount(entry, employee, "food_allowance"),
         holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
         allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
-        bonus: resolveAmount(entry, employee, "bonus"),
         salary_advance: Number(entry.salary_advance) || 0,
         stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
         mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
@@ -614,7 +608,6 @@ export const saveOneSalaryEntry = async (req, res) => {
       food_allowance: computed.food_allowance,
       holiday_payment: computed.holiday_payment,
       allowance_ns: computed.allowance_ns,
-      bonus: computed.bonus,
       join_month_carry_forward: computed.join_month_carry_forward ?? 0,
       join_month_worked_days: computed.join_month_worked_days ?? 0,
       no_pay: computed.no_pay,

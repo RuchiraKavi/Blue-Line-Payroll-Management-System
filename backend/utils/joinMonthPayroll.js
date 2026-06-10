@@ -71,7 +71,7 @@ function presentDatesForEmployee(presentDatesMap, employee) {
 }
 
 /**
- * Pro-rated earnings for join-month attendance days (basic + fixed allowances, excludes bonus).
+ * Pro-rated earnings for join-month attendance days (basic + fixed allowances).
  * Paid with the following month's salary.
  */
 export function calculateJoinMonthCarryForward(

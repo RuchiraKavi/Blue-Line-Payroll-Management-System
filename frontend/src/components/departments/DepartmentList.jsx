@@ -194,7 +194,7 @@ const DepartmentList = () => {
               </div>
 
               <DataTable
-                columns={columns(fetchDepartments, {
+                columns={columns({
                   expandedRowId,
                   onToggleExpand: handleToggleExpand,
                 })}

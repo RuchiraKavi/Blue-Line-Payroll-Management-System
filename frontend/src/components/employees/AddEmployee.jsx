@@ -15,6 +15,7 @@ import {
   validateMobileNumber,
   validateNic,
 } from "../../utils/employeeFieldValidation.js";
+import { SRI_LANKA_BANK_OPTIONS } from "../../utils/sriLankaBanks.js";
 
 const FieldError = ({ message }) =>
   message ? <p className="mt-1 text-xs text-red-600 font-medium">{message}</p> : null;
@@ -36,6 +37,100 @@ const mapServerErrorToFields = (message) => {
   if (lower.includes("department")) return { fieldErrors: { department: message } };
   if (lower.includes("designation")) return { fieldErrors: { designation: message } };
   return { formError: message };
+};
+
+const IMMEDIATE_VALIDATE_FIELDS = new Set([
+  "gender",
+  "marital_status",
+  "department",
+  "designation",
+  "dob",
+  "joined_date",
+  "bank_name",
+]);
+
+const ALL_FORM_FIELDS = [
+  "name",
+  "nic",
+  "email",
+  "mobile_number",
+  "address",
+  "dob",
+  "employee_id",
+  "gender",
+  "marital_status",
+  "joined_date",
+  "designation",
+  "department",
+  "basic_salary",
+  "password",
+  "bank_name",
+  "bank_branch",
+  "bank_account_number",
+  ...ALLOWANCE_FIELDS.map((f) => f.name),
+  ...SERVICE_CHARGE_FIELDS.map((f) => f.name),
+];
+
+const validateSingleField = (name, data) => {
+  switch (name) {
+    case "name":
+      return !data.name?.trim() ? "Name is required" : null;
+    case "nic":
+      return validateNic(data.nic);
+    case "email":
+      return validateEmail(data.email);
+    case "mobile_number":
+      return validateMobileNumber(data.mobile_number);
+    case "address":
+      return validateAddress(data.address);
+    case "dob":
+      return validateDobMinimumAge(data.dob);
+    case "employee_id":
+      return !data.employee_id?.trim() ? "Employee ID is required" : null;
+    case "gender":
+      return !data.gender ? "Gender is required" : null;
+    case "marital_status":
+      return !data.marital_status ? "Marital Status is required" : null;
+    case "joined_date":
+      return !data.joined_date ? "Joined Date is required" : null;
+    case "designation":
+      return !data.designation?.trim() ? "Designation is required" : null;
+    case "department":
+      return !data.department ? "Department is required" : null;
+    case "basic_salary":
+      if (!data.basic_salary || Number(data.basic_salary) <= 0) {
+        return "Basic Salary must be greater than 0";
+      }
+      return null;
+    case "password":
+      if (!data.password?.trim()) return "Password is required";
+      if (data.password.length < 6) return "Password must be at least 6 characters";
+      return null;
+    case "bank_name":
+      return !data.bank_name?.trim() ? "Please select a bank" : null;
+    case "bank_branch":
+      return !data.bank_branch?.trim() ? "Bank Branch is required" : null;
+    case "bank_account_number":
+      if (!data.bank_account_number?.trim()) {
+        return "Bank Account Number is required";
+      }
+      if (!/^[0-9]{8,18}$/.test(data.bank_account_number)) {
+        return "Bank Account Number must be 8–18 digits";
+      }
+      return null;
+    default: {
+      const isNumericProfileField =
+        ALLOWANCE_FIELDS.some((f) => f.name === name) ||
+        SERVICE_CHARGE_FIELDS.some((f) => f.name === name);
+      if (isNumericProfileField) {
+        const val = data[name];
+        if (val !== "" && val != null && Number(val) < 0) {
+          return "Amount cannot be negative";
+        }
+      }
+      return null;
+    }
+  }
 };
 
 const AddEmployee = () => {
@@ -67,6 +162,7 @@ const AddEmployee = () => {
     image: null,
   });
   const [fieldErrors, setFieldErrors] = useState({});
+  const [touchedFields, setTouchedFields] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [idLoading, setIdLoading] = useState(true);
@@ -158,86 +254,80 @@ const AddEmployee = () => {
     return () => timers.forEach(clearTimeout);
   }, [idLoading, credentialFieldsReady]);
 
-  const clearFieldError = (name) => {
+  const setFieldError = (name, error) => {
     setFieldErrors((prev) => {
-      if (!prev[name]) return prev;
       const next = { ...prev };
-      delete next[name];
+      if (error) next[name] = error;
+      else delete next[name];
       return next;
     });
+  };
+
+  const markFieldTouched = (name) => {
+    setTouchedFields((prev) => (prev[name] ? prev : { ...prev, [name]: true }));
+  };
+
+  const validateAndSetFieldError = (name, data) => {
+    const error = validateSingleField(name, data);
+    setFieldError(name, error);
+    return error;
+  };
+
+  const buildNextFormData = (name, value, files) => {
+    if (name === "image") {
+      return { ...formData, [name]: files[0] };
+    }
+    if (name === "mobile_number") {
+      return { ...formData, [name]: String(value).replace(/\D/g, "") };
+    }
+    if (name === "department") {
+      return { ...formData, department: value, designation: "" };
+    }
+    return { ...formData, [name]: value };
+  };
+
+  const runFieldValidation = (name, data, { markTouched = false } = {}) => {
+    if (markTouched) markFieldTouched(name);
+    if (touchedFields[name] || markTouched || IMMEDIATE_VALIDATE_FIELDS.has(name)) {
+      validateAndSetFieldError(name, data);
+    }
   };
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     setFormError("");
-    clearFieldError(name);
-    if (name === "image") {
-      setFormData((prevData) => ({ ...prevData, [name]: files[0] }));
-    } else if (name === "department") {
-      setFormData((prevData) => ({
-        ...prevData,
-        department: value,
-        designation: "",
-      }));
-    } else {
-      setFormData((prevData) => ({ ...prevData, [name]: value }));
+
+    const nextData = buildNextFormData(name, value, files);
+    setFormData(nextData);
+
+    runFieldValidation(name, nextData, {
+      markTouched: IMMEDIATE_VALIDATE_FIELDS.has(name),
+    });
+
+    if (name === "department") {
+      runFieldValidation("designation", nextData);
     }
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    if (!name) return;
+
+    let fieldValue = value;
+    if (name === "mobile_number") {
+      fieldValue = String(value).replace(/\D/g, "");
+    }
+
+    const nextData = { ...formData, [name]: fieldValue };
+    runFieldValidation(name, nextData, { markTouched: true });
   };
 
   const validateForm = () => {
     const errors = {};
-
-    if (!formData.name?.trim()) errors.name = "Name is required";
-
-    const nicError = validateNic(formData.nic);
-    if (nicError) errors.nic = nicError;
-
-    const emailError = validateEmail(formData.email);
-    if (emailError) errors.email = emailError;
-
-    const mobileError = validateMobileNumber(formData.mobile_number);
-    if (mobileError) errors.mobile_number = mobileError;
-
-    const addressError = validateAddress(formData.address);
-    if (addressError) errors.address = addressError;
-
-    const dobError = validateDobMinimumAge(formData.dob);
-    if (dobError) errors.dob = dobError;
-
-    if (!formData.employee_id?.trim()) errors.employee_id = "Employee ID is required";
-    if (!formData.gender) errors.gender = "Gender is required";
-    if (!formData.marital_status) errors.marital_status = "Marital Status is required";
-    if (!formData.joined_date) errors.joined_date = "Joined Date is required";
-    if (!formData.designation?.trim()) errors.designation = "Designation is required";
-    if (!formData.department) errors.department = "Department is required";
-    if (!formData.basic_salary || Number(formData.basic_salary) <= 0) {
-      errors.basic_salary = "Basic Salary must be greater than 0";
+    for (const name of ALL_FORM_FIELDS) {
+      const error = validateSingleField(name, formData);
+      if (error) errors[name] = error;
     }
-    if (!formData.password?.trim()) {
-      errors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      errors.password = "Password must be at least 6 characters";
-    }
-    if (!formData.bank_name?.trim()) errors.bank_name = "Bank Name is required";
-    if (!formData.bank_branch?.trim()) errors.bank_branch = "Bank Branch is required";
-
-    if (!formData.bank_account_number?.trim()) {
-      errors.bank_account_number = "Bank Account Number is required";
-    } else if (!/^[0-9]{8,18}$/.test(formData.bank_account_number)) {
-      errors.bank_account_number = "Bank Account Number must be 8–18 digits";
-    }
-
-    const numericProfileFields = [
-      ...ALLOWANCE_FIELDS.map((f) => f.name),
-      ...SERVICE_CHARGE_FIELDS.map((f) => f.name),
-    ];
-    for (const field of numericProfileFields) {
-      const val = formData[field];
-      if (val !== "" && val != null && Number(val) < 0) {
-        errors[field] = "Amount cannot be negative";
-      }
-    }
-
     return errors;
   };
 
@@ -255,14 +345,18 @@ const AddEmployee = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
-    setFieldErrors({});
 
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
+      setTouchedFields(
+        Object.fromEntries(ALL_FORM_FIELDS.map((field) => [field, true]))
+      );
       focusFirstFieldError(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     const profileDefaultNames = [
       ...ALLOWANCE_FIELDS.map((f) => f.name),
@@ -364,6 +458,7 @@ const AddEmployee = () => {
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
           onSubmit={handleSubmit}
           autoComplete="off"
+          noValidate
         >
           {/* Decoy fields — absorb browser autofill for login credentials */}
           <input
@@ -394,6 +489,7 @@ const AddEmployee = () => {
               value={formData.name}
               placeholder="Full Name"
               onChange={handleChange}
+              onBlur={handleBlur}
               autoComplete="off"
               className={fieldInputClass(fieldErrors.name)}
               required
@@ -412,6 +508,7 @@ const AddEmployee = () => {
                 placeholder="e.g. 200012345678 or 991234567V"
                 value={formData.nic}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 autoComplete="off"
                 className={fieldInputClass(fieldErrors.nic)}
                 required
@@ -435,6 +532,9 @@ const AddEmployee = () => {
               placeholder="e.g. 0771234567"
               value={formData.mobile_number}
               onChange={handleChange}
+              onBlur={handleBlur}
+              inputMode="numeric"
+              maxLength={10}
               autoComplete="off"
               className={fieldInputClass(fieldErrors.mobile_number)}
               required
@@ -453,6 +553,7 @@ const AddEmployee = () => {
               placeholder="Permanent / residential address"
               value={formData.address}
               onChange={handleChange}
+              onBlur={handleBlur}
               autoComplete="off"
               className={`${fieldInputClass(fieldErrors.address)} resize-y`}
               required
@@ -487,6 +588,7 @@ const AddEmployee = () => {
               value={formData.email}
               placeholder="Employee email address"
               onChange={handleChange}
+              onBlur={handleBlur}
               autoComplete="off"
               readOnly={!credentialFieldsReady}
               onFocus={() => setCredentialFieldsReady(true)}
@@ -664,6 +766,7 @@ const AddEmployee = () => {
               value={formData.basic_salary}
               placeholder="0.00"
               onChange={handleChange}
+              onBlur={handleBlur}
               autoComplete="off"
               className={fieldInputClass(fieldErrors.basic_salary)}
               required
@@ -671,25 +774,26 @@ const AddEmployee = () => {
             <FieldError message={fieldErrors.basic_salary} />
           </div>
 
-          <AllowancesSection values={formData} onChange={handleChange} fieldErrors={fieldErrors} />
+          <AllowancesSection values={formData} onChange={handleChange} onBlur={handleBlur} fieldErrors={fieldErrors} />
 
-          <ServiceChargesSection values={formData} onChange={handleChange} fieldErrors={fieldErrors} />
+          <ServiceChargesSection values={formData} onChange={handleChange} onBlur={handleBlur} fieldErrors={fieldErrors} />
 
           {/* Bank Name */}
             <div id="field-bank_name">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Bank Name <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                name="bank_name"
-                placeholder="Bank Name"
-                value={formData.bank_name}
-                onChange={handleChange}
-                autoComplete="off"
-                className={fieldInputClass(fieldErrors.bank_name)}
-                required
-              />
+              <div className={fieldErrors.bank_name ? "rounded-xl ring-2 ring-red-300" : ""}>
+                <SelectInput
+                  name="bank_name"
+                  value={formData.bank_name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Select Bank"
+                  searchable
+                  options={SRI_LANKA_BANK_OPTIONS}
+                />
+              </div>
               <FieldError message={fieldErrors.bank_name} />
             </div>
 
@@ -704,6 +808,7 @@ const AddEmployee = () => {
                 placeholder="Branch Name"
                 value={formData.bank_branch}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 autoComplete="off"
                 className={fieldInputClass(fieldErrors.bank_branch)}
                 required
@@ -722,6 +827,7 @@ const AddEmployee = () => {
                 placeholder="Account Number"
                 value={formData.bank_account_number}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 autoComplete="off"
                 className={fieldInputClass(fieldErrors.bank_account_number)}
                 required
@@ -741,6 +847,7 @@ const AddEmployee = () => {
               value={formData.password}
               placeholder="Enter password (min 6 characters)"
               onChange={handleChange}
+              onBlur={handleBlur}
               autoComplete="new-password"
               readOnly={!credentialFieldsReady}
               onFocus={() => setCredentialFieldsReady(true)}

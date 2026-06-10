@@ -8,7 +8,7 @@ export const SERVICE_CHARGE_FIELDS = [
 export const emptyServiceCharges = () =>
   SERVICE_CHARGE_FIELDS.reduce((acc, { name }) => ({ ...acc, [name]: "" }), {});
 
-const ServiceChargesSection = ({ values, onChange, fieldErrors = {} }) => {
+const ServiceChargesSection = ({ values, onChange, onBlur, fieldErrors = {} }) => {
   return (
     <div className="md:col-span-2 border border-slate-300 rounded-xl p-5 bg-slate-50/60">
       <h4 className="text-lg font-semibold text-slate-900 mb-4">Service Charges</h4>
@@ -29,6 +29,7 @@ const ServiceChargesSection = ({ values, onChange, fieldErrors = {} }) => {
               step="0.01"
               value={values[name] ?? ""}
               onChange={onChange}
+              onBlur={onBlur}
               placeholder="0.00"
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 ${
                 fieldErrors[name]

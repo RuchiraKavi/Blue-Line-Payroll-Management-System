@@ -215,11 +215,23 @@ export function resolveWorkingHoursForRow(row, isAbsent) {
   );
 }
 /**
- * Find employee by employee_id (exact + case-insensitive) or employee_name.
+ * Find employee by employee_id (exact + case-insensitive) or foreign / employee name.
  */
 export async function findEmployeeForAttendanceRow(row, Employee, User) {
   const empId = normalizeCsvCell(getCsvField(row, "employee_id", "employeeId", "employee id"));
-  const empName = normalizeCsvCell(getCsvField(row, "employee_name", "employeeName", "employee name", "name"));
+  const empName = normalizeCsvCell(
+    getCsvField(
+      row,
+      "foreign name",
+      "foreign_name",
+      "foreignName",
+      "foreign name",
+      "employee_name",
+      "employeeName",
+      "employee name",
+      "name"
+    )
+  );
   if (empId) {
     let employee = await Employee.findOne({ employee_id: empId });
     if (!employee) {

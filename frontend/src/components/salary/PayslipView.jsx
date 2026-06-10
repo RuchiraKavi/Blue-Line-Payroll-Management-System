@@ -118,7 +118,6 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
     hasPayslipAmount(data.food_allowance) && { label: "Food Allowance", value: n(data.food_allowance) },
     hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", value: n(data.holiday_payment) },
     hasPayslipAmount(data.allowance_ns) && { label: "Attendance Allowance", value: n(data.allowance_ns) },
-    hasPayslipAmount(data.bonus) && { label: "Bonus", value: n(data.bonus) },
     showJoinMonthPay && {
       label: `Join Month Pay (${joinMonthWorkedDays} attendance days)`,
       value: n(joinMonthCarry),
@@ -438,7 +437,6 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
     hasPayslipAmount(data.food_allowance) && { label: "Food Allowance", amount: data.food_allowance },
     hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", amount: data.holiday_payment },
     hasPayslipAmount(data.allowance_ns) && { label: "Attendance Allowance", amount: data.allowance_ns },
-    hasPayslipAmount(data.bonus) && { label: "Bonus", amount: data.bonus },
     showJoinMonthPay && {
       label: `Join Month Pay (${joinMonthWorkedDays} attendance days)`,
       amount: joinMonthCarry,

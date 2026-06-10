@@ -65,7 +65,6 @@ export function buildEmployeeRegistrationEmailHtml({
   foodAllowance,
   holidayPayment,
   allowanceNs,
-  bonus,
   stampDuty,
   mobileDeduction,
   bankName,
@@ -102,7 +101,6 @@ export function buildEmployeeRegistrationEmailHtml({
     row("Food Allowance", formatCurrency(foodAllowance)),
     row("Holiday Payment", formatCurrency(holidayPayment)),
     row("Attendance Allowance", formatCurrency(allowanceNs)),
-    row("Bonus", formatCurrency(bonus)),
     row("Stamp Duty", formatCurrency(stampDuty)),
     row("Mobile Deduction", formatCurrency(mobileDeduction)),
   ].join("");

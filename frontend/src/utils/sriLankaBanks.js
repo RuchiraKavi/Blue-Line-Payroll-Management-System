@@ -1,0 +1,38 @@
+/** Licensed banks in Sri Lanka (CBSL commercial + specialised banks). */
+export const SRI_LANKA_BANKS = [
+  "Amana Bank PLC",
+  "Bank of Ceylon",
+  "Bank of China Ltd.",
+  "Cargills Bank PLC",
+  "Citibank, N.A.",
+  "Commercial Bank of Ceylon PLC",
+  "Deutsche Bank AG",
+  "DFCC Bank PLC",
+  "Habib Bank Ltd.",
+  "Hatton National Bank PLC",
+  "Housing Development Finance Corporation Bank of Sri Lanka",
+  "Indian Bank",
+  "Indian Overseas Bank",
+  "MCB Bank Ltd.",
+  "National Development Bank PLC",
+  "National Savings Bank",
+  "Nations Trust Bank PLC",
+  "Pan Asia Banking Corporation PLC",
+  "People's Bank",
+  "Pradeshiya Sanwardhana Bank",
+  "Public Bank Berhad",
+  "Sampath Bank PLC",
+  "Sanasa Development Bank PLC",
+  "Seylan Bank PLC",
+  "Sri Lanka Savings Bank Ltd.",
+  "Standard Chartered Bank",
+  "State Bank of India",
+  "State Mortgage & Investment Bank",
+  "The Hongkong & Shanghai Banking Corporation Ltd.",
+  "Union Bank of Colombo PLC",
+];
+
+export const SRI_LANKA_BANK_OPTIONS = [
+  { value: "", label: "Select Bank" },
+  ...SRI_LANKA_BANKS.map((bank) => ({ value: bank, label: bank })),
+];

@@ -45,7 +45,6 @@ const defaultRow = (emp) => ({
   food_allowance: Number(emp.food_allowance) || 0,
   holiday_payment: Number(emp.holiday_payment) || 0,
   allowance_ns: Number(emp.allowance_ns) || 0,
-  bonus: Number(emp.bonus) || 0,
   no_pay: Number(emp.no_pay) || 0,
   no_pay_days: Number(emp.no_pay_days) || 0,
   salary_advance: 0,
@@ -82,14 +81,13 @@ const mergeNoPayApiIntoRow = (row, np) => {
   };
 };
 
-/** Compute totals (Sri Lanka: EPF/ETF base excludes bonus; Employee EPF 8%, Employer EPF 12%, ETF 3%). */
+/** Compute totals (Sri Lanka: Employee EPF 8%, Employer EPF 12%, ETF 3%). */
 function computeRow(row, payrollMonth, payrollYear) {
   const basic = Number(row.basic_salary) || 0;
   const travel = Number(row.travel_allowance) || 0;
   const food = Number(row.food_allowance) || 0;
   const holiday = Number(row.holiday_payment) || 0;
   const allowanceNs = Number(row.allowance_ns) || 0;
-  const bonus = Number(row.bonus) || 0;
   const joinCarryForward = Number(row.join_month_carry_forward) || 0;
   const joinMonthWorkedDays = Number(row.join_month_worked_days) || 0;
   const role = row.role || row.employee?.role || "";
@@ -107,11 +105,10 @@ function computeRow(row, payrollMonth, payrollYear) {
   const mobileDed = Number(row.mobile_deduction) || 0;
   const salaryAdvance = Number(row.salary_advance) || 0;
 
-  const totalAllowances = travel + food + holiday + allowanceNs + bonus;
+  const totalAllowances = travel + food + holiday + allowanceNs;
   const grossSalary = basic + totalAllowances + joinCarryForward;
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
   const totalForEpf = Math.max(
     0,
     basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
@@ -212,7 +209,6 @@ const SalaryPage = () => {
         food_allowance: entry.food_allowance ?? 0,
         holiday_payment: entry.holiday_payment ?? 0,
         allowance_ns: entry.allowance_ns ?? 0,
-        bonus: entry.bonus ?? 0,
         // Keep no_pay from row (calculated from DB nopay leave count); do not overwrite with saved entry
         no_pay: row.no_pay ?? 0,
         // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
@@ -510,7 +506,6 @@ const SalaryPage = () => {
         food_allowance: row.food_allowance,
         holiday_payment: row.holiday_payment,
         allowance_ns: row.allowance_ns,
-        bonus: row.bonus,
         no_pay: row.no_pay,
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
@@ -545,7 +540,6 @@ const SalaryPage = () => {
           food_allowance: row.food_allowance,
           holiday_payment: row.holiday_payment,
           allowance_ns: row.allowance_ns,
-          bonus: row.bonus,
           no_pay: row.no_pay,
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
@@ -711,7 +705,6 @@ const SalaryPage = () => {
         food_allowance: payslipData.food_allowance ?? 0,
         holiday_payment: payslipData.holiday_payment ?? 0,
         allowance_ns: payslipData.allowance_ns ?? 0,
-        bonus: payslipData.bonus ?? 0,
         no_pay: payslipData.no_pay ?? 0,
         salary_advance: payslipData.salary_advance ?? 0,
         stamp_duty: payslipData.stamp_duty ?? 0,
@@ -814,7 +807,6 @@ const SalaryPage = () => {
         food_allowance: row.food_allowance,
         holiday_payment: row.holiday_payment,
         allowance_ns: row.allowance_ns,
-        bonus: row.bonus,
         no_pay: row.no_pay,
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
@@ -872,7 +864,6 @@ const SalaryPage = () => {
           food_allowance: row.food_allowance,
           holiday_payment: row.holiday_payment,
           allowance_ns: row.allowance_ns,
-          bonus: row.bonus,
           no_pay: row.no_pay,
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
@@ -1349,10 +1340,6 @@ const SalaryPage = () => {
                             <span className="text-gray-700">Attendance Allowance</span>
                             <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
-                          <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Bonus</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
-                          </label>
                           {hasJoinMonthPay(computed.join_month_carry_forward) && (
                             <label className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
                               <span className="text-indigo-900" title="Present days from join-month attendance, paid with this salary">
@@ -1404,7 +1391,7 @@ const SalaryPage = () => {
                             <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
                           </div>
                           <div className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                            <span className="text-gray-700">EPF/ETF earnings base</span>
                             <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
                           </div>
                           <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
@@ -1756,10 +1743,6 @@ const SalaryPage = () => {
                           <span className="text-gray-700">Attendance Allowance</span>
                           <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
-                        <label className="flex justify-between items-center gap-2">
-                          <span className="text-gray-700">Bonus</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
-                        </label>
                         {hasJoinMonthPay(computed.join_month_carry_forward) && (
                           <div className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
                             <span className="text-indigo-900" title="Work days from join month, paid with this salary">
@@ -1811,7 +1794,7 @@ const SalaryPage = () => {
                           <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
                         </div>
                         <div className="flex justify-between items-center gap-2">
-                          <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                          <span className="text-gray-700">EPF/ETF earnings base</span>
                           <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
                         </div>
                         <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">

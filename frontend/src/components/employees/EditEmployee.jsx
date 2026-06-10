@@ -103,7 +103,6 @@ const EditEmployee = () => {
           food_allowance: emp.food_allowance ?? "",
           holiday_payment: emp.holiday_payment ?? "",
           allowance_ns: emp.allowance_ns ?? "",
-          bonus: emp.bonus ?? "",
           stamp_duty: emp.stamp_duty ?? "",
           mobile_deduction: emp.mobile_deduction ?? "",
           bank_name: emp.bank_details?.bank_name || "",

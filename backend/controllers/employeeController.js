@@ -111,7 +111,6 @@ const addEmployee = async (req, res) => {
       food_allowance,
       holiday_payment,
       allowance_ns,
-      bonus,
       stamp_duty,
       mobile_deduction,
     } = req.body;
@@ -288,7 +287,6 @@ const addEmployee = async (req, res) => {
       food_allowance: parseAllowance(food_allowance),
       holiday_payment: parseAllowance(holiday_payment),
       allowance_ns: parseAllowance(allowance_ns),
-      bonus: parseAllowance(bonus),
       stamp_duty: parseAllowance(stamp_duty),
       mobile_deduction: parseAllowance(mobile_deduction),
       role: assignedRole,
@@ -328,7 +326,6 @@ const addEmployee = async (req, res) => {
         foodAllowance: parseAllowance(food_allowance),
         holidayPayment: parseAllowance(holiday_payment),
         allowanceNs: parseAllowance(allowance_ns),
-        bonus: parseAllowance(bonus),
         stampDuty: parseAllowance(stamp_duty),
         mobileDeduction: parseAllowance(mobile_deduction),
         bankName: bank_name,
@@ -494,7 +491,6 @@ const updateEmployee = async (req, res) => {
       food_allowance,
       holiday_payment,
       allowance_ns,
-      bonus,
       stamp_duty,
       mobile_deduction,
     } = req.body;
@@ -716,7 +712,6 @@ const updateEmployee = async (req, res) => {
         allowance_ns,
         employee.allowance_ns
       );
-      employeeUpdate.bonus = parseAllowance(bonus, employee.bonus);
       employeeUpdate.stamp_duty = parseAllowance(
         stamp_duty,
         employee.stamp_duty

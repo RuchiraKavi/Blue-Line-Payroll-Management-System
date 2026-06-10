@@ -17,9 +17,9 @@ export const ATTENDANCE_CSV_HEADERS = [
 
 /** Example rows — replace with your employees; delete samples before bulk upload if needed. */
 const SAMPLE_ROWS = [
-  ["BL001", "5/31/2026", "Ruchira Kavinda", "8:30", "17:30", "8:30", "Present", "0", "0", "0"],
-  ["BL002", "5/31/2026", "Bhagya", "-", "-", "-", "Absent", "0", "1", "0"],
-  ["BL003", "5/31/2026", "Yakuna", "8:30", "17:30", "8:30", "Present", "0", "0", "0"],
+  ["BL001", "5/31/2026", "John", "8:30", "17:30", "8:30", "Present", "0", "0", "0"],
+  ["BL002", "5/31/2026", "Tom", "-", "-", "-", "Absent", "0", "1", "0"],
+  ["BL003", "5/31/2026", "Alice", "8:30", "17:30", "8:30", "Present", "0", "0", "0"],
 ];
 
 function escapeCsvCell(value) {
