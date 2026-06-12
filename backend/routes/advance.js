@@ -11,7 +11,7 @@ import {
 
 const router = express.Router();
 
-const advanceRoles = ["admin", "hr", "account", "accountant", "account_manager"];
+const advanceRoles = ["admin", "hr", "finance"];
 
 router.post("/request", authMiddleware, requestAdvance);
 router.get("/my-requests", authMiddleware, getMyAdvanceRequests);

@@ -55,7 +55,7 @@ function App() {
     if (!user) return <Navigate to="/login" />;
     const role = normalizeRole(user.role);
 
-    const adminRoles = ["admin", "hr", "accountant"];
+    const adminRoles = ["admin", "hr", "finance"];
     const employeeRoles = ["employee", "intern"];
 
     if (employeeRoles.includes(role)) {
@@ -88,7 +88,7 @@ function App() {
           path="/admin-dashboard"
           element={
             <PrivateRoutes>
-              <ProtectedRoute allowedRoles={["admin", "hr", "account", "account_manager", "accountant", "hr_manager"]}>
+              <ProtectedRoute allowedRoles={["admin", "hr", "hr_manager", "finance"]}>
                 <AdminDashboard />
               </ProtectedRoute>
             </PrivateRoutes>
@@ -289,7 +289,7 @@ function App() {
           <Route
             path="salary"
             element={
-              <ProtectedRoute allowedRoles={["admin", "hr", "hr_manager", "account", "account_manager", "accountant"]}>
+              <ProtectedRoute allowedRoles={["admin", "hr", "hr_manager", "finance"]}>
                 <SalaryPage />
               </ProtectedRoute>
             }
@@ -298,7 +298,7 @@ function App() {
           <Route
             path="advance-requests"
             element={
-              <ProtectedRoute allowedRoles={["admin", "hr", "account", "account_manager", "accountant"]}>
+              <ProtectedRoute allowedRoles={["admin", "hr", "finance"]}>
                 <AdvanceRequestList />
               </ProtectedRoute>
             }

@@ -7,6 +7,7 @@ import AllowancesSection, { emptyAllowances, ALLOWANCE_FIELDS } from "./Allowanc
 import ServiceChargesSection, { emptyServiceCharges, SERVICE_CHARGE_FIELDS } from "./ServiceChargesSection";
 import DateInput from "../ui/DateInput.jsx";
 import SelectInput from "../ui/SelectInput.jsx";
+import MoneyInput from "../ui/MoneyInput.jsx";
 import {
   getMaxDobForMinimumAge,
   validateAddress,
@@ -16,6 +17,8 @@ import {
   validateNic,
 } from "../../utils/employeeFieldValidation.js";
 import { SRI_LANKA_BANK_OPTIONS } from "../../utils/sriLankaBanks.js";
+import { JOB_TYPE_OPTIONS, validateJobType } from "../../utils/jobTypes.js";
+import normalizeRole from "../../utils/normalizeRole.js";
 
 const FieldError = ({ message }) =>
   message ? <p className="mt-1 text-xs text-red-600 font-medium">{message}</p> : null;
@@ -44,6 +47,7 @@ const IMMEDIATE_VALIDATE_FIELDS = new Set([
   "marital_status",
   "department",
   "designation",
+  "job_type",
   "dob",
   "joined_date",
   "bank_name",
@@ -62,6 +66,7 @@ const ALL_FORM_FIELDS = [
   "joined_date",
   "designation",
   "department",
+  "job_type",
   "basic_salary",
   "password",
   "bank_name",
@@ -97,6 +102,8 @@ const validateSingleField = (name, data) => {
       return !data.designation?.trim() ? "Designation is required" : null;
     case "department":
       return !data.department ? "Department is required" : null;
+    case "job_type":
+      return validateJobType(data.job_type);
     case "basic_salary":
       if (!data.basic_salary || Number(data.basic_salary) <= 0) {
         return "Basic Salary must be greater than 0";
@@ -152,6 +159,7 @@ const AddEmployee = () => {
     joined_date: "",
     designation: "",
     department: "",
+    job_type: "",
     basic_salary: "",
     ...emptyAllowances(),
     ...emptyServiceCharges(),
@@ -207,15 +215,7 @@ const AddEmployee = () => {
     getDepartmentsAndId();
   }, []);
 
-  // Check authorization - normalize roles for checking (hr_manager -> hr, account_manager -> accountant)
   useEffect(() => {
-    const normalizeRole = (r) => {
-      if (!r) return r;
-      const x = String(r).toLowerCase();
-      if (x === "hr_manager") return "hr";
-      if (x === "account_manager" || x === "accountant") return "accountant";
-      return x;
-    };
     const userRole = normalizeRole(user?.role);
     const allowedToAdd = ["admin", "hr"];
     
@@ -755,20 +755,35 @@ const AddEmployee = () => {
             )}
           </div>
 
+          {/* Job Type */}
+          <div id="field-job_type">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Job Type <span className="text-red-500">*</span>
+            </label>
+            <div className={fieldErrors.job_type ? "rounded-xl ring-2 ring-red-300" : ""}>
+              <SelectInput
+                name="job_type"
+                value={formData.job_type}
+                onChange={handleChange}
+                required
+                placeholder="Select Job Type"
+                options={JOB_TYPE_OPTIONS}
+              />
+            </div>
+            <FieldError message={fieldErrors.job_type} />
+          </div>
+
           {/* Basic Salary */}
           <div id="field-basic_salary">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Basic Salary <span className="text-red-500">*</span>
             </label>
-            <input
-              type="number"
+            <MoneyInput
               name="basic_salary"
               value={formData.basic_salary}
-              placeholder="0.00"
               onChange={handleChange}
               onBlur={handleBlur}
-              autoComplete="off"
-              className={fieldInputClass(fieldErrors.basic_salary)}
+              hasError={Boolean(fieldErrors.basic_salary)}
               required
             />
             <FieldError message={fieldErrors.basic_salary} />

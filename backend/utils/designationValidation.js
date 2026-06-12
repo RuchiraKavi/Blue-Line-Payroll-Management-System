@@ -2,8 +2,11 @@ import Designation from "../models/Designation.js";
 import DepartmentDesignation from "../models/DepartmentDesignation.js";
 import { migrateLegacyDesignations } from "./designationMigration.js";
 
-const escapeRegex = (value) =>
+export const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const designationsMatch = (left, right) =>
+  String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
 
 export const validateDesignationForDepartment = async (
   designationTitle,

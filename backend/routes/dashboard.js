@@ -14,9 +14,7 @@ router.get(
     "admin",
     "hr",
     "hr_manager",
-    "account",
-    "accountant",
-    "account_manager"
+    "finance"
   ),
   getDashboardStats
 );

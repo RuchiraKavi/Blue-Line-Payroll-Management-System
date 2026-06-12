@@ -1,12 +1,6 @@
 // backend/middleware/roleMiddleware.js
 
-const normalizeRole = (role) => {
-  if (!role) return role;
-  const r = role.toLowerCase();
-  if (r === "hr_manager") return "hr";
-  if (r === "account_manager" || r === "accountant") return "account";
-  return r;
-};
+import { normalizeRole } from "../utils/normalizeRole.js";
 
 const authorizeRoles = (...allowedRoles) => {
   const normalizedAllowed = allowedRoles.map(normalizeRole);

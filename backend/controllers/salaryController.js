@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Employee from "../models/Employee.js";
 import SalaryRun from "../models/SalaryRun.js";
+import User from "../models/User.js";
+import Role from "../models/Role.js";
 import Leave from "../models/Leave.js";
 import { calculateMonthlyApit } from "../utils/sriLankaPaye.js";
 import {
@@ -8,7 +10,13 @@ import {
   countNoPayLeaveDaysInMonth,
   getAttendanceHoursByEmployeeForMonth,
   getPresentAttendanceDatesByEmployeeForMonth,
+  resolveAttendanceAllowance,
 } from "../utils/payrollAttendance.js";
+import {
+  getEmployeeEffectiveRole,
+  isInternRole,
+  resolveEpfEtfPayments,
+} from "../utils/internPayroll.js";
 import { isFuturePayPeriod, assertPayPeriodStarted } from "../utils/payPeriod.js";
 import {
   applyJoinMonthCarryToSalaryInput,
@@ -16,6 +24,12 @@ import {
   getPreviousPayPeriod,
   isEmployeeEligibleForPayPeriod,
 } from "../utils/joinMonthPayroll.js";
+import { getRequestUserId } from "../utils/rolePermissions.js";
+import {
+  FINANCE_ROLE_KEYS,
+  isFinanceRole,
+  normalizeRole,
+} from "../utils/normalizeRole.js";
 
 /** Normalize entry.employee to a string id (handles ObjectId, string, or BSON-style object). */
 function entryEmployeeIdString(entry) {
@@ -51,6 +65,85 @@ function resolvePayslipSignature(run, entry) {
   };
 }
 
+/** Build approver fields from a user id (name, designation, role label). */
+async function resolveApproverFromUserId(userId) {
+  if (!userId) return null;
+
+  const user = await User.findById(userId).select("name role").lean();
+  if (!user) return null;
+
+  const employee = await Employee.findOne({ userId: user._id }).select("designation").lean();
+  const roleKey = normalizeRole(user.role);
+  const roleDoc = roleKey
+    ? await Role.findOne({ key: roleKey }).collation({ locale: "en", strength: 2 }).select("label").lean()
+    : null;
+  const roleLabel =
+    roleDoc?.label ||
+    (roleKey ? roleKey.charAt(0).toUpperCase() + roleKey.slice(1) : null);
+
+  return {
+    approved_by_user_id: user._id,
+    approved_by_name: user.name || null,
+    approved_by_designation: employee?.designation || roleLabel || null,
+    approved_by_role: roleLabel || null,
+  };
+}
+
+/** Resolve approver details from the authenticated user (name, designation, role label). */
+async function resolveApproverDetails(req) {
+  const userId = getRequestUserId(req.user);
+  return resolveApproverFromUserId(userId);
+}
+
+/** Fallback approver when legacy runs have a signature but no stored approver. */
+async function resolveDefaultSalaryApprover() {
+  const user = await User.findOne({
+    role: { $in: [...FINANCE_ROLE_KEYS, "admin"] },
+  })
+    .sort({ updatedAt: -1 })
+    .select("_id name role")
+    .lean();
+  return resolveApproverFromUserId(user?._id);
+}
+
+async function applyApproverToRun(month, year, req) {
+  const approver = await resolveApproverDetails(req);
+  if (!approver) return null;
+
+  return SalaryRun.findOneAndUpdate(
+    { month: Number(month), year: Number(year) },
+    { $set: approver },
+    { new: true }
+  ).lean();
+}
+
+/** Fill missing approver display fields on a saved run (and persist when possible). */
+async function ensureRunApprovalHydrated(run, req = null) {
+  if (!run) return run;
+  if (String(run.approved_by_name || "").trim()) return run;
+
+  let details = null;
+  if (run.approved_by_user_id) {
+    details = await resolveApproverFromUserId(run.approved_by_user_id);
+  } else if (run.signature_data_url || run.finalized) {
+    const viewerRole = normalizeRole(req?.user?.role);
+    if (req && (viewerRole === "admin" || isFinanceRole(viewerRole))) {
+      details = await resolveApproverDetails(req);
+    }
+    if (!details) {
+      details = await resolveDefaultSalaryApprover();
+    }
+  }
+
+  if (!details?.approved_by_name) return run;
+
+  if (!run.approved_by_name || !run.approved_by_user_id) {
+    await SalaryRun.updateOne({ _id: run._id }, { $set: details });
+  }
+
+  return { ...run, ...details };
+}
+
 /** Use entry value when provided; otherwise fall back to employee profile default. */
 function resolveAmount(entry, employee, field) {
   const v = entry?.[field];
@@ -77,7 +170,11 @@ function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap, month, year
   const noPayDays = noPayDaysMap.get(empId) || 0;
   const attendanceInfo = hoursMap.get(empId);
   const payload = buildNoPayPayloadForEmployee(
-    { _id: employee._id, basic_salary: input.basic_salary ?? employee.basic_salary, role: employee.role },
+    {
+      _id: employee._id,
+      basic_salary: input.basic_salary ?? employee.basic_salary,
+      role: getEmployeeEffectiveRole(employee),
+    },
     noPayDays,
     attendanceInfo,
     month,
@@ -86,9 +183,11 @@ function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap, month, year
   return {
     ...input,
     no_pay: payload.no_pay,
+    no_pay_calculated: payload.no_pay_calculated ?? payload.no_pay,
     no_pay_days: payload.no_pay_days,
     no_pay_leave: payload.no_pay_leave,
     no_pay_from_hours: payload.no_pay_from_hours,
+    intern_grace_applied: payload.intern_grace_applied ?? false,
     standard_hours: payload.standard_hours,
     actual_hours: payload.actual_hours,
     shortfall_hours: payload.shortfall_hours,
@@ -105,11 +204,15 @@ function prepareSalaryInput(input, employee, noPayDaysMap, hoursMap, month, year
     year,
     prevPresentDatesMap
   );
-  return applyResolvedNoPay(withJoin, employee, noPayDaysMap, hoursMap, month, year);
+  const withNoPay = applyResolvedNoPay(withJoin, employee, noPayDaysMap, hoursMap, month, year);
+  return {
+    ...withNoPay,
+    role: getEmployeeEffectiveRole(employee),
+  };
 }
 
 /**
- * EPF/ETF base = basic + fixed allowances (excludes overtime, reimbursements).
+ * EPF/ETF base = basic + fixed allowances (excludes bonus, overtime, reimbursements).
  * Employee EPF: 8% (deducted from salary). Employer EPF: 12%. Employer ETF: 3%.
  */
 function calculateEntry(input) {
@@ -117,31 +220,50 @@ function calculateEntry(input) {
   const travel = Number(input.travel_allowance) || 0;
   const food = Number(input.food_allowance) || 0;
   const holiday = Number(input.holiday_payment) || 0;
-  const allowanceNs = Number(input.allowance_ns) || 0;
+  const allowanceNsFull = Number(input.allowance_ns) || 0;
+  const allowanceNs = resolveAttendanceAllowance(allowanceNsFull, {
+    role: input.role || "",
+    standard_hours: input.standard_hours,
+    actual_hours: input.actual_hours,
+    has_attendance_records: input.has_attendance_records,
+  });
+  const bonus = Number(input.bonus) || 0;
   const joinCarryForward = Number(input.join_month_carry_forward) || 0;
-  const noPay = Number(input.no_pay) || 0;
+  const noPayCalculated =
+    Number(input.no_pay_calculated ?? input.no_pay) || 0;
+  const internNoPayWaived =
+    Boolean(input.intern_no_pay_waived) && isInternRole(input.role);
+  const noPay = internNoPayWaived ? 0 : noPayCalculated;
   const stampDuty = Number(input.stamp_duty) || 0;
   const mobileDed = Number(input.mobile_deduction) || 0;
   const salaryAdvance = Number(input.salary_advance) || 0;
 
-  const totalAllowances = travel + food + holiday + allowanceNs;
+  const totalAllowances = travel + food + holiday + allowanceNs + bonus;
   const grossSalary = basic + totalAllowances + joinCarryForward;
   // APIT/PAYE base: monthly gross remuneration after no-pay (annualized ×12, LKR 1.8M relief, progressive slabs)
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  const totalForEpf = Math.max(
+  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
+  const totalForEpfBase = Math.max(
     0,
     basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
   );
-  const employeeEpfPayment = (totalForEpf * 8) / 100;
-  const employerEpfPayment = (totalForEpf * 12) / 100;
-  const etfPayment = (totalForEpf * 3) / 100;
+  const epfEtf = resolveEpfEtfPayments(totalForEpfBase, input.role || "");
+  const totalForEpf = epfEtf.total_for_epf;
+  const employeeEpfPayment = epfEtf.epf_payment;
+  const employerEpfPayment = epfEtf.employer_epf_payment;
+  const etfPayment = epfEtf.etf_payment;
   const totalServiceCharges = stampDuty + mobileDed;
   const totalDeduction = noPay + employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
   const netPay = grossSalary - totalDeduction;
 
   return {
     ...input,
+    allowance_ns: allowanceNs,
+    allowance_ns_entitled: allowanceNsFull,
+    no_pay: noPay,
+    no_pay_calculated: noPayCalculated,
+    intern_no_pay_waived: internNoPayWaived,
     paye,
     total_allowances: totalAllowances,
     total_service_charges: totalServiceCharges,
@@ -200,10 +322,13 @@ export const getNoPayForPeriod = async (req, res) => {
       return res.status(400).json({ success: false, message: "month and year are required" });
     }
     const { noPayDaysMap, hoursMap } = await loadPayrollPeriodContext(month, year);
-    const employees = await Employee.find().select("_id role basic_salary").lean();
+    const employees = await Employee.find()
+      .select("_id role designation basic_salary")
+      .populate("userId", "role")
+      .lean();
     const data = employees.map((emp) =>
       buildNoPayPayloadForEmployee(
-        emp,
+        { ...emp, role: getEmployeeEffectiveRole(emp) },
         noPayDaysMap.get(String(emp._id)) || 0,
         hoursMap.get(String(emp._id)),
         month,
@@ -252,7 +377,7 @@ export const getEmployeesForSalary = async (req, res) => {
       const employeesWithNoPay = eligible.map((emp) => {
         const empObj = emp.toObject ? emp.toObject() : emp;
         const payload = buildNoPayPayloadForEmployee(
-          empObj,
+          { ...empObj, role: getEmployeeEffectiveRole(empObj) },
           noPayDaysMap.get(String(emp._id)) || 0,
           hoursMap.get(String(emp._id)),
           month,
@@ -347,6 +472,7 @@ export const calculateSalary = async (req, res) => {
         food_allowance: resolveAmount(entry, employee, "food_allowance"),
         holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
         allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+        bonus: resolveAmount(entry, employee, "bonus"),
         salary_advance: Number(entry.salary_advance) || 0,
         stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
         mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
@@ -437,12 +563,14 @@ export const saveSalaryRun = async (req, res) => {
           food_allowance: resolveAmount(entry, employee, "food_allowance"),
           holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
           allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+          bonus: resolveAmount(entry, employee, "bonus"),
           salary_advance: Number(entry.salary_advance) || 0,
           stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
           mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
           paye: Number(entry.paye) || 0,
           epf_percent: 8,
           etf_percent: Number(entry.etf_percent) || 3,
+          intern_no_pay_waived: Boolean(entry.intern_no_pay_waived),
         },
         employee,
         noPayDaysMap,
@@ -470,6 +598,8 @@ export const saveSalaryRun = async (req, res) => {
         food_allowance: computed.food_allowance,
         holiday_payment: computed.holiday_payment,
         allowance_ns: computed.allowance_ns,
+        allowance_ns_entitled: computed.allowance_ns_entitled ?? computed.allowance_ns,
+        bonus: computed.bonus,
         join_month_carry_forward: computed.join_month_carry_forward ?? 0,
         join_month_worked_days: computed.join_month_worked_days ?? 0,
         no_pay: computed.no_pay,
@@ -479,6 +609,8 @@ export const saveSalaryRun = async (req, res) => {
         standard_hours: computed.standard_hours ?? 0,
         actual_hours: computed.actual_hours ?? 0,
         shortfall_hours: computed.shortfall_hours ?? 0,
+        intern_no_pay_waived: computed.intern_no_pay_waived ?? false,
+        no_pay_calculated: computed.no_pay_calculated ?? computed.no_pay,
         salary_advance: computed.salary_advance,
         stamp_duty: computed.stamp_duty,
         mobile_deduction: computed.mobile_deduction,
@@ -504,9 +636,17 @@ export const saveSalaryRun = async (req, res) => {
       });
     }
 
+    const approver = await resolveApproverDetails(req);
     const run = await SalaryRun.findOneAndUpdate(
       { month, year },
-      { month, year, entries: storedEntries, finalized: true },
+      {
+        $set: {
+          entries: storedEntries,
+          finalized: true,
+          ...(approver || {}),
+        },
+        $setOnInsert: { month, year },
+      },
       { new: true, upsert: true }
     ).lean();
 
@@ -576,12 +716,14 @@ export const saveOneSalaryEntry = async (req, res) => {
         food_allowance: resolveAmount(entry, employee, "food_allowance"),
         holiday_payment: resolveAmount(entry, employee, "holiday_payment"),
         allowance_ns: resolveAmount(entry, employee, "allowance_ns"),
+        bonus: resolveAmount(entry, employee, "bonus"),
         salary_advance: Number(entry.salary_advance) || 0,
         stamp_duty: resolveAmount(entry, employee, "stamp_duty"),
         mobile_deduction: resolveAmount(entry, employee, "mobile_deduction"),
         paye: Number(entry.paye) || 0,
         epf_percent: 8,
         etf_percent: Number(entry.etf_percent) || 3,
+        intern_no_pay_waived: Boolean(entry.intern_no_pay_waived),
       },
       employee,
       noPayDaysMap,
@@ -608,6 +750,8 @@ export const saveOneSalaryEntry = async (req, res) => {
       food_allowance: computed.food_allowance,
       holiday_payment: computed.holiday_payment,
       allowance_ns: computed.allowance_ns,
+      allowance_ns_entitled: computed.allowance_ns_entitled ?? computed.allowance_ns,
+      bonus: computed.bonus,
       join_month_carry_forward: computed.join_month_carry_forward ?? 0,
       join_month_worked_days: computed.join_month_worked_days ?? 0,
       no_pay: computed.no_pay,
@@ -617,6 +761,8 @@ export const saveOneSalaryEntry = async (req, res) => {
       standard_hours: computed.standard_hours ?? 0,
       actual_hours: computed.actual_hours ?? 0,
       shortfall_hours: computed.shortfall_hours ?? 0,
+      intern_no_pay_waived: computed.intern_no_pay_waived ?? false,
+      no_pay_calculated: computed.no_pay_calculated ?? computed.no_pay,
       salary_advance: computed.salary_advance,
       stamp_duty: computed.stamp_duty,
       mobile_deduction: computed.mobile_deduction,
@@ -657,12 +803,28 @@ export const saveOneSalaryEntry = async (req, res) => {
     newEntry.signature_data_url = sigUrl ?? existingEntry?.signature_data_url ?? null;
     newEntry.signature_date = sigDate ?? existingEntry?.signature_date ?? null;
 
-    const successResponse = (run) =>
-      res.status(200).json({
+    const successResponse = async (run) => {
+      let result = run?.toObject ? run.toObject() : run;
+      if (approvalStatus === "approved") {
+        const withApprover = await applyApproverToRun(m, y, req);
+        if (withApprover) result = withApprover;
+      }
+      return res.status(200).json({
         success: true,
         message: "Salary entry saved",
-        run: { _id: run._id, month: run.month, year: run.year, entriesCount: (run.entries && run.entries.length) || 0 },
+        run: {
+          _id: result._id,
+          month: result.month,
+          year: result.year,
+          entriesCount: (result.entries && result.entries.length) || 0,
+          approved_by_role: result.approved_by_role || null,
+          approved_by_name: result.approved_by_name || null,
+          approved_by_designation: result.approved_by_designation || null,
+          signature_data_url: result.signature_data_url || null,
+          signature_date: result.signature_date || null,
+        },
       });
+    };
 
     let run = await SalaryRun.findOneAndUpdate(
       { month: m, year: y, "entries.employee": employeeObjectId },
@@ -773,7 +935,11 @@ export const getSalaryRuns = async (req, res) => {
           message: "Salary run not found",
         });
       }
-      return res.status(200).json({ success: true, run: { ...run, month: run.month, year: run.year } });
+      const hydrated = await ensureRunApprovalHydrated(run, req);
+      return res.status(200).json({
+        success: true,
+        run: { ...hydrated, month: hydrated.month, year: hydrated.year },
+      });
     }
 
     const runs = await SalaryRun.find()
@@ -822,6 +988,10 @@ export const savePayslipSignature = async (req, res) => {
     const setFields = {};
     if (signature_data_url !== undefined) setFields.signature_data_url = dataUrl;
     if (signature_date !== undefined) setFields.signature_date = dateStr;
+    const approver = await resolveApproverDetails(req);
+    if (approver) {
+      Object.assign(setFields, approver);
+    }
     const run = await SalaryRun.findOneAndUpdate(
       { month: m, year: y },
       {
@@ -835,6 +1005,10 @@ export const savePayslipSignature = async (req, res) => {
       message: "Payslip signature saved",
       signature_data_url: run.signature_data_url || null,
       signature_date: run.signature_date || null,
+      approved_by_role: run.approved_by_role || null,
+      approved_by_name: run.approved_by_name || null,
+      approved_by_designation: run.approved_by_designation || null,
+      approved_by_user_id: run.approved_by_user_id || null,
     });
   } catch (error) {
     console.error("Save payslip signature error:", error);

@@ -11,6 +11,7 @@ import {
 import PayslipView, { downloadPayslipPdf } from "./PayslipView.jsx";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
+import { formatPaysheetMoney } from "../../utils/paysheetFormat.js";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({
@@ -232,19 +233,13 @@ const AdminEmployeeSalaryHistory = () => {
                           {row.monthName} {row.year}
                         </td>
                         <td className="px-6 py-4 text-right text-gray-700">
-                          {Number(row.gross_salary).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
+                          {formatPaysheetMoney(row.gross_salary)}
                         </td>
                         <td className="px-6 py-4 text-right text-gray-700">
-                          {Number(row.total_deduction).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
+                          {formatPaysheetMoney(row.total_deduction)}
                         </td>
                         <td className="px-6 py-4 text-right font-semibold text-green-700">
-                          {Number(row.net_pay).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
+                          {formatPaysheetMoney(row.net_pay)}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span

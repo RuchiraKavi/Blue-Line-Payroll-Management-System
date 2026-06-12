@@ -2,7 +2,8 @@ export const CRUD_ACTIONS = ["create", "read", "update", "delete"];
 
 export const PERMISSION_SECTIONS = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "departments", label: "Departments & Designations" },
+  { key: "departments", label: "Departments" },
+  { key: "designations", label: "Designations" },
   { key: "employees", label: "Employees" },
   { key: "roles", label: "Roles" },
   { key: "attendance", label: "Attendance" },
@@ -67,6 +68,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   admin: {
     dashboard: allCrud(),
     departments: allCrud(),
+    designations: allCrud(),
     employees: allCrud(),
     roles: allCrud(),
     attendance: allCrud(),
@@ -77,6 +79,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   hr: {
     dashboard: readOnly(),
     departments: allCrud(),
+    designations: allCrud(),
     employees: allCrud(),
     roles: allCrud(),
     attendance: allCrud(),
@@ -84,9 +87,10 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     salary: crudNoDelete(),
     advance: readOnly(),
   },
-  accountant: {
+  finance: {
     dashboard: readOnly(),
     departments: emptySection(),
+    designations: emptySection(),
     employees: emptySection(),
     roles: emptySection(),
     attendance: emptySection(),
@@ -103,8 +107,11 @@ export function getDefaultPermissionsForRole(roleKey) {
   const normalized =
     key === "hr_manager"
       ? "hr"
-      : key === "account" || key === "account_manager"
-        ? "accountant"
+      : key === "finance" ||
+          key === "account" ||
+          key === "account_manager" ||
+          key === "accountant"
+        ? "finance"
         : key;
 
   if (DEFAULT_ROLE_PERMISSIONS[normalized]) {

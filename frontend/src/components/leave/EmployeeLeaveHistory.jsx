@@ -7,6 +7,7 @@ const EmployeeLeaveHistory = () => {
   const { employeeId } = useParams();
   const location = useLocation();
   const [leaveBalance, setLeaveBalance] = useState(null);
+  const [isIntern, setIsIntern] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ const EmployeeLeaveHistory = () => {
         );
 
         if (res.data.success) {
+          setIsIntern(Boolean(res.data.isIntern));
           setLeaveBalance(res.data.leaveBalance);
         }
       } catch (error) {
@@ -61,33 +63,34 @@ const EmployeeLeaveHistory = () => {
 
       <tbody>
         {leaveBalance &&
-          Object.entries(leaveBalance).map(([type, balance]) => {
-            const totals = {
-              casual: 7,
-              annual: 14,
-              sick: 21,
-            };
-
-            const used = totals[type] - balance;
-            const percentage = (used / totals[type]) * 100;
-
-            const styles = {
-              casual: {
-                icon: "🏖️",
-                bar: "bg-blue-500",
-                badge: "bg-blue-100 text-blue-700",
-              },
-              annual: {
-                icon: "📅",
-                bar: "bg-green-500",
-                badge: "bg-green-100 text-green-700",
-              },
-              sick: {
-                icon: "🤒",
-                bar: "bg-red-500",
-                badge: "bg-red-100 text-red-700",
-              },
-            };
+          (isIntern
+            ? [
+                {
+                  type: "half_day",
+                  label: "Half Day (this month)",
+                  balance: leaveBalance.half_day ?? leaveBalance.casual ?? 0,
+                  total: 0.5,
+                  icon: "🕐",
+                  bar: "bg-indigo-500",
+                  badge: "bg-indigo-100 text-indigo-700",
+                },
+              ]
+            : ["casual", "annual", "sick"].map((type) => ({
+                type,
+                label: `${type.charAt(0).toUpperCase() + type.slice(1)} Leave`,
+                balance: leaveBalance[type] ?? 0,
+                total: { casual: 7, annual: 14, sick: 21 }[type],
+                icon: { casual: "🏖️", annual: "📅", sick: "🤒" }[type],
+                bar: { casual: "bg-blue-500", annual: "bg-green-500", sick: "bg-red-500" }[type],
+                badge: {
+                  casual: "bg-blue-100 text-blue-700",
+                  annual: "bg-green-100 text-green-700",
+                  sick: "bg-red-100 text-red-700",
+                }[type],
+              }))
+          ).map(({ type, label, balance, total, icon, bar, badge }) => {
+            const used = Math.max(0, total - balance);
+            const percentage = total > 0 ? Math.min(100, (used / total) * 100) : 0;
 
             return (
               <tr
@@ -96,15 +99,13 @@ const EmployeeLeaveHistory = () => {
               >
                 <td className="px-4 py-3">
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${styles[type].badge}`}
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${badge}`}
                   >
-                    {styles[type].icon} {type.charAt(0).toUpperCase() + type.slice(1)} Leave
+                    {icon} {label}
                   </span>
                 </td>
 
-                <td className="px-4 py-3 text-center font-medium">
-                  {totals[type]}
-                </td>
+                <td className="px-4 py-3 text-center font-medium">{total}</td>
 
                 <td className="px-4 py-3 text-center font-semibold text-gray-800">
                   {balance}
@@ -113,12 +114,12 @@ const EmployeeLeaveHistory = () => {
                 <td className="px-4 py-3">
                   <div className="h-2 w-full rounded-full bg-gray-200">
                     <div
-                      className={`h-2 rounded-full ${styles[type].bar}`}
+                      className={`h-2 rounded-full ${bar}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500 text-center">
-                    {used} used / {totals[type]}
+                    {used} used / {total}
                   </p>
                 </td>
               </tr>

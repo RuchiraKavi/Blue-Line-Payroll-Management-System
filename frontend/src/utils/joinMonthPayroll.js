@@ -2,6 +2,7 @@ import {
   getPayrollDivisor,
   toLocalDateOnly,
 } from "./payrollAttendance.js";
+import { getEmployeeEffectiveRole } from "./internPayroll.js";
 
 export function getPreviousPayPeriod(month, year) {
   const m = Number(month);
@@ -62,7 +63,7 @@ export function calculateJoinMonthCarryForward(employee, joinMonth, joinYear, pr
   if (workedDays <= 0) {
     return { amount: 0, workedDays: 0, joinMonth, joinYear };
   }
-  const role = employee?.role || employee?.userId?.role || "";
+  const role = getEmployeeEffectiveRole(employee);
   const divisor = getPayrollDivisor(role);
   const basic = Number(employee?.basic_salary) || 0;
   const travel = Number(employee?.travel_allowance) || 0;

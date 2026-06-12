@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth.js";
 import usePermissions from "../../hooks/usePermissions.js";
+import normalizeRole, { isFinanceRole } from "../../utils/normalizeRole.js";
 import SidebarGroup, {
   SidebarAccordionProvider,
   SidebarSubLink,
@@ -10,6 +11,7 @@ import {
   FaBuilding,
   FaCalendarCheck,
   FaClipboardList,
+  FaIdBadge,
   FaTachometerAlt,
   FaUser,
   FaUserShield,
@@ -24,10 +26,9 @@ const topLinkClass = ({ isActive }) =>
 const AdminSidebar = () => {
   const { user } = useAuth();
   const { canRead, can } = usePermissions();
-  const role = user?.role;
-  const isHR = role === "hr" || role === "hr_manager";
-  const isAccount =
-    role === "account" || role === "account_manager" || role === "accountant";
+  const role = normalizeRole(user?.role);
+  const isHR = role === "hr";
+  const isFinance = isFinanceRole(role);
   const isAdminOrHR = role === "admin" || isHR;
 
   const hasPermissionData = Boolean(
@@ -47,15 +48,16 @@ const AdminSidebar = () => {
 
   const showDashboard = sectionRead(
     "dashboard",
-    role === "admin" || isHR || isAccount
+    role === "admin" || isHR || isFinance
   );
   const showDepartments = sectionRead("departments", isAdminOrHR);
+  const showDesignations = sectionRead("designations", isAdminOrHR);
   const showEmployees = sectionRead("employees", isAdminOrHR);
   const showLeave = sectionRead("leave", isAdminOrHR);
   const showAttendance = sectionRead("attendance", isAdminOrHR);
   const showRoles = sectionRead("roles", isAdminOrHR);
-  const showSalary = sectionRead("salary", role === "admin" || isHR || isAccount);
-  const showAdvance = sectionRead("advance", role === "admin" || isAccount);
+  const showSalary = sectionRead("salary", role === "admin" || isHR || isFinance);
+  const showAdvance = sectionRead("advance", role === "admin" || isFinance);
   const showFinance = showSalary || showAdvance;
 
   const accordionGroups = useMemo(() => {
@@ -67,6 +69,14 @@ const AdminSidebar = () => {
         paths: [
           "/admin-dashboard/departments",
           "/admin-dashboard/add-department",
+        ],
+      });
+    }
+
+    if (showDesignations) {
+      groups.push({
+        id: "designations",
+        paths: [
           "/admin-dashboard/designations",
           "/admin-dashboard/add-designation",
           "/admin-dashboard/assign-designation",
@@ -130,6 +140,7 @@ const AdminSidebar = () => {
     return groups;
   }, [
     showDepartments,
+    showDesignations,
     showEmployees,
     showLeave,
     showAttendance,
@@ -160,8 +171,6 @@ const AdminSidebar = () => {
               paths={[
                 "/admin-dashboard/departments",
                 "/admin-dashboard/add-department",
-                "/admin-dashboard/designations",
-                "/admin-dashboard/add-designation",
               ]}
             >
               <SidebarSubLink to="/admin-dashboard/departments">
@@ -172,15 +181,29 @@ const AdminSidebar = () => {
                   Add Department
                 </SidebarSubLink>
               )}
+            </SidebarGroup>
+          )}
+
+          {showDesignations && (
+            <SidebarGroup
+              groupId="designations"
+              title="Designation"
+              icon={FaIdBadge}
+              paths={[
+                "/admin-dashboard/designations",
+                "/admin-dashboard/add-designation",
+                "/admin-dashboard/assign-designation",
+              ]}
+            >
               <SidebarSubLink to="/admin-dashboard/designations" end>
                 Designation List
               </SidebarSubLink>
-              {sectionCan("departments", "create", isAdminOrHR) && (
+              {sectionCan("designations", "create", isAdminOrHR) && (
                 <SidebarSubLink to="/admin-dashboard/add-designation" end>
                   Add Designation
                 </SidebarSubLink>
               )}
-              {sectionCan("departments", "update", isAdminOrHR) && (
+              {sectionCan("designations", "update", isAdminOrHR) && (
                 <SidebarSubLink to="/admin-dashboard/assign-designation" end>
                   Assign Designation
                 </SidebarSubLink>

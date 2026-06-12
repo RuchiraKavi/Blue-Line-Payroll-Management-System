@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { jsPDF } from "jspdf";
 import { FaTimes, FaHistory, FaFileAlt, FaPrint, FaFilePdf } from "react-icons/fa";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
 import SelectInput from "../ui/SelectInput.jsx";
+import ContributionPeriodReportTable from "./ContributionPeriodReportTable.jsx";
+import { downloadEmployeeContributionReportPdf } from "../../utils/contributionReportFormat.js";
+import { formatPaysheetMoney } from "../../utils/paysheetFormat.js";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -69,9 +71,6 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
   });
 
   const historyPagination = usePagination(history, { resetKey: employeeId });
-  const reportPagination = usePagination(reportEntries, {
-    resetKey: `${reportFromMonth}-${reportFromYear}-${reportToMonth}-${reportToYear}-${employeeId}`,
-  });
 
   const handlePrintReport = () => {
     const content = reportRef.current;
@@ -105,51 +104,15 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
     if (reportEntries.length === 0) return;
     const fromLabel = `${monthNames[reportFromMonth - 1]} ${reportFromYear}`;
     const toLabel = `${monthNames[reportToMonth - 1]} ${reportToYear}`;
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const margin = 14;
-    let y = 20;
-    doc.setFontSize(16);
-    doc.setTextColor(5, 150, 105);
-    doc.text("EPF & ETF Contribution Report", pageW / 2, y, { align: "center" });
-    y += 10;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Employee: ${employeeName} ${employeeIdRef !== "—" ? `(${employeeIdRef})` : ""}`, margin, y);
-    y += 6;
-    doc.text(`Period: ${fromLabel} to ${toLabel}`, margin, y);
-    y += 12;
-    const colW = (pageW - 2 * margin) / 4;
-    const rowH = 8;
-    const headY = y;
-    doc.setFillColor(236, 253, 245);
-    doc.rect(margin, headY, pageW - 2 * margin, rowH, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("Period", margin + 2, headY + 5.5);
-    doc.text("Emp EPF (8%)", margin + colW + 2, headY + 5.5, { align: "right" });
-    doc.text("Empr EPF (12%)", margin + colW * 2 + 2, headY + 5.5, { align: "right" });
-    doc.text("ETF (3%)", pageW - margin - 2, headY + 5.5, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    y = headY + rowH;
-    reportEntries.forEach((h, i) => {
-      if (y + rowH > doc.internal.pageSize.getHeight() - 20) {
-        doc.addPage();
-        y = 20;
-      }
-      if (i % 2 === 1) {
-        doc.setFillColor(249, 250, 251);
-        doc.rect(margin, y, pageW - 2 * margin, rowH, "F");
-      }
-      doc.setFontSize(9);
-      doc.text(`${h.monthName} ${h.year}`, margin + 2, y + 5.5);
-      doc.text(Number(h.epf_payment).toFixed(2), margin + colW + 2, y + 5.5, { align: "right" });
-      doc.text(Number(h.employer_epf_payment ?? 0).toFixed(2), margin + colW * 2 + 2, y + 5.5, { align: "right" });
-      doc.text(Number(h.etf_payment).toFixed(2), pageW - margin - 2, y + 5.5, { align: "right" });
-      y += rowH;
-    });
+    const periodLabel = `${fromLabel} to ${toLabel}`;
     const safeName = `${employeeName.replace(/[^a-zA-Z0-9-_]/g, "_")}_Contribution_${fromLabel.replace(/\s/g, "_")}_to_${toLabel.replace(/\s/g, "_")}.pdf`;
-    doc.save(safeName);
+    downloadEmployeeContributionReportPdf({
+      rows: reportEntries,
+      employeeName,
+      employeeId: employeeIdRef,
+      periodLabel,
+      fileName: safeName,
+    });
   };
 
   return (
@@ -204,15 +167,15 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50/50">
                   <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Employee EPF (8%) — deducted</h4>
-                  <p className="text-2xl font-bold text-blue-900">Rs. {Number(currentEmployeeEpfPayment || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-blue-900">{formatPaysheetMoney(currentEmployeeEpfPayment)}</p>
                 </div>
                 <div className="border-2 border-indigo-200 rounded-xl p-4 bg-indigo-50/50">
                   <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2">Employer EPF (12%)</h4>
-                  <p className="text-2xl font-bold text-indigo-900">Rs. {Number(currentEmployerEpfPayment || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-indigo-900">{formatPaysheetMoney(currentEmployerEpfPayment)}</p>
                 </div>
                 <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
                   <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">Employer ETF (3%)</h4>
-                  <p className="text-2xl font-bold text-emerald-900">Rs. {Number(currentEtfPayment || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-emerald-900">{formatPaysheetMoney(currentEtfPayment)}</p>
                 </div>
               </div>
             </div>
@@ -239,9 +202,9 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                       {historyPagination.paginatedItems.map((h, i) => (
                         <tr key={`${h.year}-${h.month}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                           <td className="px-4 py-3 border-t border-gray-200">{h.monthName} {h.year}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(h.epf_payment).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(h.employer_epf_payment ?? 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(h.etf_payment).toFixed(2)}</td>
+                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{formatPaysheetMoney(h.epf_payment)}</td>
+                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{formatPaysheetMoney(h.employer_epf_payment)}</td>
+                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{formatPaysheetMoney(h.etf_payment)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -317,43 +280,13 @@ const ContributionModal = ({ employee, currentEmployeeEpfPayment, currentEmploye
                   />
                 </label>
               </div>
-              <div ref={reportRef} className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-emerald-50 text-emerald-900">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Period</th>
-                      <th className="px-4 py-3 text-right font-semibold">Employee EPF (8%)</th>
-                      <th className="px-4 py-3 text-right font-semibold">Employer EPF (12%)</th>
-                      <th className="px-4 py-3 text-right font-semibold">ETF (3%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportEntries.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500">No data for selected range.</td>
-                      </tr>
-                    ) : (
-                      reportPagination.paginatedItems.map((h, i) => (
-                        <tr key={`${h.year}-${h.month}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-4 py-3 border-t border-gray-200">{h.monthName} {h.year}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(h.epf_payment).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(h.employer_epf_payment ?? 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(h.etf_payment).toFixed(2)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <TablePagination
-                  page={reportPagination.page}
-                  perPage={reportPagination.perPage}
-                  totalItems={reportPagination.totalItems}
-                  totalPages={reportPagination.totalPages}
-                  onPageChange={reportPagination.setPage}
-                  onPerPageChange={(n) => {
-                    reportPagination.setPerPage(n);
-                    reportPagination.setPage(1);
-                  }}
+              <div ref={reportRef}>
+                <ContributionPeriodReportTable
+                  rows={reportEntries}
+                  employeeName={employeeName}
+                  employeeId={employeeIdRef}
+                  periodLabel={`${monthNames[reportFromMonth - 1]} ${reportFromYear} to ${monthNames[reportToMonth - 1]} ${reportToYear}`}
+                  resetKey={`${reportFromMonth}-${reportFromYear}-${reportToMonth}-${reportToYear}-${employeeId}`}
                 />
               </div>
               {reportEntries.length > 0 && (

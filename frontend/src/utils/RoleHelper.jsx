@@ -30,13 +30,14 @@ export const roleTableCustomStyles = {
       fontSize: "14px",
       fontWeight: "600",
       color: "#475569",
+      justifyContent: "center",
     },
   },
   rows: {
     style: {
       fontSize: "14px",
       color: "#374151",
-      minHeight: "72px",
+      minHeight: "56px",
       "&:hover": {
         backgroundColor: "#f8fafc",
         cursor: "default",
@@ -51,6 +52,13 @@ export const roleTableCustomStyles = {
       paddingLeft: "16px",
       paddingRight: "16px",
       fontSize: "14px",
+      justifyContent: "center",
+    },
+  },
+  table: {
+    style: {
+      tableLayout: "fixed",
+      width: "100%",
     },
   },
   pagination: {
@@ -110,43 +118,29 @@ export const roleColumns = (onEdit, onDelete) => [
   {
     name: "S.No",
     selector: (row) => row.sno,
-    width: "80px",
+    grow: 1,
+    center: true,
     sortable: true,
   },
   {
-    name: "Role Key",
-    selector: (row) => row.key,
+    name: "Role",
+    selector: (row) => row.label || row.key,
     sortable: true,
     grow: 1,
-  },
-  {
-    name: "Label",
-    selector: (row) => row.label,
-    sortable: true,
-    grow: 1.5,
-  },
-  {
-    name: "Type",
+    center: true,
     cell: (row) => (
-      <span
-        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-          row.isSystem
-            ? "bg-indigo-100 text-indigo-800"
-            : "bg-gray-100 text-gray-700"
-        }`}
-      >
-        {row.isSystem ? "System" : "Custom"}
-      </span>
+      <span className="font-medium text-gray-900">{row.label || row.key}</span>
     ),
-    width: "120px",
   },
   {
     name: "Actions",
+    grow: 1,
+    center: true,
     cell: (row) => (
-      <div className="flex gap-1 justify-center">
+      <div className="flex flex-wrap gap-2 justify-center">
         <button
           type="button"
-          className="inline-flex items-center px-4 py-2 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+          className="inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-all duration-200 shadow-sm hover:shadow-md"
           onClick={() => onEdit(row)}
           title="Edit Role"
         >
@@ -154,7 +148,7 @@ export const roleColumns = (onEdit, onDelete) => [
         </button>
         <button
           type="button"
-          className="inline-flex items-center px-4 py-2 text-xs font-medium text-white bg-linear-to-r from-red-500 to-rose-500 rounded-md hover:from-red-600 hover:to-rose-600 focus:ring-2 focus:ring-red-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:transform-none"
+          className="inline-flex items-center px-3 py-2 text-xs font-medium text-white bg-linear-to-r from-red-500 to-rose-500 rounded-md hover:from-red-600 hover:to-rose-600 focus:ring-2 focus:ring-red-200 transition-all duration-200 shadow-sm hover:shadow-md disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed"
           onClick={() => onDelete(row)}
           disabled={row.isSystem}
           title={row.isSystem ? "System roles cannot be deleted" : "Delete Role"}
@@ -163,7 +157,5 @@ export const roleColumns = (onEdit, onDelete) => [
         </button>
       </div>
     ),
-    width: "180px",
-    center: true,
   },
 ];

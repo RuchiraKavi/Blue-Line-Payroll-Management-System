@@ -1,8 +1,8 @@
 import React, { useRef, useState } from "react";
 import { FaTimes, FaPrint, FaFileInvoiceDollar, FaPenFancy, FaSave, FaFilePdf } from "react-icons/fa";
 import { jsPDF } from "jspdf";
-
-const n = (x) => Number(x || 0).toFixed(2);
+import { formatPaysheetMoney } from "../../utils/paysheetFormat.js";
+import { getEmployeeEffectiveRole, isInternRole } from "../../utils/internPayroll.js";
 
 /** True if amount should appear on payslip (non-zero). */
 function hasPayslipAmount(value) {
@@ -19,10 +19,18 @@ function hasPayslipText(value) {
   return s !== "" && s !== "-" && s !== "—" && s.toLowerCase() !== "n/a";
 }
 
-function payslipPdfAmounts(data) {
+function payslipPdfAmounts(data, employee) {
+  const role = getEmployeeEffectiveRole(employee || data) || data?.role || "";
+  if (isInternRole(role)) {
+    const totalDeductionPayslip =
+      (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0);
+    const netPayPayslip = (Number(data.gross_salary) || 0) - totalDeductionPayslip;
+    return { epfPayslipAmount: 0, totalDeductionPayslip, netPayPayslip };
+  }
   const totalForEpf = Number(data.total_for_epf) || 0;
   const epfPayslipAmount = totalForEpf * 0.08;
-  const totalDeductionPayslip = (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
+  const totalDeductionPayslip =
+    (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
   const netPayPayslip = (Number(data.gross_salary) || 0) - totalDeductionPayslip;
   return { epfPayslipAmount, totalDeductionPayslip, netPayPayslip };
 }
@@ -84,7 +92,12 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   const margin = 10;
   const tableWidth = pageW - margin * 2;
   const usableH = pageH - margin * 2;
-  const { epfPayslipAmount, totalDeductionPayslip, netPayPayslip } = payslipPdfAmounts(data);
+  const { epfPayslipAmount, totalDeductionPayslip, netPayPayslip } = payslipPdfAmounts(
+    data,
+    employee
+  );
+  const pdfPayrollRole = getEmployeeEffectiveRole(employee || data) || data?.role || "";
+  const pdfIsIntern = isInternRole(pdfPayrollRole);
   const joinMonthCarry = Number(data.join_month_carry_forward) || 0;
   const joinMonthWorkedDays = Number(data.join_month_worked_days) || 0;
   const showJoinMonthPay = hasPayslipAmount(joinMonthCarry);
@@ -113,31 +126,32 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   ].filter(Boolean);
 
   const earningsLineRows = [
-    hasPayslipAmount(data.basic_salary) && { label: "Basic Salary", value: n(data.basic_salary) },
-    hasPayslipAmount(data.travel_allowance) && { label: "Travel Allowance", value: n(data.travel_allowance) },
-    hasPayslipAmount(data.food_allowance) && { label: "Food Allowance", value: n(data.food_allowance) },
-    hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", value: n(data.holiday_payment) },
-    hasPayslipAmount(data.allowance_ns) && { label: "Attendance Allowance", value: n(data.allowance_ns) },
+    hasPayslipAmount(data.basic_salary) && { label: "Basic Salary", value: formatPaysheetMoney(data.basic_salary) },
+    hasPayslipAmount(data.travel_allowance) && { label: "Travel Allowance", value: formatPaysheetMoney(data.travel_allowance) },
+    hasPayslipAmount(data.food_allowance) && { label: "Food Allowance", value: formatPaysheetMoney(data.food_allowance) },
+    hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", value: formatPaysheetMoney(data.holiday_payment) },
+    hasPayslipAmount(data.allowance_ns) && { label: "Attendance Allowance", value: formatPaysheetMoney(data.allowance_ns) },
+    hasPayslipAmount(data.bonus) && { label: "Bonus", value: formatPaysheetMoney(data.bonus) },
     showJoinMonthPay && {
       label: `Join Month Pay (${joinMonthWorkedDays} attendance days)`,
-      value: n(joinMonthCarry),
+      value: formatPaysheetMoney(joinMonthCarry),
     },
   ].filter(Boolean);
 
   const earningsRows = [
     { label: "Description", value: "Amount (Rs.)", header: true },
     ...earningsLineRows,
-    { label: "Total Earnings", value: n(totalEarningsPayslip), bold: true, totalRow: true },
-    { label: "Gross Salary", value: n(data.gross_salary), bold: true, totalRow: true },
+    { label: "Total Earnings", value: formatPaysheetMoney(totalEarningsPayslip), bold: true, totalRow: true },
+    { label: "Gross Salary", value: formatPaysheetMoney(data.gross_salary), bold: true, totalRow: true },
   ];
 
   const deductionLineRows = [
-    hasPayslipAmount(data.stamp_duty) && { label: "Stamp Duty", value: n(data.stamp_duty) },
-    hasPayslipAmount(data.mobile_deduction) && { label: "Mobile Deduction", value: n(data.mobile_deduction) },
-    hasPayslipAmount(data.no_pay) && { label: "No Pay", value: n(data.no_pay) },
-    hasPayslipAmount(data.paye) && { label: "APIT (PAYE)", value: n(data.paye) },
-    hasPayslipAmount(data.salary_advance) && { label: "Salary Advance", value: n(data.salary_advance) },
-    hasPayslipAmount(epfPayslipAmount) && { label: "Employee EPF (8%)", value: n(epfPayslipAmount) },
+    hasPayslipAmount(data.stamp_duty) && { label: "Stamp Duty", value: formatPaysheetMoney(data.stamp_duty) },
+    hasPayslipAmount(data.mobile_deduction) && { label: "Mobile Deduction", value: formatPaysheetMoney(data.mobile_deduction) },
+    hasPayslipAmount(data.no_pay) && { label: "No Pay", value: formatPaysheetMoney(data.no_pay) },
+    hasPayslipAmount(data.paye) && { label: "APIT (PAYE)", value: formatPaysheetMoney(data.paye) },
+    hasPayslipAmount(data.salary_advance) && { label: "Salary Advance", value: formatPaysheetMoney(data.salary_advance) },
+    hasPayslipAmount(epfPayslipAmount) && { label: "Employee EPF (8%)", value: formatPaysheetMoney(epfPayslipAmount) },
   ].filter(Boolean);
 
   const deductionsRows = [
@@ -145,11 +159,22 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
     ...deductionLineRows,
   ];
 
-  const epfRows = [
-    hasPayslipAmount(data.total_for_epf) && { label: "Earnings base (for EPF/ETF)", value: n(data.total_for_epf) },
-    hasPayslipAmount(data.employer_epf_payment) && { label: "Employer EPF (12%)", value: n(data.employer_epf_payment) },
-    hasPayslipAmount(data.etf_payment) && { label: "Employer ETF (3%)", value: n(data.etf_payment) },
-  ].filter(Boolean);
+  const epfRows = pdfIsIntern
+    ? []
+    : [
+        hasPayslipAmount(data.total_for_epf) && {
+          label: "Earnings base (for EPF/ETF)",
+          value: formatPaysheetMoney(data.total_for_epf),
+        },
+        hasPayslipAmount(data.employer_epf_payment) && {
+          label: "Employer EPF (12%)",
+          value: formatPaysheetMoney(data.employer_epf_payment),
+        },
+        hasPayslipAmount(data.etf_payment) && {
+          label: "Employer ETF (3%)",
+          value: formatPaysheetMoney(data.etf_payment),
+        },
+      ].filter(Boolean);
 
   const sectionGap = 5;
   const sectionTitleH = 6;
@@ -236,7 +261,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
 
   // —— Total Deduction & Net Pay ——
   y = pdfTable(doc, y, margin, tableWidth, [
-    { label: "Total Deduction", value: n(totalDeductionPayslip), bold: true, totalRow: true },
+    { label: "Total Deduction", value: formatPaysheetMoney(totalDeductionPayslip), bold: true, totalRow: true },
   ], opts());
   doc.setFillColor(240, 253, 244);
   doc.rect(margin, y, tableWidth * 0.35, rowH, "F");
@@ -248,7 +273,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   doc.setFontSize(Math.round(11 * v));
   doc.setTextColor(21, 128, 61);
   doc.text("Net Pay", margin + CELL_PAD, y + rowH - 1.5);
-  doc.text(`Rs. ${n(netPayPayslip)}`, margin + tableWidth - CELL_PAD, y + rowH - 1.5, { align: "right" });
+  doc.text(formatPaysheetMoney(netPayPayslip), margin + tableWidth - CELL_PAD, y + rowH - 1.5, { align: "right" });
   y += rowH + gap(6);
 
   if (showBankSection) {
@@ -286,7 +311,7 @@ export function downloadPayslipPdf(employee, data, month, year, monthName, signa
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(107, 114, 128);
-  doc.text("Accountant Signature", margin, sigLabelY);
+  doc.text("Finance Signature", margin, sigLabelY);
   doc.text("Date", margin + tableWidth * 0.5, sigLabelY);
   y += gap(3);
   const sigBoxW = 40;
@@ -406,12 +431,15 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
   const bankBranch = employee?.bank_details?.bank_branch || "";
   const bankAcc = employee?.bank_details?.bank_account_number || "";
 
+  const payrollRole = getEmployeeEffectiveRole(employee || data) || data?.role || "";
+  const isIntern = isInternRole(payrollRole);
   // Payslip uses 8% for EPF payment (contribution tracking uses 12% elsewhere)
   const epfPct = 8;
-  const etfPct = Number(data.etf_percent) || 3;
-  const totalForEpf = Number(data.total_for_epf) || 0;
-  const epfPayslipAmount = totalForEpf * (epfPct / 100);
-  const totalDeductionPayslip = (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
+  const totalForEpf = isIntern ? 0 : Number(data.total_for_epf) || 0;
+  const epfPayslipAmount = isIntern ? 0 : totalForEpf * (epfPct / 100);
+  const totalDeductionPayslip = isIntern
+    ? (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0)
+    : (Number(data.total_deduction) || 0) - (Number(data.epf_payment) || 0) + epfPayslipAmount;
   // "Total Earnings" should include basic salary as well as allowances.
   const joinMonthCarry = Number(data.join_month_carry_forward) || 0;
   const joinMonthWorkedDays = Number(data.join_month_worked_days) || 0;
@@ -437,6 +465,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
     hasPayslipAmount(data.food_allowance) && { label: "Food Allowance", amount: data.food_allowance },
     hasPayslipAmount(data.holiday_payment) && { label: "Holiday Payment", amount: data.holiday_payment },
     hasPayslipAmount(data.allowance_ns) && { label: "Attendance Allowance", amount: data.allowance_ns },
+    hasPayslipAmount(data.bonus) && { label: "Bonus", amount: data.bonus },
     showJoinMonthPay && {
       label: `Join Month Pay (${joinMonthWorkedDays} attendance days)`,
       amount: joinMonthCarry,
@@ -452,11 +481,22 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
     hasPayslipAmount(epfPayslipAmount) && { label: "Employee EPF (8%)", amount: epfPayslipAmount },
   ].filter(Boolean);
 
-  const epfLines = [
-    hasPayslipAmount(data.total_for_epf) && { label: "Earnings base (for EPF/ETF)", amount: data.total_for_epf },
-    hasPayslipAmount(data.employer_epf_payment) && { label: "Employer EPF (12%)", amount: data.employer_epf_payment },
-    hasPayslipAmount(data.etf_payment) && { label: "Employer ETF (3%)", amount: data.etf_payment },
-  ].filter(Boolean);
+  const epfLines = isIntern
+    ? []
+    : [
+        hasPayslipAmount(data.total_for_epf) && {
+          label: "Earnings base (for EPF/ETF)",
+          amount: data.total_for_epf,
+        },
+        hasPayslipAmount(data.employer_epf_payment) && {
+          label: "Employer EPF (12%)",
+          amount: data.employer_epf_payment,
+        },
+        hasPayslipAmount(data.etf_payment) && {
+          label: "Employer ETF (3%)",
+          amount: data.etf_payment,
+        },
+      ].filter(Boolean);
 
   const showBankOnScreen =
     hasPayslipText(bankName) || hasPayslipText(bankBranch) || hasPayslipText(bankAcc);
@@ -574,11 +614,11 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                   {earningsLines.map((row) => (
                     <tr key={row.label}>
                       <td className={tableCell}>{row.label}</td>
-                      <td className={`${tableCell} text-right`}>{n(row.amount)}</td>
+                      <td className={`${tableCell} text-right`}>{formatPaysheetMoney(row.amount)}</td>
                     </tr>
                   ))}
-                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Earnings</td><td className={`${tableCell} text-right font-bold`}>{n(totalEarningsPayslip)}</td></tr>
-                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Gross Salary</td><td className={`${tableCell} text-right font-bold`}>{n(data.gross_salary)}</td></tr>
+                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Total Earnings</td><td className={`${tableCell} text-right font-bold`}>{formatPaysheetMoney(totalEarningsPayslip)}</td></tr>
+                  <tr className="bg-gray-100"><td className={`${tableCell} font-bold`}>Gross Salary</td><td className={`${tableCell} text-right font-bold`}>{formatPaysheetMoney(data.gross_salary)}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -599,7 +639,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                   {deductionLines.map((row) => (
                     <tr key={row.label}>
                       <td className={tableCell}>{row.label}</td>
-                      <td className={`${tableCell} text-right`}>{n(row.amount)}</td>
+                      <td className={`${tableCell} text-right`}>{formatPaysheetMoney(row.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -617,7 +657,7 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
                   {epfLines.map((row) => (
                     <tr key={row.label}>
                       <td className={tableCell}>{row.label}</td>
-                      <td className={`${tableCell} text-right text-gray-600`}>{n(row.amount)}</td>
+                      <td className={`${tableCell} text-right text-gray-600`}>{formatPaysheetMoney(row.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -632,11 +672,11 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
               <tbody>
                 <tr className="bg-gray-100">
                   <td className={`${tableCell} font-bold`}>Total Deduction</td>
-                  <td className={`${tableCell} text-right font-bold`}>{n(totalDeductionPayslip)}</td>
+                  <td className={`${tableCell} text-right font-bold`}>{formatPaysheetMoney(totalDeductionPayslip)}</td>
                 </tr>
                 <tr className="bg-green-50 border-t-2 border-green-200">
                   <td className="px-4 py-4 font-bold text-lg text-gray-900">Net Pay</td>
-                  <td className="px-4 py-4 text-right font-bold text-lg text-green-700">Rs. {n(netPayPayslip)}</td>
+                  <td className="px-4 py-4 text-right font-bold text-lg text-green-700">{formatPaysheetMoney(netPayPayslip)}</td>
                 </tr>
               </tbody>
             </table>
@@ -657,14 +697,14 @@ const PayslipView = ({ employee, data, month, year, monthName, onClose, initialS
           </div>
           )}
 
-          {/* Accountant Signature - prints with the payslip */}
+          {/* Finance Signature - prints with the payslip */}
           <div className="mt-8 pt-6 border-t-2 border-gray-200">
             <div className={`${sectionTitle} text-gray-800`}>Authorized by</div>
             <div className="flex flex-wrap gap-8 sm:gap-12 mt-4">
               <div className="flex-1 min-w-[140px]">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Accountant Signature</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Finance Signature</p>
                 {signatureDataUrl ? (
-                  <img src={signatureDataUrl} alt="Accountant signature" className="h-14 object-contain object-left max-w-[200px]" />
+                  <img src={signatureDataUrl} alt="Finance signature" className="h-14 object-contain object-left max-w-[200px]" />
                 ) : (
                   <div className="h-14 border-b-2 border-gray-300 w-full max-w-[200px]" />
                 )}

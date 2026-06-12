@@ -9,7 +9,7 @@ const leaveSchema = new Schema(
       required: true,
     },
 
-    // Assigned employee (must be same department as employeeId.department)
+    // Assigned employee (must match employeeId department and designation)
     assignedTo: {
       type: Schema.Types.ObjectId,
       ref: "Employee",
@@ -40,7 +40,7 @@ const leaveSchema = new Schema(
     totalDays: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0.5,
     },
 
     reason: {
@@ -58,6 +58,11 @@ const leaveSchema = new Schema(
     approvedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      default: null,
+    },
+
+    signature_data_url: {
+      type: String,
       default: null,
     },
 

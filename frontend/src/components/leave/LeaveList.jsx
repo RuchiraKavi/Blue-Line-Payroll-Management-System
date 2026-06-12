@@ -5,6 +5,7 @@ import axios from "axios";
 import LeaveBalance from "./LeaveBalance";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
+import { isInternEmployee, isInternRole } from "../../utils/internPayroll.js";
 
 const LeaveList = ({ employeeId, isAdminView = false }) => {
   const { user } = useAuth();
@@ -12,10 +13,32 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
   const [search, setSearch] = useState("");
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isIntern, setIsIntern] = useState(false);
 
   useEffect(() => {
     const fetchLeaves = async () => {
       try {
+        if (!isAdminView && user?._id) {
+          try {
+            const employeeRes = await axios.get(
+              "http://localhost:5000/api/employees/me/profile",
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+              }
+            );
+            if (employeeRes.data.success && employeeRes.data.employee) {
+              const emp = employeeRes.data.employee;
+              setIsIntern(
+                isInternEmployee(emp) || isInternRole(user?.role)
+              );
+            }
+          } catch {
+            setIsIntern(isInternRole(user?.role));
+          }
+        }
+
         let url = "";
 
         if (isAdminView && employeeId) {
@@ -72,12 +95,17 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
   const daysTaken = calculateDaysTaken();
 
   const formatLeaveType = (type) => {
-    const map = {
-      casual: "Casual Leave",
-      annual: "Annual Leave",
-      sick: "Sick Leave",
-      nopay: "No Pay",
-    };
+    const map = isIntern
+      ? {
+          casual: "Half Day Leave",
+          nopay: "No Pay",
+        }
+      : {
+          casual: "Casual Leave",
+          annual: "Annual Leave",
+          sick: "Sick Leave",
+          nopay: "No Pay",
+        };
     return map[type] || type;
   };
 
@@ -115,55 +143,87 @@ const LeaveList = ({ employeeId, isAdminView = false }) => {
             📊 Leaves Taken Summary
           </h4>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Casual Leaves */}
-            <div className="group rounded-lg border border-blue-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                  🏖️
+          {isIntern ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="group rounded-lg border border-indigo-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                    🕐
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Half Day Leave</p>
+                    <p className="text-2xl font-bold text-indigo-700">
+                      {daysTaken.casual}
+                      <span className="text-base font-medium text-gray-500"> days</span>
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Casual Leaves</p>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {daysTaken.casual}
-                    <span className="text-base font-medium text-gray-500"> days</span>
-                  </p>
+              </div>
+              <div className="group rounded-lg border border-amber-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                    📋
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">No Pay</p>
+                    <p className="text-2xl font-bold text-amber-700">
+                      {leaves
+                        .filter((l) => l.status === "Approved" && l.leaveType === "nopay")
+                        .reduce((sum, l) => sum + (Number(l.totalDays) || 0), 0)}
+                      <span className="text-base font-medium text-gray-500"> days</span>
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="group rounded-lg border border-blue-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                    🏖️
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Casual Leaves</p>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {daysTaken.casual}
+                      <span className="text-base font-medium text-gray-500"> days</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-            {/* Annual Leaves */}
-            <div className="group rounded-lg border border-green-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-600">
-                  📅
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Annual Leaves</p>
-                  <p className="text-2xl font-bold text-green-700">
-                    {daysTaken.annual}
-                    <span className="text-base font-medium text-gray-500"> days</span>
-                  </p>
+              <div className="group rounded-lg border border-green-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-600">
+                    📅
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Annual Leaves</p>
+                    <p className="text-2xl font-bold text-green-700">
+                      {daysTaken.annual}
+                      <span className="text-base font-medium text-gray-500"> days</span>
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Sick Leaves */}
-            <div className="group rounded-lg border border-red-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
-                  🤒
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Sick Leaves</p>
-                  <p className="text-2xl font-bold text-red-700">
-                    {daysTaken.sick}
-                    <span className="text-base font-medium text-gray-500"> days</span>
-                  </p>
+              <div className="group rounded-lg border border-red-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
+                    🤒
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Sick Leaves</p>
+                    <p className="text-2xl font-bold text-red-700">
+                      {daysTaken.sick}
+                      <span className="text-base font-medium text-gray-500"> days</span>
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
       )}

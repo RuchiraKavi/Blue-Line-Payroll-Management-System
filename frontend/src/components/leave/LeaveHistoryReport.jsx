@@ -1,9 +1,11 @@
 import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "react-data-table-component";
+import { FaFileAlt } from "react-icons/fa";
 import { leaveDataTableCustomStyles, leaveTypeLabels } from "../../utils/LeaveHelper";
 import DateInput from "../ui/DateInput.jsx";
 import SelectInput from "../ui/SelectInput.jsx";
+import LeaveReportModal from "./LeaveReportModal.jsx";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -90,6 +92,7 @@ const LeaveHistoryReport = () => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showLeaveReport, setShowLeaveReport] = useState(false);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all"); // all | Pending | Approved | Rejected
@@ -159,7 +162,7 @@ const LeaveHistoryReport = () => {
     });
   }, [leaves, search, status, leaveType, appliedFrom, appliedTo]);
 
-  const reportRows = useMemo(() => {
+  const csvReportRows = useMemo(() => {
     // CSV rows include header row at index 0
     const header = [
       "Employee Name",
@@ -200,10 +203,10 @@ const LeaveHistoryReport = () => {
       const to = appliedTo || "end";
       const safeFrom = String(from).replaceAll("-", "_");
       const safeTo = String(to).replaceAll("-", "_");
-      downloadCsv(`leave_history_report_${safeFrom}_to_${safeTo}.csv`, reportRows);
+      downloadCsv(`leave_history_report_${safeFrom}_to_${safeTo}.csv`, csvReportRows);
       return;
     }
-    downloadCsv(`leave_history_report_all_time.csv`, reportRows);
+    downloadCsv(`leave_history_report_all_time.csv`, csvReportRows);
   };
 
   const hasActiveFilters = Boolean(
@@ -232,6 +235,15 @@ const LeaveHistoryReport = () => {
           <p className="text-sm text-gray-600 mt-1">View leave history for all employees and export a report.</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowLeaveReport(true)}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FaFileAlt /> Monthly Leave Report
+          </button>
+
           <button
             type="button"
             onClick={handleExport}
@@ -311,6 +323,10 @@ const LeaveHistoryReport = () => {
           </div>
         </div>
       </div>
+
+      {showLeaveReport && (
+        <LeaveReportModal leaves={filteredLeaves} onClose={() => setShowLeaveReport(false)} />
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">

@@ -1,7 +1,10 @@
 import fs from "fs";
 import Attendance from "../models/Attendance.js";
+import AttendanceReportRun from "../models/AttendanceReportRun.js";
 import Employee from "../models/Employee.js";
 import User from "../models/User.js";
+import Role from "../models/Role.js";
+import { getRequestUserId } from "../utils/rolePermissions.js";
 import {
   normalizeCsvCell,
   parseCsvDate,
@@ -336,4 +339,109 @@ const getAttendanceSummary = async (req, res) => {
   }
 };
 
-export { uploadAttendanceCSV, getAttendanceByDate, getAttendanceByEmployee, getAttendanceSummary };
+function normalizeSignatureDataUrl(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("data:image/")) return null;
+  if (trimmed.length > 2_000_000) return null;
+  return trimmed;
+}
+
+async function resolveAttendanceReportApprover(userId) {
+  if (!userId) return null;
+
+  const user = await User.findById(userId).select("name role").lean();
+  if (!user) return null;
+
+  const employee = await Employee.findOne({ userId: user._id }).select("designation").lean();
+  const roleKey = String(user.role || "").trim().toLowerCase();
+  const roleDoc = roleKey
+    ? await Role.findOne({ key: roleKey }).collation({ locale: "en", strength: 2 }).select("label").lean()
+    : null;
+  const roleLabel =
+    roleDoc?.label ||
+    (roleKey ? roleKey.charAt(0).toUpperCase() + roleKey.slice(1) : null);
+
+  return {
+    approved_by_user_id: user._id,
+    approved_by_name: user.name || null,
+    approved_by_role: roleLabel || null,
+    approved_by_designation: employee?.designation || roleLabel || null,
+  };
+}
+
+const getAttendanceReportApproval = async (req, res) => {
+  try {
+    const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+    const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
+
+    if (month == null || isNaN(month) || month < 1 || month > 12 || year == null || isNaN(year)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+
+    const approval = await AttendanceReportRun.findOne({ month, year }).lean();
+    return res.status(200).json({ success: true, approval: approval || null });
+  } catch (error) {
+    console.error("Get attendance report approval error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch attendance report approval" });
+  }
+};
+
+const saveAttendanceReportApproval = async (req, res) => {
+  try {
+    const { month, year, signature_data_url } = req.body;
+    const m = month != null ? parseInt(month, 10) : null;
+    const y = year != null ? parseInt(year, 10) : null;
+
+    if (m == null || isNaN(m) || m < 1 || m > 12 || y == null || isNaN(y)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+
+    const signatureUrl = normalizeSignatureDataUrl(signature_data_url);
+    if (!signatureUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid signature image is required to approve the report",
+      });
+    }
+
+    const approver = await resolveAttendanceReportApprover(getRequestUserId(req.user));
+    if (!approver) {
+      return res.status(400).json({ success: false, message: "Approver details not found" });
+    }
+
+    const approval = await AttendanceReportRun.findOneAndUpdate(
+      { month: m, year: y },
+      {
+        $set: {
+          ...approver,
+          signature_data_url: signatureUrl,
+          approved_at: new Date(),
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance report approved",
+      approval,
+    });
+  } catch (error) {
+    console.error("Save attendance report approval error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to approve attendance report",
+    });
+  }
+};
+
+export {
+  uploadAttendanceCSV,
+  getAttendanceByDate,
+  getAttendanceByEmployee,
+  getAttendanceSummary,
+  getAttendanceReportApproval,
+  saveAttendanceReportApproval,
+};

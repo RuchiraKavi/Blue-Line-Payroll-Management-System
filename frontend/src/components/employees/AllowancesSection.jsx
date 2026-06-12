@@ -1,10 +1,12 @@
 import React from "react";
+import MoneyInput from "../ui/MoneyInput.jsx";
 
 export const ALLOWANCE_FIELDS = [
   { name: "travel_allowance", label: "Travel" },
   { name: "food_allowance", label: "Food" },
   { name: "holiday_payment", label: "Holiday" },
   { name: "allowance_ns", label: "Attendance Allowance" },
+  { name: "bonus", label: "Bonus" },
 ];
 
 export const emptyAllowances = () =>
@@ -23,21 +25,14 @@ const AllowancesSection = ({ values, onChange, onBlur, fieldErrors = {} }) => {
             >
               {label}
             </label>
-            <input
-              type="number"
+            <MoneyInput
               id={name}
               name={name}
-              min="0"
-              step="0.01"
               value={values[name] ?? ""}
               onChange={onChange}
               onBlur={onBlur}
-              placeholder="0.00"
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 ${
-                fieldErrors[name]
-                  ? "border-red-500 focus:ring-red-100 focus:border-red-500"
-                  : "border-gray-300 focus:ring-amber-500 focus:border-transparent"
-              }`}
+              hasError={Boolean(fieldErrors[name])}
+              focusRingClass="focus-within:ring-amber-500"
             />
             {fieldErrors[name] && (
               <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors[name]}</p>

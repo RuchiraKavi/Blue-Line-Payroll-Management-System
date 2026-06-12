@@ -163,6 +163,11 @@ const EmployeePDF = ({ employee }) => (
         </View>
 
         <View style={styles.row}>
+          <Text style={styles.label}>Job Type:</Text>
+          <Text style={styles.value}>{employee.job_type || "Permanent"}</Text>
+        </View>
+
+        <View style={styles.row}>
           <Text style={styles.label}>Department:</Text>
           <Text style={styles.value}>{employee.department?.dep_name}</Text>
         </View>

@@ -13,11 +13,25 @@ import {
   getLeavesByUser,
   getEmployeeLeaveBalance,
   getTotalLeaveDaysByEmployee,
+  getLeaveReportApproval,
+  saveLeaveReportApproval,
 } from "../controllers/leaveController.js";
 
 const router = express.Router();
 
 router.get("/total-days-by-employee", authMiddleware, getTotalLeaveDaysByEmployee);
+router.get(
+  "/report-approval",
+  authMiddleware,
+  authorizePermission("leave", "read", "admin", "hr"),
+  getLeaveReportApproval
+);
+router.post(
+  "/report-approval",
+  authMiddleware,
+  authorizePermission("leave", "update", "admin", "hr"),
+  saveLeaveReportApproval
+);
 router.post("/request-leave", authMiddleware, requestLeave);
 router.get("/", authMiddleware, authorizePermission("leave", "read", "admin", "hr"), getLeaves);
 router.get("/user/:userId", authMiddleware, getEmployeeLeaves);

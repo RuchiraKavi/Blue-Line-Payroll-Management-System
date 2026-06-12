@@ -1,8 +1,19 @@
 import axios from "axios";
 import { jsPDF } from "jspdf";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaHistory, FaTimes } from "react-icons/fa";
+import { useAuth } from "../../hooks/useAuth.js";
+import {
+  getAttendanceReportApprovalPeriod,
+  resolveAttendanceReportApprovalInfo,
+} from "../../utils/attendanceReportApproval.js";
+import {
+  buildAttendanceReportRows,
+  downloadAttendanceReportPdf,
+  resolveAttendanceReportPeriod,
+} from "../../utils/attendanceReportFormat.js";
 import { reportTableTheme } from "../../utils/LeaveHelper";
+import AttendanceReportApprovalSection from "./AttendanceReportApprovalSection.jsx";
 import DateInput from "../ui/DateInput.jsx";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
@@ -11,88 +22,23 @@ import SelectInput from "../ui/SelectInput.jsx";
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
-/** PDF of the summary table currently shown (same filters: date range + employee search). */
-const downloadAttendanceHistorySummaryPdf = ({ summaryRows, leaveTotalsMap, from, to, employeeQuery }) => {
-  if (!Array.isArray(summaryRows) || summaryRows.length === 0) return;
+const escapeCsvCell = (value) => {
+  const str = value == null ? "" : String(value);
+  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+};
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 10;
-  const tableW = pageW - 2 * margin;
-  const colWeights = [8, 24, 42, 36, 36, 22, 22, 22];
-  const wSum = colWeights.reduce((a, b) => a + b, 0);
-  const w = colWeights.map((c) => (c / wSum) * tableW);
-  const rowH = 6;
-  let y = 12;
-
-  doc.setFontSize(14);
-  doc.setTextColor(37, 99, 235);
-  doc.text("Attendance History Report", pageW / 2, y, { align: "center" });
-  y += 7;
-  doc.setFontSize(9);
-  doc.setTextColor(40, 40, 40);
-  doc.text(`Date range: ${from || "—"}  -  ${to || "—"}`, margin, y);
-  y += 5;
-  const q = (employeeQuery || "").trim();
-  if (q) {
-    doc.text(`Employee filter: ${q}`, margin, y);
-    y += 5;
-  }
-  y += 3;
-
-  const headers = ["S.No", "Employee ID", "Name", "Department", "Designation", "Days worked", "Total hours", "Total leave"];
-
-  const drawTableHeader = () => {
-    doc.setFillColor(243, 244, 246);
-    doc.rect(margin, y, tableW, rowH, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    let x = margin;
-    headers.forEach((h, i) => {
-      doc.text(h, x + w[i] / 2, y + 4.2, { align: "center" });
-      x += w[i];
-    });
-    y += rowH;
-    doc.setFont("helvetica", "normal");
-  };
-
-  drawTableHeader();
-
-  summaryRows.forEach((emp, idx) => {
-    if (y + rowH > pageH - 10) {
-      doc.addPage("landscape");
-      y = 12;
-      drawTableHeader();
-    }
-    doc.setFontSize(7);
-    let x = margin;
-    const cells = [
-      String(idx + 1),
-      emp.employee_id || "—",
-      emp.employee_name || "—",
-      emp.department || "—",
-      emp.designation || "—",
-      String(emp.workedDays ?? 0),
-      (Number(emp.totalHours) || 0).toFixed(1),
-      String(leaveTotalsMap?.[emp.employee_db_id] ?? 0),
-    ];
-    cells.forEach((cell, i) => {
-      const raw = String(cell);
-      const display = raw.length > 42 ? `${raw.slice(0, 39)}…` : raw;
-      if (i >= 5) {
-        doc.text(display, x + w[i] / 2, y + 4.2, { align: "center", maxWidth: w[i] - 2 });
-      } else {
-        doc.text(display, x + 1.5, y + 4.2, { maxWidth: w[i] - 3 });
-      }
-      x += w[i];
-    });
-    y += rowH;
-  });
-
-  const safeFrom = (from || "start").replaceAll("-", "_");
-  const safeTo = (to || "end").replaceAll("-", "_");
-  doc.save(`attendance_history_report_${safeFrom}_to_${safeTo}.pdf`);
+const downloadCsv = (filename, rows) => {
+  const csv = rows.map((r) => r.map(escapeCsvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 const monthLabelFromKey = (key) =>
@@ -326,6 +272,7 @@ const getCurrentMonthDateRange = () => {
 };
 
 const AttendanceHistoryReport = () => {
+  const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
 
@@ -341,6 +288,12 @@ const AttendanceHistoryReport = () => {
 
   const [leaveTotalsMap, setLeaveTotalsMap] = useState({}); // keyed by Employee ObjectId
 
+  const [reportApproval, setReportApproval] = useState(null);
+  const [draftSignature, setDraftSignature] = useState(null);
+  const [loadingApproval, setLoadingApproval] = useState(false);
+  const [approvingReport, setApprovingReport] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+
   /* View history modal — same behavior as Attendance page “All employees” table */
   const [historyEmployee, setHistoryEmployee] = useState(null);
   const [historyRecords, setHistoryRecords] = useState([]);
@@ -351,6 +304,8 @@ const AttendanceHistoryReport = () => {
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [historyMonthFilter, setHistoryMonthFilter] = useState("all");
   const [historyShowExtraColumns, setHistoryShowExtraColumns] = useState(false);
+
+  const reportGenerationRef = useRef(0);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -447,10 +402,14 @@ const AttendanceHistoryReport = () => {
   }, [historyEmployee, historyFrom, historyTo, openHistory]);
 
   const generateReport = async (employeesToFetch) => {
+    const generation = ++reportGenerationRef.current;
+
     if (!Array.isArray(employeesToFetch) || employeesToFetch.length === 0) {
+      if (generation !== reportGenerationRef.current) return;
       setRecords([]);
       setLeaveTotalsMap({});
       closeHistory();
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -513,25 +472,112 @@ const AttendanceHistoryReport = () => {
         return String(a.employee_name).localeCompare(String(b.employee_name));
       });
 
+      if (generation !== reportGenerationRef.current) return;
       setRecords(out);
     } catch (err) {
+      if (generation !== reportGenerationRef.current) return;
       setError(err?.response?.data?.message || "Failed to generate attendance report");
       setRecords([]);
     } finally {
-      setLoading(false);
+      if (generation === reportGenerationRef.current) {
+        setLoading(false);
+      }
     }
   };
 
+  const hasActiveFilters = Boolean(
+    from || to || employeeQuery.trim() || employeeQueryDebounced.trim()
+  );
+
   const clearFilters = () => {
-    const { from: f, to: t } = getCurrentMonthDateRange();
-    setFrom(f);
-    setTo(t);
+    reportGenerationRef.current += 1;
+    setFrom("");
+    setTo("");
     setEmployeeQuery("");
     setEmployeeQueryDebounced("");
     setRecords([]);
     setLeaveTotalsMap({});
+    setReportApproval(null);
+    setDraftSignature(null);
+    setApprovalError("");
     closeHistory();
     setError("");
+    setLoading(false);
+  };
+
+  const approvalPeriod = useMemo(
+    () => getAttendanceReportApprovalPeriod(from, to),
+    [from, to]
+  );
+
+  const approverDesignationFallback = useMemo(() => {
+    const approverEmployee = (employees || []).find((emp) => {
+      const uid = emp?.userId?._id ?? emp?.userId;
+      return uid && user?._id && String(uid) === String(user._id);
+    });
+    return approverEmployee?.designation || "—";
+  }, [employees, user]);
+
+  const reportApprovalInfo = useMemo(
+    () => resolveAttendanceReportApprovalInfo(reportApproval, user, approverDesignationFallback),
+    [reportApproval, user, approverDesignationFallback]
+  );
+
+  const fetchReportApproval = useCallback(async () => {
+    if (!approvalPeriod) {
+      setReportApproval(null);
+      return;
+    }
+    setLoadingApproval(true);
+    setApprovalError("");
+    try {
+      const res = await axios.get(`${API_BASE}/attendance/report-approval`, {
+        params: { month: approvalPeriod.month, year: approvalPeriod.year },
+        headers: getAuthHeader(),
+      });
+      if (res.data?.success) {
+        setReportApproval(res.data.approval || null);
+        setDraftSignature(null);
+      } else {
+        setReportApproval(null);
+      }
+    } catch (err) {
+      setReportApproval(null);
+      setApprovalError(err.response?.data?.message || "Failed to load report approval");
+    } finally {
+      setLoadingApproval(false);
+    }
+  }, [approvalPeriod]);
+
+  useEffect(() => {
+    fetchReportApproval();
+  }, [fetchReportApproval]);
+
+  const handleApproveReport = async () => {
+    if (!draftSignature || !approvalPeriod) return;
+    setApprovingReport(true);
+    setApprovalError("");
+    try {
+      const res = await axios.post(
+        `${API_BASE}/attendance/report-approval`,
+        {
+          month: approvalPeriod.month,
+          year: approvalPeriod.year,
+          signature_data_url: draftSignature,
+        },
+        { headers: getAuthHeader() }
+      );
+      if (res.data?.success) {
+        setReportApproval(res.data.approval || null);
+        setDraftSignature(null);
+      } else {
+        setApprovalError(res.data?.message || "Failed to approve report");
+      }
+    } catch (err) {
+      setApprovalError(err.response?.data?.message || "Failed to approve report");
+    } finally {
+      setApprovingReport(false);
+    }
   };
 
   const employeesForReport = useMemo(() => {
@@ -652,13 +698,54 @@ const AttendanceHistoryReport = () => {
     filteredHistoryRows,
   ]);
 
-  const handleExport = () => {
-    downloadAttendanceHistorySummaryPdf({
-      summaryRows: summaryByEmployee,
-      leaveTotalsMap,
-      from,
-      to,
-      employeeQuery,
+  const csvReportRows = useMemo(() => {
+    const header = [
+      "Employee ID",
+      "Name",
+      "Department",
+      "Designation",
+      "Days worked",
+      "Total hours",
+      "Total leave",
+    ];
+    const rows = summaryByEmployee.map((emp) => [
+      emp.employee_id || "",
+      emp.employee_name || "",
+      emp.department || "",
+      emp.designation || "",
+      emp.workedDays ?? 0,
+      (Number(emp.totalHours) || 0).toFixed(1),
+      leaveTotalsMap?.[emp.employee_db_id] ?? 0,
+    ]);
+    return [header, ...rows];
+  }, [summaryByEmployee, leaveTotalsMap]);
+
+  const handleExportCsv = () => {
+    const safeFrom = (from || "start").replaceAll("-", "_");
+    const safeTo = (to || "end").replaceAll("-", "_");
+    downloadCsv(`attendance_history_report_${safeFrom}_to_${safeTo}.csv`, csvReportRows);
+  };
+
+  const isReportApproved = Boolean(reportApprovalInfo.isApproved && reportApprovalInfo.signatureDataUrl);
+
+  const handleExportPdf = () => {
+    if (!isReportApproved) return;
+    const period = resolveAttendanceReportPeriod(from, to);
+    const rows = buildAttendanceReportRows(summaryByEmployee, leaveTotalsMap);
+    const safeFrom = (from || "start").replaceAll("-", "_");
+    const safeTo = (to || "end").replaceAll("-", "_");
+    downloadAttendanceReportPdf({
+      rows,
+      monthName: period.monthName,
+      year: period.year,
+      daysWorkedInPeriod: period.daysWorkedInPeriod,
+      approvalInfo: {
+        approvedBy: reportApprovalInfo.approvedBy,
+        name: reportApprovalInfo.name,
+        designation: reportApprovalInfo.designation,
+        signatureDataUrl: reportApprovalInfo.signatureDataUrl,
+      },
+      fileName: `Attendance_Report_${safeFrom}_to_${safeTo}.pdf`,
     });
   };
 
@@ -725,25 +812,38 @@ const AttendanceHistoryReport = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Attendance History Report</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Summary for the selected period and employee filter. Export PDF matches the table below.
+            Summary for the selected period and employee filter. Export CSV matches the table below. Approve the report before downloading the official PDF.
           </p>
         </div>
         <div className="flex items-center gap-2">
-        <button
+          <button
             type="button"
-            onClick={handleExport}
+            onClick={handleExportCsv}
             disabled={loading || summaryByEmployee.length === 0}
             className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Export PDF
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={loading || summaryByEmployee.length === 0 || !isReportApproved}
+            title={
+              isReportApproved
+                ? "Download approved attendance report PDF"
+                : "Approve the report with your signature before downloading PDF"
+            }
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Get PDF
           </button>
           <button
             type="button"
             onClick={clearFilters}
-            disabled={loading}
-            className="px-4 py-2 rounded-xl bg-white border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50"
+            disabled={loading || !hasActiveFilters}
+            className="px-4 py-2 rounded-xl bg-white border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Clear
+            Clear filters
           </button>
         </div>
       </div>
@@ -866,6 +966,23 @@ const AttendanceHistoryReport = () => {
           }}
         />
       </div>
+
+      {to && summaryByEmployee.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+          {approvalError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{approvalError}</div>
+          )}
+          <AttendanceReportApprovalSection
+            approvalInfo={reportApprovalInfo}
+            editable
+            draftSignature={draftSignature}
+            onDraftSignatureChange={setDraftSignature}
+            onApprove={handleApproveReport}
+            approving={approvingReport}
+            loading={loadingApproval}
+          />
+        </div>
+      )}
 
       {historyEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={closeHistory}>

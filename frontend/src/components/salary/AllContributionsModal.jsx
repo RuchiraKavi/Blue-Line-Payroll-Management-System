@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { jsPDF } from "jspdf";
 import { FaTimes, FaFileAlt, FaPrint, FaFilePdf, FaUsers } from "react-icons/fa";
-import { usePagination } from "../../hooks/usePagination.js";
-import TablePagination from "../ui/TablePagination.jsx";
 import SelectInput from "../ui/SelectInput.jsx";
+import ContributionReportTable from "./ContributionReportTable.jsx";
+import {
+  mapContributionEntry,
+  downloadContributionReportPdf,
+  downloadContributionReportRangePdf,
+} from "../../utils/contributionReportFormat.js";
+import { resolveApprovalInfo } from "../../utils/approvalInfo.js";
 
 const API_BASE = "http://localhost:5000/api";
 const getAuthHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -29,28 +33,29 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
   const [loadingReport, setLoadingReport] = useState(false);
   const reportRef = useRef(null);
 
-  const entries = run?.entries || [];
-
-  const currentPagination = usePagination(entries, {
-    resetKey: `${periodMonth}-${periodYear}`,
-  });
-
-  const reportTableRows = useMemo(
-    () =>
-      reportRuns.flatMap(({ month, year, run: r }) =>
-        (r?.entries || []).map((e, i) => ({
-          key: `${year}-${month}-${e.employee || i}`,
-          month,
-          year,
-          entry: e,
-        }))
-      ),
-    [reportRuns]
+  const currentRows = useMemo(
+    () => (run?.entries || []).map(mapContributionEntry),
+    [run]
   );
 
-  const reportPagination = usePagination(reportTableRows, {
-    resetKey: `${reportFromMonth}-${reportFromYear}-${reportToMonth}-${reportToYear}-${reportTableRows.length}`,
-  });
+  const currentApprovalInfo = useMemo(
+    () => resolveApprovalInfo(run),
+    [run]
+  );
+
+  const reportSections = useMemo(
+    () =>
+      reportRuns
+        .filter((r) => r.run?.entries?.length)
+        .map(({ month, year, run: r }) => ({
+          month,
+          year,
+          monthName: monthNames[month - 1],
+          rows: (r.entries || []).map(mapContributionEntry),
+          approvalInfo: resolveApprovalInfo(r),
+        })),
+    [reportRuns]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +69,9 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
           setError("");
         } else {
           setRun(null);
-          if (!cancelled && res.data?.success === false && res.response?.status !== 404) setError(res.data?.message || "No data");
+          if (!cancelled && res.data?.success === false && res.response?.status !== 404) {
+            setError(res.data?.message || "No data");
+          }
         }
       })
       .catch((err) => {
@@ -92,7 +99,9 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
     }
     Promise.all(
       runsToFetch.map(({ month, year }) =>
-        axios.get(`${API_BASE}/salary/runs`, { params: { month, year }, headers: getAuthHeader() }).then((r) => ({ month, year, run: r.data?.run }))
+        axios
+          .get(`${API_BASE}/salary/runs`, { params: { month, year }, headers: getAuthHeader() })
+          .then((r) => ({ month, year, run: r.data?.run }))
       )
     )
       .then((results) => {
@@ -113,13 +122,14 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
-        <head><title>All Employees Contribution Report</title>
+        <head><title>EPF & ETF Contribution Report</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
           table { width: 100%; border-collapse: collapse; margin: 16px 0; }
           th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
-          th { background: #ecfdf5; font-weight: 600; }
+          th { background: #f8fafc; font-weight: 600; }
           .text-right { text-align: right; }
+          .section { margin-bottom: 32px; page-break-after: always; }
         </style>
         </head>
         <body>${content.innerHTML}</body>
@@ -133,57 +143,21 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
     }, 250);
   };
 
-  const handleDownloadPdf = () => {
-    if (reportRuns.length === 0) return;
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const margin = 12;
-    let y = 14;
-    doc.setFontSize(14);
-    doc.setTextColor(5, 150, 105);
-    doc.text("All Employees — EPF & ETF Contribution Report", pageW / 2, y, { align: "center" });
-    y += 8;
-    doc.setFontSize(9);
-    doc.setTextColor(0, 0, 0);
-    const totalTableW = pageW - 2 * margin;
-    const colEmployee = totalTableW * 0.28;
-    const colId = totalTableW * 0.14;
-    const colEmpEpf = totalTableW * 0.16;
-    const colEmprEpf = totalTableW * 0.18;
-    const colEtf = totalTableW * 0.14;
-    const rowH = 6;
-    reportRuns.forEach(({ month, year, run: r }) => {
-      if (!r?.entries?.length) return;
-      doc.setFont("helvetica", "bold");
-      doc.text(`${monthNames[month - 1]} ${year}`, margin, y);
-      y += rowH;
-      doc.setFillColor(236, 253, 245);
-      doc.rect(margin, y, totalTableW, rowH, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.text("Employee", margin + 2, y + 4);
-      doc.text("ID", margin + colEmployee + 2, y + 4);
-      doc.text("Emp EPF(8%)", margin + colEmployee + colId + colEmpEpf - 2, y + 4, { align: "right" });
-      doc.text("Empr EPF(12%)", margin + colEmployee + colId + colEmpEpf + colEmprEpf - 2, y + 4, { align: "right" });
-      doc.text("ETF(3%)", margin + totalTableW - 2, y + 4, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      y += rowH;
-      r.entries.forEach((e, i) => {
-        if (y + rowH > doc.internal.pageSize.getHeight() - 15) {
-          doc.addPage("landscape");
-          y = 14;
-        }
-        doc.setFontSize(8);
-        doc.text((e.name || "—").slice(0, 20), margin + 2, y + 4);
-        doc.text((e.employee_id || "—").slice(0, 10), margin + colEmployee + 2, y + 4);
-        doc.text(Number(e.epf_payment || 0).toFixed(2), margin + colEmployee + colId + colEmpEpf - 2, y + 4, { align: "right" });
-        doc.text(Number(e.employer_epf_payment || 0).toFixed(2), margin + colEmployee + colId + colEmpEpf + colEmprEpf - 2, y + 4, { align: "right" });
-        doc.text(Number(e.etf_payment || 0).toFixed(2), margin + totalTableW - 2, y + 4, { align: "right" });
-        y += rowH;
-      });
-      y += 4;
+  const handleDownloadCurrentPdf = () => {
+    downloadContributionReportPdf({
+      rows: currentRows,
+      monthName: monthNames[periodMonth - 1],
+      year: periodYear,
+      approvalInfo: currentApprovalInfo,
+      fileName: `EPF_ETF_Contribution_${monthNames[periodMonth - 1]}_${periodYear}.pdf`.replace(/\s+/g, "_"),
     });
-    doc.save("All_Employees_Contribution_Report.pdf");
+  };
+
+  const handleDownloadRangePdf = () => {
+    downloadContributionReportRangePdf({
+      sections: reportSections,
+      fileName: `EPF_ETF_Contribution_${monthNames[reportFromMonth - 1]}_${reportFromYear}_to_${monthNames[reportToMonth - 1]}_${reportToYear}.pdf`.replace(/\s+/g, "_"),
+    });
   };
 
   return (
@@ -247,54 +221,34 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
                     label: String(y),
                   }))}
                 />
+                {currentRows.length > 0 && !loading && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadCurrentPdf}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 text-sm ml-auto"
+                  >
+                    <FaFilePdf /> Download PDF
+                  </button>
+                )}
               </div>
-              {loading ? (
-                <p className="text-gray-500">Loading…</p>
-              ) : entries.length === 0 ? (
-                <p className="text-gray-500">No saved data for this period. Save salary runs to see contributions here.</p>
-              ) : (
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-emerald-50 text-emerald-900">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-semibold">Employee</th>
-                        <th className="px-4 py-3 text-left font-semibold">ID</th>
-                        <th className="px-4 py-3 text-right font-semibold">Employee EPF (8%) Rs.</th>
-                        <th className="px-4 py-3 text-right font-semibold">Employer EPF (12%) Rs.</th>
-                        <th className="px-4 py-3 text-right font-semibold">ETF (3%) Rs.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentPagination.paginatedItems.map((e, i) => (
-                        <tr key={e.employee || i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-4 py-3 border-t border-gray-200">{e.name || "—"}</td>
-                          <td className="px-4 py-3 border-t border-gray-200">{e.employee_id || "—"}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(e.epf_payment || 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(e.employer_epf_payment || 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right font-medium">{Number(e.etf_payment || 0).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <TablePagination
-                    page={currentPagination.page}
-                    perPage={currentPagination.perPage}
-                    totalItems={currentPagination.totalItems}
-                    totalPages={currentPagination.totalPages}
-                    onPageChange={currentPagination.setPage}
-                    onPerPageChange={(n) => {
-                      currentPagination.setPerPage(n);
-                      currentPagination.setPage(1);
-                    }}
-                  />
-                </div>
-              )}
+              <ContributionReportTable
+                rows={currentRows}
+                monthName={monthNames[periodMonth - 1]}
+                year={periodYear}
+                loading={loading}
+                loadingLabel="Loading…"
+                emptyMessage="No saved data for this period. Save salary runs to see contributions here."
+                approvalInfo={currentApprovalInfo}
+                resetKey={`${periodMonth}-${periodYear}`}
+              />
             </div>
           )}
 
           {tab === "report" && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Select month range, then load and print or download contribution report for all employees.</p>
+              <p className="text-sm text-gray-600">
+                Select month range, then load and print or download the contribution report for all employees.
+              </p>
               <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">From</span>
@@ -355,55 +309,44 @@ const AllContributionsModal = ({ currentMonth, currentYear, onClose }) => {
                   {loadingReport ? "Loading…" : "Load report"}
                 </button>
               </div>
-              <div ref={reportRef} className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-emerald-50 text-emerald-900">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Period</th>
-                      <th className="px-4 py-3 text-left font-semibold">Employee</th>
-                      <th className="px-4 py-3 text-left font-semibold">Employee ID</th>
-                      <th className="px-4 py-3 text-right font-semibold">Employee EPF (8%)</th>
-                      <th className="px-4 py-3 text-right font-semibold">Employer EPF (12%)</th>
-                      <th className="px-4 py-3 text-right font-semibold">ETF (3%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportTableRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Load report to see data.</td>
-                      </tr>
-                    ) : (
-                      reportPagination.paginatedItems.map(({ key, month, year, entry: e }, i) => (
-                        <tr key={key} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-4 py-3 border-t border-gray-200">{monthNames[month - 1]} {year}</td>
-                          <td className="px-4 py-3 border-t border-gray-200">{e.name || "—"}</td>
-                          <td className="px-4 py-3 border-t border-gray-200">{e.employee_id || "—"}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(e.epf_payment || 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(e.employer_epf_payment || 0).toFixed(2)}</td>
-                          <td className="px-4 py-3 border-t border-gray-200 text-right">{Number(e.etf_payment || 0).toFixed(2)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <TablePagination
-                  page={reportPagination.page}
-                  perPage={reportPagination.perPage}
-                  totalItems={reportPagination.totalItems}
-                  totalPages={reportPagination.totalPages}
-                  onPageChange={reportPagination.setPage}
-                  onPerPageChange={(n) => {
-                    reportPagination.setPerPage(n);
-                    reportPagination.setPage(1);
-                  }}
-                />
+
+              <div ref={reportRef}>
+                {loadingReport ? (
+                  <p className="text-gray-500 py-8 text-center">Loading report…</p>
+                ) : reportSections.length === 0 ? (
+                  <p className="text-gray-500 py-8 text-center">Load report to see data.</p>
+                ) : (
+                  <div className="space-y-10">
+                    {reportSections.map((section) => (
+                      <div key={`${section.year}-${section.month}`} className="section">
+                        <ContributionReportTable
+                          rows={section.rows}
+                          monthName={section.monthName}
+                          year={section.year}
+                          paginate={false}
+                          approvalInfo={section.approvalInfo}
+                          resetKey={`${section.year}-${section.month}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {reportRuns.length > 0 && (
+
+              {reportSections.length > 0 && (
                 <div className="flex gap-2">
-                  <button type="button" onClick={handlePrintReport} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 text-sm">
+                  <button
+                    type="button"
+                    onClick={handlePrintReport}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 text-sm"
+                  >
                     <FaPrint /> Print report
                   </button>
-                  <button type="button" onClick={handleDownloadPdf} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 text-sm">
+                  <button
+                    type="button"
+                    onClick={handleDownloadRangePdf}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 text-sm"
+                  >
                     <FaFilePdf /> Download PDF
                   </button>
                 </div>

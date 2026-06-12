@@ -7,7 +7,8 @@ export const CRUD_ACTIONS = [
 
 export const PERMISSION_SECTIONS = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "departments", label: "Departments & Designations" },
+  { key: "departments", label: "Departments" },
+  { key: "designations", label: "Designations" },
   { key: "employees", label: "Employees" },
   { key: "roles", label: "Roles" },
   { key: "attendance", label: "Attendance" },

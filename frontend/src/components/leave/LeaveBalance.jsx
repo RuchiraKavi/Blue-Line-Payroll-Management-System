@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../hooks/useAuth";
+import { isInternEmployee, isInternRole } from "../../utils/internPayroll.js";
 
 const LeaveBalance = () => {
   const { user } = useAuth();
   const [leaveBalance, setLeaveBalance] = useState(null);
+  const [isIntern, setIsIntern] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,6 +38,12 @@ const LeaveBalance = () => {
           );
 
           if (balanceRes.data.success) {
+            const emp = employeeRes.data.employee;
+            const internUser =
+              Boolean(balanceRes.data.isIntern) ||
+              isInternEmployee(emp) ||
+              isInternRole(user?.role);
+            setIsIntern(internUser);
             setLeaveBalance(balanceRes.data.leaveBalance);
           }
         }
@@ -61,35 +69,51 @@ const LeaveBalance = () => {
     return null;
   }
 
-  const balanceData = [
-    {
-      type: "casual",
-      label: "Casual Leaves",
-      icon: "🏖️",
-      bgColor: "from-blue-50 to-blue-100",
-      borderColor: "border-blue-200",
-      badgeBg: "bg-blue-100",
-      textColor: "text-blue-700",
-    },
-    {
-      type: "annual",
-      label: "Annual Leaves",
-      icon: "📅",
-      bgColor: "from-green-50 to-green-100",
-      borderColor: "border-green-200",
-      badgeBg: "bg-green-100",
-      textColor: "text-green-700",
-    },
-    {
-      type: "sick",
-      label: "Sick Leaves",
-      icon: "🤒",
-      bgColor: "from-red-50 to-red-100",
-      borderColor: "border-red-200",
-      badgeBg: "bg-red-100",
-      textColor: "text-red-700",
-    },
-  ];
+  const halfDayAvailable =
+    (leaveBalance.half_day ?? leaveBalance.casual ?? 0) >= 0.5;
+
+  const balanceData = isIntern
+    ? [
+        {
+          type: "half_day",
+          label: "Half Day (this month)",
+          icon: "🕐",
+          bgColor: "from-blue-50 to-blue-100",
+          borderColor: "border-blue-200",
+          badgeBg: "bg-blue-100",
+          textColor: "text-blue-700",
+          display: halfDayAvailable ? "Available" : "Used",
+        },
+      ]
+    : [
+        {
+          type: "casual",
+          label: "Casual Leaves",
+          icon: "🏖️",
+          bgColor: "from-blue-50 to-blue-100",
+          borderColor: "border-blue-200",
+          badgeBg: "bg-blue-100",
+          textColor: "text-blue-700",
+        },
+        {
+          type: "annual",
+          label: "Annual Leaves",
+          icon: "📅",
+          bgColor: "from-green-50 to-green-100",
+          borderColor: "border-green-200",
+          badgeBg: "bg-green-100",
+          textColor: "text-green-700",
+        },
+        {
+          type: "sick",
+          label: "Sick Leaves",
+          icon: "🤒",
+          bgColor: "from-red-50 to-red-100",
+          borderColor: "border-red-200",
+          badgeBg: "bg-red-100",
+          textColor: "text-red-700",
+        },
+      ];
 
   return (
     <div className="mb-6 rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white p-5 shadow-sm">
@@ -97,9 +121,9 @@ const LeaveBalance = () => {
         ✨ Your Leave Balance
       </h4>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 ${isIntern ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}>
         {balanceData.map(
-          ({ type, label, icon, bgColor, borderColor, badgeBg, textColor }) => (
+          ({ type, label, icon, bgColor, borderColor, badgeBg, textColor, display }) => (
             <div
               key={type}
               className={`group rounded-lg border ${borderColor} bg-gradient-to-br ${bgColor} p-4 shadow-sm transition hover:shadow-md`}
@@ -111,10 +135,12 @@ const LeaveBalance = () => {
                 <div>
                   <p className="text-sm text-gray-600">{label}</p>
                   <p className={`text-3xl font-bold ${textColor}`}>
-                    {leaveBalance[type] || 0}
-                    <span className="text-base font-medium text-gray-500 ml-1">
-                      {leaveBalance[type] === 1 ? "day" : "days"}
-                    </span>
+                    {display ?? leaveBalance[type] ?? 0}
+                    {!display && (
+                      <span className="text-base font-medium text-gray-500 ml-1">
+                        {leaveBalance[type] === 1 ? "day" : "days"}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

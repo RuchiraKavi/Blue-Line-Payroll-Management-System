@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { jsPDF } from "jspdf";
 import { FaMoneyBillWave, FaFileInvoiceDollar, FaListUl, FaCheck, FaTimes, FaSave, FaPiggyBank, FaUsers, FaFilePdf, FaUser, FaChevronDown, FaChevronUp, FaPenFancy } from "react-icons/fa";
 import PayslipView from "./PayslipView.jsx";
 import ContributionModal from "./ContributionModal.jsx";
@@ -8,10 +7,22 @@ import AllContributionsModal from "./AllContributionsModal.jsx";
 import SalarySummaryTable from "./SalarySummaryTable.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
-import { resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
-import { hasJoinMonthPay } from "../../utils/joinMonthPayroll.js";
+import { resolveAttendanceAllowance, resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
+import { formatPaysheetMoney } from "../../utils/paysheetFormat.js";
+import normalizeRole from "../../utils/normalizeRole.js";
+import {
+  getEmployeeEffectiveRole,
+  isInternRole,
+  resolveEpfEtfPayments,
+} from "../../utils/internPayroll.js";
+import { hasJoinMonthPay, isFirstPayMonth } from "../../utils/joinMonthPayroll.js";
 import { getCurrentPayPeriod, isFuturePayPeriod } from "../../utils/payPeriod.js";
 import SelectInput from "../ui/SelectInput.jsx";
+import {
+  downloadMonthlyPaysheetPdf,
+  resolvePaysheetAmounts,
+} from "../../utils/paysheetFormat.js";
+import { mergeRunApprovalFields, resolveApprovalInfo } from "../../utils/approvalInfo.js";
 
 const API_BASE = "http://localhost:5000/api";
 
@@ -45,6 +56,7 @@ const defaultRow = (emp) => ({
   food_allowance: Number(emp.food_allowance) || 0,
   holiday_payment: Number(emp.holiday_payment) || 0,
   allowance_ns: Number(emp.allowance_ns) || 0,
+  bonus: Number(emp.bonus) || 0,
   no_pay: Number(emp.no_pay) || 0,
   no_pay_days: Number(emp.no_pay_days) || 0,
   salary_advance: 0,
@@ -63,6 +75,7 @@ const defaultRow = (emp) => ({
   join_month_carry_forward: Number(emp.join_month_carry_forward) || 0,
   join_month_worked_days: Number(emp.join_month_worked_days) || 0,
   approvalStatus: APPROVAL.PENDING,
+  intern_no_pay_waived: false,
   employee: emp,
 });
 
@@ -81,16 +94,17 @@ const mergeNoPayApiIntoRow = (row, np) => {
   };
 };
 
-/** Compute totals (Sri Lanka: Employee EPF 8%, Employer EPF 12%, ETF 3%). */
+/** Compute totals (Sri Lanka: EPF/ETF base excludes bonus; Employee EPF 8%, Employer EPF 12%, ETF 3%). */
 function computeRow(row, payrollMonth, payrollYear) {
   const basic = Number(row.basic_salary) || 0;
   const travel = Number(row.travel_allowance) || 0;
   const food = Number(row.food_allowance) || 0;
   const holiday = Number(row.holiday_payment) || 0;
-  const allowanceNs = Number(row.allowance_ns) || 0;
+  const allowanceNsFull = Number(row.allowance_ns) || 0;
+  const bonus = Number(row.bonus) || 0;
   const joinCarryForward = Number(row.join_month_carry_forward) || 0;
   const joinMonthWorkedDays = Number(row.join_month_worked_days) || 0;
-  const role = row.role || row.employee?.role || "";
+  const role = getEmployeeEffectiveRole(row.employee || row) || row.role || "";
   const noPayResolved = resolveNoPayDeduction({
     basicSalary: basic,
     role,
@@ -100,22 +114,33 @@ function computeRow(row, payrollMonth, payrollYear) {
     payrollMonth: payrollMonth ?? row.payroll_month,
     payrollYear: payrollYear ?? row.payroll_year,
   });
-  const noPay = noPayResolved.no_pay;
+  const allowanceNs = resolveAttendanceAllowance(allowanceNsFull, {
+    role,
+    standard_hours: noPayResolved.standard_hours,
+    actual_hours: noPayResolved.actual_hours,
+    has_attendance_records: noPayResolved.has_attendance_records,
+  });
+  const noPayCalculated = noPayResolved.no_pay_calculated ?? noPayResolved.no_pay;
+  const internNoPayWaived = Boolean(row.intern_no_pay_waived) && isInternRole(role);
+  const noPay = internNoPayWaived ? 0 : noPayCalculated;
   const stampDuty = Number(row.stamp_duty) || 0;
   const mobileDed = Number(row.mobile_deduction) || 0;
   const salaryAdvance = Number(row.salary_advance) || 0;
 
-  const totalAllowances = travel + food + holiday + allowanceNs;
+  const totalAllowances = travel + food + holiday + allowanceNs + bonus;
   const grossSalary = basic + totalAllowances + joinCarryForward;
   const monthlyIncomeForApit = Math.max(0, grossSalary - noPay);
   const paye = calculateMonthlyApit(monthlyIncomeForApit);
-  const totalForEpf = Math.max(
+  // EPF/ETF base: basic + fixed allowances + join-month carry (exclude bonus, after no-pay)
+  const totalForEpfBase = Math.max(
     0,
     basic + travel + food + holiday + allowanceNs + joinCarryForward - noPay
   );
-  const employeeEpfPayment = (totalForEpf * 8) / 100;
-  const employerEpfPayment = (totalForEpf * 12) / 100;
-  const etfPayment = (totalForEpf * 3) / 100;
+  const epfEtf = resolveEpfEtfPayments(totalForEpfBase, role);
+  const totalForEpf = epfEtf.total_for_epf;
+  const employeeEpfPayment = epfEtf.epf_payment;
+  const employerEpfPayment = epfEtf.employer_epf_payment;
+  const etfPayment = epfEtf.etf_payment;
   const totalServiceCharges = stampDuty + mobileDed;
   const totalDeduction = noPay + employeeEpfPayment + totalServiceCharges + paye + salaryAdvance;
   const netPay = grossSalary - totalDeduction;
@@ -126,6 +151,9 @@ function computeRow(row, payrollMonth, payrollYear) {
     join_month_worked_days: joinMonthWorkedDays,
     paye,
     no_pay: noPay,
+    no_pay_calculated: noPayCalculated,
+    intern_no_pay_waived: internNoPayWaived,
+    intern_grace_applied: noPayResolved.intern_grace_applied ?? false,
     no_pay_leave: noPayResolved.no_pay_leave,
     no_pay_from_hours: noPayResolved.no_pay_from_hours,
     standard_hours: noPayResolved.standard_hours,
@@ -133,6 +161,9 @@ function computeRow(row, payrollMonth, payrollYear) {
     shortfall_hours: noPayResolved.shortfall_hours,
     has_attendance_records: noPayResolved.has_attendance_records,
     attendance_missing: noPayResolved.attendance_missing,
+    allowance_ns: allowanceNs,
+    allowance_ns_entitled: allowanceNsFull,
+    attendance_allowance_paid: allowanceNs,
     total_allowances: totalAllowances,
     total_service_charges: totalServiceCharges,
     gross_salary: grossSalary,
@@ -147,9 +178,9 @@ function computeRow(row, payrollMonth, payrollYear) {
 
 const SalaryPage = () => {
   const { user } = useAuth();
-  const role = user?.role?.toLowerCase?.() || "";
-  const canApprove = ["admin", "accountant", "account_manager", "account"].includes(role);
-  const canEditAllowances = ["admin", "hr", "hr_manager"].includes(role);
+  const role = normalizeRole(user?.role);
+  const canApprove = ["admin", "finance"].includes(role);
+  const canEditAllowances = ["admin", "hr"].includes(role);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -208,7 +239,8 @@ const SalaryPage = () => {
         travel_allowance: entry.travel_allowance ?? 0,
         food_allowance: entry.food_allowance ?? 0,
         holiday_payment: entry.holiday_payment ?? 0,
-        allowance_ns: entry.allowance_ns ?? 0,
+        allowance_ns: entry.allowance_ns_entitled ?? entry.allowance_ns ?? row.allowance_ns ?? 0,
+        bonus: entry.bonus ?? 0,
         // Keep no_pay from row (calculated from DB nopay leave count); do not overwrite with saved entry
         no_pay: row.no_pay ?? 0,
         // Keep salary_advance from row (total approved advance) — applied separately from accepted-totals
@@ -218,7 +250,19 @@ const SalaryPage = () => {
         join_month_worked_days: entry.join_month_worked_days ?? row.join_month_worked_days ?? 0,
         epf_percent: entry.epf_percent ?? 8,
         etf_percent: entry.etf_percent ?? 3,
+        intern_no_pay_waived: Boolean(entry.intern_no_pay_waived),
       };
+    });
+  };
+
+  const toggleInternNoPayWaived = (idx) => {
+    setRows((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        intern_no_pay_waived: !next[idx].intern_no_pay_waived,
+      };
+      return next;
     });
   };
 
@@ -454,28 +498,32 @@ const SalaryPage = () => {
     }
   }, [summaryMonth, summaryYear]);
 
-  // When summary is shown for a different period, fetch that run for the paysheet table
+  // When summary is shown, fetch the run (includes hydrated approver details from the API)
   useEffect(() => {
-    const sm = Number(summaryMonth);
-    const sy = Number(summaryYear);
-    const samePeriod = sm === Number(month) && sy === Number(year);
-    if (samePeriod || !showSummary) {
+    if (!showSummary) {
       setSummaryRun(null);
       return;
     }
+    const sm = Number(summaryMonth);
+    const sy = Number(summaryYear);
+    const samePeriod = sm === Number(month) && sy === Number(year);
     let cancelled = false;
     axios.get(`${API_BASE}/salary/runs`, { params: { month: sm, year: sy }, headers: getAuthHeader() })
       .then((res) => {
         if (cancelled) return;
         const run = res.data?.run;
         if (res.data?.success && run && Number(run.month) === sm && Number(run.year) === sy) {
-          setSummaryRun({ month: sm, year: sy, run });
-        } else {
+          if (samePeriod) {
+            setRunForPeriod({ month: sm, year: sy, run });
+          } else {
+            setSummaryRun({ month: sm, year: sy, run });
+          }
+        } else if (!samePeriod) {
           setSummaryRun({ month: sm, year: sy, run: null });
         }
       })
       .catch(() => {
-        if (!cancelled) setSummaryRun({ month: sm, year: sy, run: null });
+        if (!cancelled && !samePeriod) setSummaryRun({ month: sm, year: sy, run: null });
       });
     return () => { cancelled = true; };
   }, [showSummary, summaryMonth, summaryYear, month, year]);
@@ -506,6 +554,7 @@ const SalaryPage = () => {
         food_allowance: row.food_allowance,
         holiday_payment: row.holiday_payment,
         allowance_ns: row.allowance_ns,
+        bonus: row.bonus,
         no_pay: row.no_pay,
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
@@ -513,6 +562,7 @@ const SalaryPage = () => {
         paye: computeRow(row, month, year).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
+        intern_no_pay_waived: Boolean(row.intern_no_pay_waived),
       };
       if (entry.employeeId) {
         axios.post(`${API_BASE}/salary/save-one`, { month, year, entry }, { headers: getAuthHeader() })
@@ -540,6 +590,7 @@ const SalaryPage = () => {
           food_allowance: row.food_allowance,
           holiday_payment: row.holiday_payment,
           allowance_ns: row.allowance_ns,
+          bonus: row.bonus,
           no_pay: row.no_pay,
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
@@ -547,6 +598,7 @@ const SalaryPage = () => {
           paye: computeRow(row, month, year).paye,
           epf_percent: row.epf_percent,
           etf_percent: row.etf_percent,
+          intern_no_pay_waived: Boolean(row.intern_no_pay_waived),
         };
         return entry.employeeId
           ? axios.post(`${API_BASE}/salary/save-one`, { month, year, entry }, { headers: getAuthHeader() })
@@ -578,96 +630,26 @@ const SalaryPage = () => {
     setPayslipEmployee(row.employee);
   };
 
-  /** Get amounts for a summary row (full row → computeRow; entry-like row → use stored amounts). */
+  /** Paysheet amounts for a summary row (full row → computeRow; saved entry → stored values). */
   const getSummaryAmounts = (row) => {
-    if (row.gross_salary != null && row.total_deduction != null && row.net_pay != null) {
-      return { gross_salary: row.gross_salary, total_deduction: row.total_deduction, net_pay: row.net_pay };
+    let computed = null;
+    if (row.gross_salary == null || row.total_deduction == null || row.net_pay == null) {
+      computed = computeRow(row, summaryMonth, summaryYear);
     }
-    return computeRow(row, month, year);
+    return resolvePaysheetAmounts(row, computed);
   };
 
-  /** Download salary summary as PDF; uses provided rows (filtered or all approved). */
-  const downloadSummaryPdf = (filteredRows, approvedRows, periodMonth, periodYear, monthNamesArr) => {
+  const downloadSummaryPdf = (filteredRows, periodMonth, periodYear, monthNamesArr, approvalInfo) => {
     if (filteredRows.length === 0) return;
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const margin = 12;
-    let y = 14;
-    doc.setFontSize(14);
-    doc.setTextColor(30, 64, 175);
-    doc.text("Salary Summary", pageW / 2, y, { align: "center" });
-    y += 6;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    const periodLabel = `${monthNamesArr[periodMonth - 1]} ${periodYear}`;
-    doc.text(periodLabel, pageW / 2, y, { align: "center" });
-    if (filteredRows.length < approvedRows.length) {
-      y += 5;
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Filtered: ${filteredRows.length} of ${approvedRows.length} employees`, pageW / 2, y, { align: "center" });
-    }
-    y += 10;
-    const totalTableW = pageW - 2 * margin;
-    const colEmployee = totalTableW * 0.22;
-    const colNic = totalTableW * 0.11;
-    const colEpf = totalTableW * 0.11;
-    const colDept = totalTableW * 0.12;
-    const colGross = totalTableW * 0.13;
-    const colDed = totalTableW * 0.13;
-    const colNet = totalTableW * 0.18;
-    const rowH = 7;
-    const xNic = margin + colEmployee;
-    const xEpf = xNic + colNic;
-    const xDept = xEpf + colEpf;
-    const xGross = xDept + colDept;
-    const xDed = xGross + colGross;
-    const xNet = xDed + colDed;
-    doc.setFillColor(240, 247, 255);
-    doc.rect(margin, y, totalTableW, rowH, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("Employee", margin + 2, y + 4.5);
-    doc.text("NIC", xNic + 2, y + 4.5);
-    doc.text("EPF No.", xEpf + 2, y + 4.5);
-    doc.text("Department", xDept + 2, y + 4.5);
-    doc.text("Gross Salary", xGross + colGross - 2, y + 4.5, { align: "right" });
-    doc.text("Total Deduction", xDed + colDed - 2, y + 4.5, { align: "right" });
-    doc.text("Net Pay", margin + totalTableW - 2, y + 4.5, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    y += rowH;
-    filteredRows.forEach((row) => {
-      if (y + rowH > doc.internal.pageSize.getHeight() - 18) {
-        doc.addPage("landscape");
-        y = 14;
-      }
-      const c = getSummaryAmounts(row);
-      doc.setFontSize(8);
-      doc.text((row.name || "—").slice(0, 22), margin + 2, y + 4.5);
-      doc.text((row.nic || "—").slice(0, 12), xNic + 2, y + 4.5);
-      doc.text((row.epf_number || "—").slice(0, 12), xEpf + 2, y + 4.5);
-      doc.text((row.department || "—").slice(0, 12), xDept + 2, y + 4.5);
-      doc.text(Number(c.gross_salary).toFixed(2), xGross + colGross - 2, y + 4.5, { align: "right" });
-      doc.text(Number(c.total_deduction).toFixed(2), xDed + colDed - 2, y + 4.5, { align: "right" });
-      doc.text(Number(c.net_pay).toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
-      y += rowH;
+    const monthName = monthNamesArr[periodMonth - 1];
+    downloadMonthlyPaysheetPdf({
+      rows: filteredRows,
+      monthName,
+      year: periodYear,
+      getAmounts: getSummaryAmounts,
+      approvalInfo,
+      fileName: `Monthly_Pay_Sheet_${monthName}_${periodYear}.pdf`.replace(/\s+/g, "_"),
     });
-    y += 2;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(margin, y, margin + totalTableW, y);
-    y += rowH;
-    const totGross = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).gross_salary), 0);
-    const totDed = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).total_deduction), 0);
-    const totNet = filteredRows.reduce((s, r) => s + Number(getSummaryAmounts(r).net_pay), 0);
-    doc.setFont("helvetica", "bold");
-    doc.text(filteredRows.length < approvedRows.length ? `Total (${filteredRows.length} shown)` : "Total", margin + 2, y + 4.5);
-    doc.text(totGross.toFixed(2), xGross + colGross - 2, y + 4.5, { align: "right" });
-    doc.text(totDed.toFixed(2), xDed + colDed - 2, y + 4.5, { align: "right" });
-    doc.setTextColor(21, 128, 61);
-    doc.text(totNet.toFixed(2), margin + totalTableW - 2, y + 4.5, { align: "right" });
-    doc.setTextColor(0, 0, 0);
-    const safeName = `Salary_Summary_${periodLabel.replace(/\s+/g, "_")}${filteredRows.length < approvedRows.length ? `_${filteredRows.length}_of_${approvedRows.length}` : ""}.pdf`;
-    doc.save(safeName);
   };
 
   const closePayslip = () => {
@@ -704,7 +686,8 @@ const SalaryPage = () => {
         travel_allowance: payslipData.travel_allowance ?? 0,
         food_allowance: payslipData.food_allowance ?? 0,
         holiday_payment: payslipData.holiday_payment ?? 0,
-        allowance_ns: payslipData.allowance_ns ?? 0,
+        allowance_ns: payslipData.allowance_ns_entitled ?? payslipData.allowance_ns ?? 0,
+        bonus: payslipData.bonus ?? 0,
         no_pay: payslipData.no_pay ?? 0,
         salary_advance: payslipData.salary_advance ?? 0,
         stamp_duty: payslipData.stamp_duty ?? 0,
@@ -777,6 +760,15 @@ const SalaryPage = () => {
       if (res.data.success) {
         if (res.data.signature_data_url != null) setPayslipSignature(res.data.signature_data_url);
         if (res.data.signature_date != null) setPayslipSignatureDate(res.data.signature_date);
+        setRunForPeriod((prev) => {
+          if (!prev || Number(prev.month) !== Number(month) || Number(prev.year) !== Number(year)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            run: mergeRunApprovalFields(prev.run, res.data),
+          };
+        });
         setSavedForPeriod({ month, year });
         setError("");
       } else {
@@ -807,6 +799,7 @@ const SalaryPage = () => {
         food_allowance: row.food_allowance,
         holiday_payment: row.holiday_payment,
         allowance_ns: row.allowance_ns,
+        bonus: row.bonus,
         no_pay: row.no_pay,
         salary_advance: row.salary_advance,
         stamp_duty: row.stamp_duty,
@@ -814,6 +807,7 @@ const SalaryPage = () => {
         paye: computeRow(row, month, year).paye,
         epf_percent: row.epf_percent,
         etf_percent: row.etf_percent,
+        intern_no_pay_waived: Boolean(row.intern_no_pay_waived),
       };
       const res = await axios.post(
         `${API_BASE}/salary/save-one`,
@@ -864,6 +858,7 @@ const SalaryPage = () => {
           food_allowance: row.food_allowance,
           holiday_payment: row.holiday_payment,
           allowance_ns: row.allowance_ns,
+          bonus: row.bonus,
           no_pay: row.no_pay,
           salary_advance: row.salary_advance,
           stamp_duty: row.stamp_duty,
@@ -871,6 +866,7 @@ const SalaryPage = () => {
           paye: computed.paye,
           epf_percent: row.epf_percent,
           etf_percent: row.etf_percent,
+          intern_no_pay_waived: Boolean(row.intern_no_pay_waived),
         };
       });
       const res = await axios.post(
@@ -1075,6 +1071,9 @@ const SalaryPage = () => {
                     epf_number: e.epf_number || "",
                     designation: e.designation || "",
                     department: e.department,
+                    basic_salary: e.basic_salary,
+                    total_allowances: e.total_allowances,
+                    join_month_carry_forward: e.join_month_carry_forward,
                     gross_salary: e.gross_salary,
                     total_deduction: e.total_deduction,
                     net_pay: e.net_pay,
@@ -1087,6 +1086,9 @@ const SalaryPage = () => {
               return matchSearch && matchDept;
             });
             const totalRowsLabel = isSummaryCurrentPeriod ? rows.length : (summaryRun?.run?.entries?.length ?? 0);
+            const summaryApprovalInfo = resolveApprovalInfo(
+              isSummaryCurrentPeriod ? runForPeriod?.run : summaryRun?.run
+            );
             return (
               <div className="mb-8 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                 <div className="px-8 py-6 border-b border-gray-200 bg-gray-50">
@@ -1161,7 +1163,7 @@ const SalaryPage = () => {
                     </span>
                     <button
                       type="button"
-                      onClick={() => downloadSummaryPdf(filteredRows, approvedRows, summaryMonth, summaryYear, monthNames)}
+                      onClick={() => downloadSummaryPdf(filteredRows, summaryMonth, summaryYear, monthNames, summaryApprovalInfo)}
                       disabled={filteredRows.length === 0 || summaryLoading}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-xl font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -1174,6 +1176,8 @@ const SalaryPage = () => {
                     filteredRows={filteredRows}
                     approvedRows={approvedRows}
                     summaryLoading={summaryLoading}
+                    monthName={monthNames[summaryMonth - 1]}
+                    year={summaryYear}
                     loadingLabel={`Loading ${monthNames[summaryMonth - 1]} ${summaryYear}…`}
                     emptyNoApprovedMessage={
                       !isSummaryCurrentPeriod
@@ -1182,6 +1186,7 @@ const SalaryPage = () => {
                     }
                     emptyNoMatchMessage="No employees match the filter."
                     getSummaryAmounts={getSummaryAmounts}
+                    approvalInfo={summaryApprovalInfo}
                     resetKey={`${summarySearch}|${summaryDepartment}|${summaryMonth}|${summaryYear}`}
                   />
                 </div>
@@ -1230,7 +1235,7 @@ const SalaryPage = () => {
                         {" · "}
                         Joined {d.joined_date ? String(d.joined_date).slice(0, 10) : "—"}
                         {" · "}
-                        {d.join_month_worked_days} attendance day(s) → Rs. {(d.join_month_carry_forward ?? 0).toLocaleString("en-LK")} next month
+                        {d.join_month_worked_days} attendance day(s) → {formatPaysheetMoney(d.join_month_carry_forward)} next month
                       </li>
                     ))}
                   </ul>
@@ -1244,10 +1249,18 @@ const SalaryPage = () => {
                   const computed = computeRow(row, month, year);
                   const gross = computed.gross_salary;
                   const totalAllow = computed.total_allowances;
-                  const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
+                  const joinCarry = Number(computed.join_month_carry_forward) || 0;
+                  const totalEarnings =
+                    (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0) + joinCarry;
                   const totalSc = computed.total_service_charges;
                   const epf = computed.epf_payment;
                   const etf = computed.etf_payment;
+                  const isIntern = isInternRole(
+                    getEmployeeEffectiveRole(row.employee || row) || row.role || ""
+                  );
+                  const showJoinMonthRow =
+                    hasJoinMonthPay(joinCarry) ||
+                    (isIntern && isFirstPayMonth(row.joined_date, month, year));
                   const totalDed = computed.total_deduction;
                   const net = computed.net_pay;
                   const periodLabel = `${monthNames[month - 1]} ${year}`;
@@ -1297,13 +1310,15 @@ const SalaryPage = () => {
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 relative z-10">
-                            <button
-                              type="button"
-                              onClick={() => setContributionRow(row)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm rounded-xl font-semibold hover:bg-amber-600 transition-colors"
-                            >
-                              <FaPiggyBank /> Contribution
-                            </button>
+                            {!isIntern && (
+                              <button
+                                type="button"
+                                onClick={() => setContributionRow(row)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm rounded-xl font-semibold hover:bg-amber-600 transition-colors"
+                              >
+                                <FaPiggyBank /> Contribution
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => saveOneEmployee(row, advanceToNext)}
@@ -1316,13 +1331,13 @@ const SalaryPage = () => {
                           </div>
                         </div>
 
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto items-stretch">
+                    <div className={`p-6 grid grid-cols-1 md:grid-cols-2 ${isIntern ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-6 max-w-6xl mx-auto items-stretch`}>
                       <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1">
                         <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Earnings</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Basic Salary</span>
-                            <span className="w-24 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200" title="From employee record">{(row.basic_salary ?? 0).toLocaleString()}</span>
+                            <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm" title="From employee record">{formatPaysheetMoney(row.basic_salary)}</span>
                           </div>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Travel</span>
@@ -1336,19 +1351,31 @@ const SalaryPage = () => {
                             <span className="text-gray-700">Holiday</span>
                             <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
+                          <div className="space-y-0.5">
+                            <label className="flex justify-between items-center gap-2">
+                              <span className="text-gray-700" title="Monthly entitlement; paid amount depends on attendance">Attendance Allowance</span>
+                              <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : "Full monthly entitlement from profile"} />
+                            </label>
+                            {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
+                              <div className="flex justify-between text-xs text-amber-800">
+                                <span>Paid (attendance)</span>
+                                <span className="font-medium">{formatPaysheetMoney(computed.attendance_allowance_paid)}</span>
+                              </div>
+                            )}
+                          </div>
                           <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Attendance Allowance</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
+                            <span className="text-gray-700">Bonus</span>
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
-                          {hasJoinMonthPay(computed.join_month_carry_forward) && (
+                          {showJoinMonthRow && (
                             <label className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
                               <span className="text-indigo-900" title="Present days from join-month attendance, paid with this salary">
                                 Join Month Pay ({computed.join_month_worked_days} attendance days)
                               </span>
-                              <input type="number" readOnly value={computed.join_month_carry_forward} className="w-24 px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
+                              <input type="number" readOnly value={joinCarry} className="w-24 px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
                             </label>
                           )}
-                          <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
+                          <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {formatPaysheetMoney(gross)}</div>
                         </div>
                       </div>
 
@@ -1366,12 +1393,24 @@ const SalaryPage = () => {
                               </label>
                               <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                                 <span>Total Service Charges</span>
-                                <span>{totalSc.toFixed(2)}</span>
+                                <span>{formatPaysheetMoney(totalSc)}</span>
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
                               </label>
+                              {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
+                                <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">
+                                  <button
+                                    type="button"
+                                    disabled={locked}
+                                    onClick={() => toggleInternNoPayWaived(idx)}
+                                    className={`w-full text-xs font-semibold px-3 py-2 rounded-lg transition ${row.intern_no_pay_waived ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-white border border-indigo-300 text-indigo-800 hover:bg-indigo-100"} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                  >
+                                    {row.intern_no_pay_waived ? "Deduction waived — paying full salary" : "Waive deduction (pay full salary)"}
+                                  </button>
+                                </div>
+                              )}
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
                                 <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
@@ -1383,46 +1422,48 @@ const SalaryPage = () => {
                         </div>
 
                       </div>
-                      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1">
-                        <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
-                            <span className="text-gray-700 font-medium">EPF Number</span>
-                            <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
-                          </div>
-                          <div className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">EPF/ETF earnings base</span>
-                            <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
-                          </div>
-                          <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                            <span>Employee EPF (8%) — deducted</span>
-                            <span>{epf.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center gap-2 text-gray-700">
-                            <span>Employer EPF (12%)</span>
-                            <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center gap-2 text-gray-700">
-                            <span>Employer ETF (3%)</span>
-                            <span className="font-medium">{etf.toFixed(2)}</span>
+                      {!isIntern && (
+                        <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1">
+                          <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
+                              <span className="text-gray-700 font-medium">EPF Number</span>
+                              <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
+                            </div>
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                              <span className="font-medium">{formatPaysheetMoney(computed.total_for_epf)}</span>
+                            </div>
+                            <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
+                              <span>Employee EPF (8%) — deducted</span>
+                              <span>{formatPaysheetMoney(epf)}</span>
+                            </div>
+                            <div className="flex justify-between items-center gap-2 text-gray-700">
+                              <span>Employer EPF (12%)</span>
+                              <span className="font-medium">{formatPaysheetMoney(computed.employer_epf_payment)}</span>
+                            </div>
+                            <div className="flex justify-between items-center gap-2 text-gray-700">
+                              <span>Employer ETF (3%)</span>
+                              <span className="font-medium">{formatPaysheetMoney(etf)}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                       <div className="lg:col-span-1">
                         <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
                           <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">Summary</h4>
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-center">
                               <span className="text-gray-700">Total Earnings</span>
-                              <span className="font-semibold">{totalEarnings.toFixed(2)}</span>
+                              <span className="font-semibold">{formatPaysheetMoney(totalEarnings)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                               <span className="text-gray-700">Total Deduction</span>
-                              <span className="font-semibold">{totalDed.toFixed(2)}</span>
+                              <span className="font-semibold">{formatPaysheetMoney(totalDed)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
                               <span className="font-bold text-emerald-900">Net Pay</span>
-                              <span className="text-lg font-bold text-emerald-800">Rs. {net.toFixed(2)}</span>
+                              <span className="text-lg font-bold text-emerald-800">{formatPaysheetMoney(net)}</span>
                             </div>
                           </div>
                         </div>
@@ -1648,10 +1689,18 @@ const SalaryPage = () => {
         const computed = computeRow(row, month, year);
         const gross = computed.gross_salary;
         const totalAllow = computed.total_allowances;
-        const totalEarnings = (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0);
+        const joinCarry = Number(computed.join_month_carry_forward) || 0;
+        const totalEarnings =
+          (Number(computed.basic_salary) || 0) + (Number(totalAllow) || 0) + joinCarry;
         const totalSc = computed.total_service_charges;
         const epf = computed.epf_payment;
         const etf = computed.etf_payment;
+        const isIntern = isInternRole(
+          getEmployeeEffectiveRole(row.employee || row) || row.role || ""
+        );
+        const showJoinMonthRow =
+          hasJoinMonthPay(joinCarry) ||
+          (isIntern && isFirstPayMonth(row.joined_date, month, year));
         const totalDed = computed.total_deduction;
         const net = computed.net_pay;
         const periodLabel = `${monthNames[month - 1]} ${year}`;
@@ -1708,9 +1757,11 @@ const SalaryPage = () => {
                           )}
                         </>
                       )}
-                      <button type="button" onClick={() => { setContributionRow(row); setCalculatedPopupRow(null); }} className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm rounded-xl font-semibold hover:bg-amber-600 transition-colors">
-                        <FaPiggyBank /> Contribution
-                      </button>
+                      {!isIntern && (
+                        <button type="button" onClick={() => { setContributionRow(row); setCalculatedPopupRow(null); }} className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm rounded-xl font-semibold hover:bg-amber-600 transition-colors">
+                          <FaPiggyBank /> Contribution
+                        </button>
+                      )}
                       <button type="button" onClick={() => saveOneEmployee(row)} disabled={savingEmployeeId === row._id} className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white text-sm rounded-xl font-semibold hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <FaSave /> {savingEmployeeId === row._id ? "Saving…" : "Save"}
                       </button>
@@ -1719,13 +1770,13 @@ const SalaryPage = () => {
                       </button>
                     </div>
                   </div>
-                  <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 items-stretch min-w-0">
+                  <div className={`p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 ${isIntern ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-4 sm:gap-6 items-stretch min-w-0`}>
                     <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1 min-w-0">
                       <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Earnings</h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Basic Salary</span>
-                          <span className="w-24 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200">{(row.basic_salary ?? 0).toLocaleString()}</span>
+                          <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm">{formatPaysheetMoney(row.basic_salary)}</span>
                         </div>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Travel</span>
@@ -1739,21 +1790,33 @@ const SalaryPage = () => {
                           <span className="text-gray-700">Holiday</span>
                           <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
+                        <div className="space-y-0.5">
+                          <label className="flex justify-between items-center gap-2">
+                            <span className="text-gray-700" title="Monthly entitlement; paid amount depends on attendance">Attendance Allowance</span>
+                            <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                          </label>
+                          {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
+                            <div className="flex justify-between text-xs text-amber-800">
+                              <span>Paid (attendance)</span>
+                              <span className="font-medium">{formatPaysheetMoney(computed.attendance_allowance_paid)}</span>
+                            </div>
+                          )}
+                        </div>
                         <label className="flex justify-between items-center gap-2">
-                          <span className="text-gray-700">Attendance Allowance</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                          <span className="text-gray-700">Bonus</span>
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
-                        {hasJoinMonthPay(computed.join_month_carry_forward) && (
+                        {showJoinMonthRow && (
                           <div className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
                             <span className="text-indigo-900" title="Work days from join month, paid with this salary">
                               Join Month Pay ({computed.join_month_worked_days} attendance days)
                             </span>
-                            <span className="w-24 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200">
-                              {computed.join_month_carry_forward.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="w-28 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200 text-xs sm:text-sm">
+                              {formatPaysheetMoney(joinCarry)}
                             </span>
                           </div>
                         )}
-                        <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {gross.toFixed(2)}</div>
+                        <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {formatPaysheetMoney(gross)}</div>
                       </div>
                     </div>
                     <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-1 min-w-0">
@@ -1770,12 +1833,23 @@ const SalaryPage = () => {
                             </label>
                             <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                               <span>Total Service Charges</span>
-                              <span>{totalSc.toFixed(2)}</span>
+                              <span>{formatPaysheetMoney(totalSc)}</span>
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
-                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
                             </label>
+                            {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
+                              <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleInternNoPayWaived(idx)}
+                                  className={`w-full text-xs font-semibold px-3 py-2 rounded-lg transition ${row.intern_no_pay_waived ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-white border border-indigo-300 text-indigo-800 hover:bg-indigo-100"}`}
+                                >
+                                  {row.intern_no_pay_waived ? "Deduction waived — paying full salary" : "Waive deduction (pay full salary)"}
+                                </button>
+                              </div>
+                            )}
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
                               <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
@@ -1786,46 +1860,48 @@ const SalaryPage = () => {
                             </label>
                       </div>
                     </div>
-                    <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1 min-w-0">
-                      <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
-                          <span className="text-gray-700 font-medium">EPF Number</span>
-                          <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
-                        </div>
-                        <div className="flex justify-between items-center gap-2">
-                          <span className="text-gray-700">EPF/ETF earnings base</span>
-                          <span className="font-medium">{computed.total_for_epf.toFixed(2)}</span>
-                        </div>
-                        <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                          <span>Employee EPF (8%) — deducted</span>
-                          <span>{epf.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center gap-2 text-gray-700">
-                          <span>Employer EPF (12%)</span>
-                          <span className="font-medium">{(computed.employer_epf_payment ?? 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center gap-2 text-gray-700">
-                          <span>Employer ETF (3%)</span>
-                          <span className="font-medium">{etf.toFixed(2)}</span>
+                    {!isIntern && (
+                      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1 min-w-0">
+                        <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
+                            <span className="text-gray-700 font-medium">EPF Number</span>
+                            <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                            <span className="font-medium">{formatPaysheetMoney(computed.total_for_epf)}</span>
+                          </div>
+                          <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
+                            <span>Employee EPF (8%) — deducted</span>
+                            <span>{formatPaysheetMoney(epf)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-gray-700">
+                            <span>Employer EPF (12%)</span>
+                            <span className="font-medium">{formatPaysheetMoney(computed.employer_epf_payment)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-gray-700">
+                            <span>Employer ETF (3%)</span>
+                            <span className="font-medium">{formatPaysheetMoney(etf)}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                     <div className="lg:col-span-1 min-w-0">
                       <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
                         <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">Summary</h4>
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between items-center">
                             <span className="text-gray-700">Total Earnings</span>
-                            <span className="font-semibold">{totalEarnings.toFixed(2)}</span>
+                            <span className="font-semibold">{formatPaysheetMoney(totalEarnings)}</span>
                           </div>
                           <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                             <span className="text-gray-700">Total Deduction</span>
-                            <span className="font-semibold">{totalDed.toFixed(2)}</span>
+                            <span className="font-semibold">{formatPaysheetMoney(totalDed)}</span>
                           </div>
                           <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
                             <span className="font-bold text-emerald-900">Net Pay</span>
-                            <span className="text-lg font-bold text-emerald-800">Rs. {net.toFixed(2)}</span>
+                            <span className="text-lg font-bold text-emerald-800">{formatPaysheetMoney(net)}</span>
                           </div>
                         </div>
                       </div>

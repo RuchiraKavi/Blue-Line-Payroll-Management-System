@@ -2,6 +2,7 @@ import {
   getPayrollDivisor,
   toLocalDateOnly,
 } from "./payrollAttendance.js";
+import { getEmployeeEffectiveRole } from "./internPayroll.js";
 
 export function getPreviousPayPeriod(month, year) {
   const m = Number(month);
@@ -71,7 +72,7 @@ function presentDatesForEmployee(presentDatesMap, employee) {
 }
 
 /**
- * Pro-rated earnings for join-month attendance days (basic + fixed allowances).
+ * Pro-rated earnings for join-month attendance days (basic + fixed allowances, excludes bonus).
  * Paid with the following month's salary.
  */
 export function calculateJoinMonthCarryForward(
@@ -90,7 +91,7 @@ export function calculateJoinMonthCarryForward(
     return { amount: 0, workedDays: 0, joinMonth, joinYear };
   }
 
-  const role = employee?.role || employee?.userId?.role || "";
+  const role = getEmployeeEffectiveRole(employee);
   const divisor = getPayrollDivisor(role);
   const basic = Number(employee?.basic_salary) || 0;
   const travel = Number(employee?.travel_allowance) || 0;

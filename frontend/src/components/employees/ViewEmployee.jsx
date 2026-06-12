@@ -44,7 +44,9 @@ const ViewEmployee = () => {
               <h2 className="text-3xl font-bold mb-1">
                 {employee.userId?.name}
               </h2>
-              <p className="text-sm opacity-80">{employee.designation}</p>
+              <p className="text-sm opacity-80">
+                {[employee.department?.dep_name, employee.designation].filter(Boolean).join(" · ")}
+              </p>
             </div>
 
             {/* Profile Image */}
@@ -84,6 +86,7 @@ const ViewEmployee = () => {
                 <div className="grid md:grid-cols-2 gap-4">
                   <p><b>Employee ID:</b> {employee.employee_id}</p>
                   <p><b>Designation:</b> {employee.designation}</p>
+                  <p><b>Job Type:</b> {employee.job_type || "—"}</p>
                   <p><b>Department:</b> {employee.department?.dep_name}</p>
                   <p><b>Joined Date:</b> {employee.joined_date?.slice(0, 10)}</p>
                   <p>
@@ -116,6 +119,7 @@ const ViewEmployee = () => {
                     <p><b>Food:</b> Rs. {(employee.food_allowance ?? 0).toLocaleString()}</p>
                     <p><b>Holiday:</b> Rs. {(employee.holiday_payment ?? 0).toLocaleString()}</p>
                     <p><b>Attendance Allowance:</b> Rs. {(employee.allowance_ns ?? 0).toLocaleString()}</p>
+                    <p><b>Bonus:</b> Rs. {(employee.bonus ?? 0).toLocaleString()}</p>
                   </div>
                 </div>
                 <div className="mt-4 border border-slate-300 rounded-lg p-4 bg-slate-50/60">

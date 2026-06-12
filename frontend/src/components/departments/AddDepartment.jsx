@@ -5,7 +5,6 @@ import { Link, useNavigate } from "react-router-dom";
 const AddDepartment = () => {
   const [department, setDepartment] = useState({
     dep_name: "",
-    description: "",
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +31,6 @@ const AddDepartment = () => {
         "http://localhost:5000/api/departments/add",
         {
           dep_name: department.dep_name.trim(),
-          description: department.description.trim(),
         },
         {
           headers: {
@@ -121,25 +119,6 @@ const AddDepartment = () => {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
                   required
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="description"
-                  className="block text-sm font-semibold text-gray-700 mb-2"
-                >
-                  Description
-                  <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={department.description}
-                  placeholder="Brief overview of this department's role and responsibilities..."
-                  onChange={handleChange}
-                  rows={4}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white resize-none"
                 />
               </div>
 

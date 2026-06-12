@@ -19,7 +19,7 @@ import {
 
 const router = express.Router();
 
-const salaryRoles = ["admin", "hr", "hr_manager", "account", "accountant", "account_manager"];
+const salaryRoles = ["admin", "hr", "hr_manager", "finance"];
 
 router.get("/my-history", authMiddleware, getMySalaryHistory);
 router.get("/me/payslip", authMiddleware, getMyPayslip);

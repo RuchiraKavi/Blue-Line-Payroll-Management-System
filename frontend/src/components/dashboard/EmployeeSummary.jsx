@@ -12,9 +12,28 @@ import {
   FaMoneyBillWave,
   FaChevronRight,
   FaIdBadge,
+  FaClock,
 } from "react-icons/fa";
+import {
+  INTERN_MONTHLY_LEAVE_DAYS,
+  isInternEmployee,
+  isInternRole,
+} from "../../utils/internPayroll.js";
 
 const LEAVE_TOTALS = { casual: 7, annual: 14, sick: 21 };
+
+const INTERN_HALF_DAY_META = {
+  label: "Half Day Leave",
+  icon: FaClock,
+  iconBg: "bg-indigo-500/10 text-indigo-600 ring-indigo-500/20",
+  bar: "bg-indigo-500",
+  value: "text-indigo-700",
+  card: "border-indigo-100/80",
+  gradient: "from-indigo-50/90 via-white to-violet-50/40",
+  ring: "#6366f1",
+  ringTrack: "#e0e7ff",
+  pill: "bg-indigo-50 text-indigo-700",
+};
 
 const LEAVE_TYPES = {
   casual: {
@@ -70,6 +89,7 @@ const PAGE_H = "h-full min-h-0";
 const EmployeeSummary = () => {
   const { user } = useAuth();
   const [leaveBalance, setLeaveBalance] = useState(null);
+  const [isIntern, setIsIntern] = useState(false);
   const [employee, setEmployee] = useState(null);
   const [pendingLeaveList, setPendingLeaveList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,16 +114,25 @@ const EmployeeSummary = () => {
           return;
         }
 
-        setEmployee(employeeRes.data.employee);
-        const employeeId = employeeRes.data.employee._id;
+        const emp = employeeRes.data.employee;
+        setEmployee(emp);
+        const employeeId = emp._id;
 
         const balanceRes = await axios.get(
           `http://localhost:5000/api/leaves/employees/${employeeId}/leave-balance`,
           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
         );
 
+        const internUser =
+          Boolean(balanceRes.data?.isIntern) ||
+          isInternEmployee(emp) ||
+          isInternRole(user?.role);
+        setIsIntern(internUser);
+
         if (balanceRes.data.success) {
           setLeaveBalance(balanceRes.data.leaveBalance);
+        } else if (internUser) {
+          setLeaveBalance({ half_day: 0, casual: 0, annual: 0, sick: 0 });
         } else {
           setLeaveBalance({ casual: 0, annual: 0, sick: 0 });
         }
@@ -154,7 +183,8 @@ const EmployeeSummary = () => {
     );
   }
 
-  const balance = leaveBalance || { casual: 0, annual: 0, sick: 0 };
+  const balance = leaveBalance || { casual: 0, annual: 0, sick: 0, half_day: 0 };
+  const halfDayAvailable = balance.half_day ?? balance.casual ?? 0;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -197,7 +227,7 @@ const EmployeeSummary = () => {
               <p className="text-xs font-medium uppercase tracking-wider text-blue-100">{greeting}</p>
               <h1 className="truncate text-xl font-bold text-white sm:text-2xl">{employee.userId?.name}</h1>
               <p className="truncate text-sm text-blue-100/90">
-                {employee.designation} · {employee.department?.dep_name}
+                {[employee.department?.dep_name, employee.designation].filter(Boolean).join(" · ")}
               </p>
             </div>
           </div>
@@ -223,16 +253,22 @@ const EmployeeSummary = () => {
             Full history <FaChevronRight className="h-2.5 w-2.5" />
           </Link>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
-          {(["casual", "annual", "sick"]).map((type) => (
-            <LeaveBalanceCard
-              key={type}
-              type={type}
-              remaining={balance[type] ?? 0}
-              total={LEAVE_TOTALS[type]}
-            />
-          ))}
-        </div>
+        {isIntern ? (
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 max-w-md">
+            <InternHalfDayBalanceCard available={halfDayAvailable} />
+          </div>
+        ) : (
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
+            {(["casual", "annual", "sick"]).map((type) => (
+              <LeaveBalanceCard
+                key={type}
+                type={type}
+                remaining={balance[type] ?? 0}
+                total={LEAVE_TOTALS[type]}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Row 3 — Pending + shortcuts (fills other half) */}
@@ -256,7 +292,7 @@ const EmployeeSummary = () => {
           <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             {pendingLeaveList.length > 0 ? (
               pendingLeaveList.map((leave) => (
-                <PendingLeaveCard key={leave._id} leave={leave} />
+                <PendingLeaveCard key={leave._id} leave={leave} isIntern={isIntern} />
               ))
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center">
@@ -287,13 +323,16 @@ const EmployeeSummary = () => {
   );
 };
 
-function PendingLeaveCard({ leave }) {
+function PendingLeaveCard({ leave, isIntern = false }) {
   const typeKey = leave.leaveType in LEAVE_TYPES ? leave.leaveType : null;
   const meta = typeKey
     ? LEAVE_TYPES[typeKey]
     : { icon: FaFileAlt, iconBg: "bg-gray-100 text-gray-600", card: "border-gray-200" };
   const Icon = meta.icon;
-  const label = LEAVE_TYPE_LABELS[leave.leaveType] || leave.leaveType;
+  const label =
+    isIntern && leave.leaveType === "casual"
+      ? "Half Day Leave"
+      : LEAVE_TYPE_LABELS[leave.leaveType] || leave.leaveType;
 
   return (
     <div className={`flex shrink-0 items-start gap-3 rounded-xl border bg-white p-3 shadow-sm ${meta.card}`}>
@@ -348,6 +387,66 @@ function ProgressRing({ percent, color, trackColor, size = 96, stroke = 8, child
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
+    </div>
+  );
+}
+
+function InternHalfDayBalanceCard({ available }) {
+  const meta = INTERN_HALF_DAY_META;
+  const Icon = meta.icon;
+  const total = INTERN_MONTHLY_LEAVE_DAYS;
+  const remaining = available >= total ? total : 0;
+  const used = total - remaining;
+  const remainingPct = total > 0 ? Math.round((remaining / total) * 100) : 0;
+  const usedPct = total > 0 ? Math.round((used / total) * 100) : 0;
+  const statusLabel = available >= total ? "Available" : "Used this month";
+
+  return (
+    <div
+      className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border bg-linear-to-br p-4 shadow-sm transition-shadow hover:shadow-md ${meta.card} ${meta.gradient}`}
+    >
+      <div
+        className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full opacity-40 blur-2xl"
+        style={{ backgroundColor: meta.ringTrack }}
+      />
+
+      <div className="relative flex shrink-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${meta.iconBg}`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="truncate text-sm font-semibold text-gray-800">{meta.label}</p>
+            <p className="text-xs text-gray-500">One half-day per calendar month</p>
+          </div>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold ${meta.pill}`}>
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="relative flex flex-1 items-center justify-center py-3">
+        <ProgressRing percent={remainingPct} color={meta.ring} trackColor={meta.ringTrack}>
+          <span className={`text-2xl font-bold leading-none tabular-nums ${meta.value}`}>
+            {available >= total ? "½" : "—"}
+          </span>
+          <span className="mt-0.5 text-[0.6rem] font-medium uppercase tracking-wide text-gray-400">day</span>
+        </ProgressRing>
+      </div>
+
+      <div className="relative shrink-0 space-y-2.5">
+        <div className="h-2 overflow-hidden rounded-full bg-white/80 ring-1 ring-black/5">
+          <div className="flex h-full">
+            <div className={`${meta.bar} transition-all duration-500`} style={{ width: `${usedPct}%` }} />
+            <div className="flex-1 bg-transparent" />
+          </div>
+        </div>
+        <p className="text-center text-xs text-gray-600">
+          Longer absences should be requested as <span className="font-semibold">No Pay</span>.
+        </p>
+      </div>
     </div>
   );
 }

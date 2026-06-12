@@ -3,6 +3,7 @@ export const ROLE_ACCESS = {
     "dashboard",
     "employees",
     "departments",
+    "designations",
     "leave",
     "salary",
     "settings",
@@ -11,11 +12,12 @@ export const ROLE_ACCESS = {
     "dashboard",
     "employees",
     "departments",
+    "designations",
     "leave",
     "salary",
     "settings",
   ],
-  accountant: [
+  finance: [
     "dashboard",
     "salary",
     "settings",

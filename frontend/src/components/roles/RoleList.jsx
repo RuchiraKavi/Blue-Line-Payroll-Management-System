@@ -10,6 +10,7 @@ import {
 } from "../../utils/RoleHelper";
 import PermissionMatrix from "./PermissionMatrix.jsx";
 import { emptyPermissions, sanitizePermissions } from "../../utils/permissionSections.js";
+import { keyToRoleLabel } from "../../utils/roleConstants.js";
 
 const RoleList = () => {
   const [roles, setRoles] = useState([]);
@@ -18,7 +19,6 @@ const RoleList = () => {
   const [error, setError] = useState("");
   const [editRow, setEditRow] = useState(null);
   const [editKey, setEditKey] = useState("");
-  const [editLabel, setEditLabel] = useState("");
   const [editPermissions, setEditPermissions] = useState(emptyPermissions());
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +55,6 @@ const RoleList = () => {
   const handleEdit = (row) => {
     setEditRow(row);
     setEditKey(row.key);
-    setEditLabel(row.label);
     setEditPermissions(sanitizePermissions(row.permissions));
     setError("");
   };
@@ -63,7 +62,6 @@ const RoleList = () => {
   const handleCloseEdit = () => {
     setEditRow(null);
     setEditKey("");
-    setEditLabel("");
     setEditPermissions(emptyPermissions());
     setError("");
   };
@@ -76,10 +74,6 @@ const RoleList = () => {
       setError("Role key is required");
       return;
     }
-    if (!editLabel.trim()) {
-      setError("Role label is required");
-      return;
-    }
 
     setSaving(true);
     setError("");
@@ -87,7 +81,7 @@ const RoleList = () => {
       const result = await updateRole(
         editRow._id,
         editKey.trim(),
-        editLabel.trim(),
+        keyToRoleLabel(editKey),
         editPermissions
       );
       if (result.success) {
@@ -109,7 +103,7 @@ const RoleList = () => {
 
   const handleDelete = async (row) => {
     const confirmDelete = window.confirm(
-      `Delete role "${row.label}" (${row.key}) from the master list?`
+      `Delete role "${row.key}" from the master list?`
     );
     if (!confirmDelete) return;
 
@@ -206,11 +200,11 @@ const RoleList = () => {
                 roles
               </div>
 
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
               <DataTable
                 columns={roleColumns(handleEdit, handleDelete)}
                 data={filteredRoles}
                 highlightOnHover
-                responsive
                 pagination
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
@@ -236,6 +230,7 @@ const RoleList = () => {
                 }
                 customStyles={roleTableCustomStyles}
               />
+              </div>
             </>
           )}
         </div>
@@ -271,23 +266,6 @@ const RoleList = () => {
                 <p className="mt-1 text-xs text-gray-500">
                   Lowercase identifier stored on user accounts (e.g. hr, employee).
                 </p>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="editLabel"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Display Label
-                </label>
-                <input
-                  id="editLabel"
-                  type="text"
-                  value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  required
-                />
               </div>
 
               <PermissionMatrix

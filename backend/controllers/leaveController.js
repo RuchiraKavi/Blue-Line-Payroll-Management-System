@@ -1,8 +1,115 @@
 import Leave from "../models/Leave.js";
+import LeaveReportRun from "../models/LeaveReportRun.js";
 import Employee from "../models/Employee.js";
+import User from "../models/User.js";
+import Role from "../models/Role.js";
 import path from "path";
 import sendEmail from "../utils/sendEmail.js";
 import { countInclusiveCalendarDays } from "../utils/payrollAttendance.js";
+import { getRequestUserId } from "../utils/rolePermissions.js";
+import {
+  getInternHalfDayAvailable,
+  INTERN_MONTHLY_LEAVE_DAYS,
+  isInternEmployee,
+  isInternRole,
+} from "../utils/internPayroll.js";
+import { designationsMatch, escapeRegex } from "../utils/designationValidation.js";
+
+function normalizeSignatureDataUrl(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("data:image/")) return null;
+  if (trimmed.length > 2_000_000) return null;
+  return trimmed;
+}
+
+async function resolveLeaveReportApprover(userId) {
+  if (!userId) return null;
+
+  const user = await User.findById(userId).select("name role").lean();
+  if (!user) return null;
+
+  const roleKey = String(user.role || "").trim().toLowerCase();
+  const roleDoc = roleKey
+    ? await Role.findOne({ key: roleKey }).collation({ locale: "en", strength: 2 }).select("label").lean()
+    : null;
+  const roleLabel =
+    roleDoc?.label ||
+    (roleKey ? roleKey.charAt(0).toUpperCase() + roleKey.slice(1) : null);
+
+  return {
+    approved_by_user_id: user._id,
+    approved_by_name: user.name || null,
+    approved_by_role: roleLabel || null,
+  };
+}
+
+const getLeaveReportApproval = async (req, res) => {
+  try {
+    const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+    const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
+
+    if (month == null || isNaN(month) || month < 1 || month > 12 || year == null || isNaN(year)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+
+    const approval = await LeaveReportRun.findOne({ month, year }).lean();
+    return res.status(200).json({ success: true, approval: approval || null });
+  } catch (error) {
+    console.error("Get leave report approval error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch leave report approval" });
+  }
+};
+
+const saveLeaveReportApproval = async (req, res) => {
+  try {
+    const { month, year, signature_data_url } = req.body;
+    const m = month != null ? parseInt(month, 10) : null;
+    const y = year != null ? parseInt(year, 10) : null;
+
+    if (m == null || isNaN(m) || m < 1 || m > 12 || y == null || isNaN(y)) {
+      return res.status(400).json({ success: false, message: "Valid month (1-12) and year are required" });
+    }
+
+    const signatureUrl = normalizeSignatureDataUrl(signature_data_url);
+    if (!signatureUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid signature image is required to approve the report",
+      });
+    }
+
+    const approver = await resolveLeaveReportApprover(getRequestUserId(req.user));
+    if (!approver) {
+      return res.status(400).json({ success: false, message: "Approver details not found" });
+    }
+
+    const approval = await LeaveReportRun.findOneAndUpdate(
+      { month: m, year: y },
+      {
+        $set: {
+          ...approver,
+          signature_data_url: signatureUrl,
+          approved_at: new Date(),
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Monthly leave report approved",
+      approval,
+    });
+  } catch (error) {
+    console.error("Save leave report approval error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to approve leave report",
+    });
+  }
+};
 
 const requestLeave = async (req, res) => {
   try {
@@ -38,15 +145,13 @@ const requestLeave = async (req, res) => {
       });
     }
 
-    /* ---------------- INTERN RULE (nopay allowed when no balance) ---------------- */
-    if (
-      employee.userId.role === "intern" &&
-      normalizedLeaveType !== "casual" &&
-      normalizedLeaveType !== "nopay"
-    ) {
+    const intern = isInternEmployee(employee);
+
+    /* ---------------- INTERN RULES: half-day or no-pay only ---------------- */
+    if (intern && normalizedLeaveType !== "casual" && normalizedLeaveType !== "nopay") {
       return res.status(403).json({
         success: false,
-        message: "Interns can apply only casual or no-pay leaves",
+        message: "Interns can apply only half-day leave or no-pay leave",
       });
     }
 
@@ -61,18 +166,42 @@ const requestLeave = async (req, res) => {
       });
     }
 
-    const totalDays = countInclusiveCalendarDays(start, end);
+    let totalDays = countInclusiveCalendarDays(start, end);
+
+    if (intern && normalizedLeaveType === "casual") {
+      if (start.toDateString() !== end.toDateString()) {
+        return res.status(400).json({
+          success: false,
+          message: "Intern half-day leave must be for a single date (same start and end date)",
+        });
+      }
+      totalDays = INTERN_MONTHLY_LEAVE_DAYS;
+    }
 
     /* ---------------- CHECK LEAVE BALANCE (skip for nopay) ---------------- */
     if (normalizedLeaveType !== "nopay") {
-      const availableLeaves =
-        employee.leave_balance?.[normalizedLeaveType] ?? 0;
+      if (intern && normalizedLeaveType === "casual") {
+        const available = await getInternHalfDayAvailable(
+          employee._id,
+          start.getMonth() + 1,
+          start.getFullYear()
+        );
+        if (available < INTERN_MONTHLY_LEAVE_DAYS) {
+          return res.status(400).json({
+            success: false,
+            message: "Half-day leave for this month has already been used or requested",
+          });
+        }
+      } else {
+        const availableLeaves =
+          employee.leave_balance?.[normalizedLeaveType] ?? 0;
 
-      if (availableLeaves < totalDays) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient ${normalizedLeaveType} leave balance`,
-        });
+        if (availableLeaves < totalDays) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient ${normalizedLeaveType} leave balance`,
+          });
+        }
       }
     }
 
@@ -115,6 +244,7 @@ const getEmployeeLeaves = async (req, res) => {
     // Try to find leaves by ID (could be either userId or employeeId)
     const populateForList = (query) =>
       query
+        .select("-signature_data_url")
         .populate({
           path: "employeeId",
           populate: [
@@ -162,7 +292,7 @@ const getEmployeeLeaves = async (req, res) => {
 
 const getLeaves = async (req, res) => {
   try {
-    const leaves = await Leave.find().populate({
+    const leaves = await Leave.find().select("-signature_data_url").populate({
       path: "employeeId",
         populate: [
         {
@@ -205,6 +335,10 @@ const getLeaveDetails = async (req, res) => {
       .populate({
         path: "assignedTo",
         populate: [{ path: "userId", select: "name role" }, { path: "department", select: "dep_name" }],
+      })
+      .populate({
+        path: "approvedBy",
+        select: "name role",
       });
 
     if (!leave) {
@@ -218,14 +352,14 @@ const getLeaveDetails = async (req, res) => {
   }
 };
 
-// Get assignees (employees) in same department as the leave applicant
+// Get assignees (employees) in same department and designation as the leave applicant
 const getLeaveAssignees = async (req, res) => {
   try {
     const { id } = req.params; // leave ID
 
     const leave = await Leave.findById(id).populate({
       path: "employeeId",
-      select: "department",
+      select: "department designation",
     });
 
     if (!leave) {
@@ -233,13 +367,20 @@ const getLeaveAssignees = async (req, res) => {
     }
 
     const departmentId = leave.employeeId?.department;
+    const applicantDesignation = leave.employeeId?.designation?.trim();
     if (!departmentId) {
       return res.status(400).json({ success: false, message: "Leave employee department not found" });
     }
+    if (!applicantDesignation) {
+      return res.status(400).json({ success: false, message: "Leave employee designation not found" });
+    }
 
-    const employees = await Employee.find({ department: departmentId })
+    const employees = await Employee.find({
+      department: departmentId,
+      designation: { $regex: new RegExp(`^${escapeRegex(applicantDesignation)}$`, "i") },
+    })
       .populate("userId", "name role")
-      .select("_id employee_id userId");
+      .select("_id employee_id designation userId");
 
     // Exclude the employee who applied for the leave
     const applicantEmployeeId = String(leave.employeeId?._id || "");
@@ -248,20 +389,26 @@ const getLeaveAssignees = async (req, res) => {
       .map((e) => ({
         employeeMongoId: String(e._id),
         employee_id: e.employee_id,
+        designation: e.designation || "",
         userId: String(e.userId?._id || ""),
         name: e.userId?.name || "",
         role: e.userId?.role || "",
       }))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-    return res.status(200).json({ success: true, assignees });
+    return res.status(200).json({
+      success: true,
+      assignees,
+      departmentId: String(departmentId),
+      designation: applicantDesignation,
+    });
   } catch (error) {
     console.error("Get leave assignees error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch assignees" });
   }
 };
 
-// Assign an employee (same department) before approval
+// Assign an employee (same department and designation) before approval
 const assignLeave = async (req, res) => {
   try {
     const { id } = req.params; // leave ID
@@ -273,7 +420,7 @@ const assignLeave = async (req, res) => {
 
     const leave = await Leave.findById(id).populate({
       path: "employeeId",
-      select: "department",
+      select: "department designation",
     });
 
     if (!leave) {
@@ -285,8 +432,12 @@ const assignLeave = async (req, res) => {
     }
 
     const departmentId = leave.employeeId?.department;
+    const applicantDesignation = leave.employeeId?.designation;
     if (!departmentId) {
       return res.status(400).json({ success: false, message: "Leave employee department not found" });
+    }
+    if (!applicantDesignation?.trim()) {
+      return res.status(400).json({ success: false, message: "Leave employee designation not found" });
     }
 
     const assigneeEmployee = await Employee.findById(assignedTo).populate("userId", "name role");
@@ -297,7 +448,14 @@ const assignLeave = async (req, res) => {
     if (String(assigneeEmployee.department) !== String(departmentId)) {
       return res.status(400).json({
         success: false,
-        message: "Assignee must be in the same department",
+        message: "Assignee must be in the same department and have the same designation",
+      });
+    }
+
+    if (!designationsMatch(assigneeEmployee.designation, applicantDesignation)) {
+      return res.status(400).json({
+        success: false,
+        message: "Assignee must be in the same department and have the same designation",
       });
     }
 
@@ -332,11 +490,21 @@ const assignLeave = async (req, res) => {
 // Update leave status (Approve / Reject) – only admin/HR
 const updateLeaveStatus = async (req, res) => {
   try {
-    let { status } = req.body;
+    let { status, signature_data_url } = req.body;
     const leaveId = req.params.id;
 
     if (!status) {
       return res.status(400).json({ success: false, message: "Status is required" });
+    }
+
+    const signatureUrl = normalizeSignatureDataUrl(signature_data_url);
+    if (
+      signature_data_url !== undefined &&
+      signature_data_url !== null &&
+      signature_data_url !== "" &&
+      !signatureUrl
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid signature image" });
     }
 
     // Normalize incoming status to lowercase for validation
@@ -388,11 +556,13 @@ const updateLeaveStatus = async (req, res) => {
     if (normalizedStatus === "approved" && !leave.assignedTo) {
       return res.status(400).json({
         success: false,
-        message: "Please assign an employee from the same department before approving",
+        message: "Please assign an employee from the same department and designation before approving",
       });
     }
 
-    const employee = await Employee.findById(leave.employeeId._id);
+    const employee = await Employee.findById(leave.employeeId._id)
+      .select("leave_balance role designation")
+      .populate("userId", "role");
 
     if (!employee) {
       return res.status(404).json({
@@ -403,33 +573,46 @@ const updateLeaveStatus = async (req, res) => {
 
     /* ---------------- DEDUCT LEAVES ONLY IF APPROVED (not for nopay) ---------------- */
     if (normalizedStatus === "approved" && leave.leaveType !== "nopay") {
-      const leaveType = leave.leaveType; // casual | annual | sick
+      const leaveType = leave.leaveType;
       const days = leave.totalDays;
+      const intern = isInternEmployee(employee);
 
-      const available = employee.leave_balance?.[leaveType] ?? 0;
+      if (intern && leaveType === "casual") {
+        const leaveMonth = new Date(leave.startDate).getMonth() + 1;
+        const leaveYear = new Date(leave.startDate).getFullYear();
+        const available = await getInternHalfDayAvailable(
+          employee._id,
+          leaveMonth,
+          leaveYear
+        );
+        if (available < days) {
+          return res.status(400).json({
+            success: false,
+            message: "Half-day leave for this month has already been used",
+          });
+        }
+      } else {
+        const available = employee.leave_balance?.[leaveType] ?? 0;
+        if (available < days) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient ${leaveType} leave balance`,
+          });
+        }
 
-      if (available < days) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient ${leaveType} leave balance`,
-        });
+        const updateObj = {};
+        updateObj[`leave_balance.${leaveType}`] = available - days;
+        await Employee.findByIdAndUpdate(leave.employeeId._id, updateObj, { new: true });
       }
-
-      // Update leave balance using findByIdAndUpdate to avoid validation issues
-      const updateObj = {};
-      updateObj[`leave_balance.${leaveType}`] = available - days;
-      
-      await Employee.findByIdAndUpdate(
-        leave.employeeId._id,
-        updateObj,
-        { new: true }
-      );
     }
 
     /* ---------------- UPDATE STATUS ---------------- */
     // Store with capitalized first letter to match model enum: Pending | Approved | Rejected
     leave.status = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
     leave.approvedBy = req.user?.id || req.user?._id || leave.approvedBy;
+    if (signature_data_url !== undefined) {
+      leave.signature_data_url = signatureUrl;
+    }
     await leave.save();
 
     /* ---------------- SEND EMAIL ---------------- */
@@ -553,9 +736,9 @@ const getLeavesByUser = async (req, res) => {
 
 const getEmployeeLeaveBalance = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id).select(
-      "leave_balance role"
-    );
+    const employee = await Employee.findById(req.params.id)
+      .select("leave_balance role designation")
+      .populate("userId", "role");
 
     if (!employee) {
       return res.status(404).json({
@@ -564,8 +747,29 @@ const getEmployeeLeaveBalance = async (req, res) => {
       });
     }
 
+    if (isInternEmployee(employee)) {
+      const now = new Date();
+      const halfDayAvailable = await getInternHalfDayAvailable(
+        employee._id,
+        now.getMonth() + 1,
+        now.getFullYear()
+      );
+      return res.status(200).json({
+        success: true,
+        isIntern: true,
+        leaveBalance: {
+          half_day: halfDayAvailable,
+          casual: halfDayAvailable,
+          annual: 0,
+          sick: 0,
+        },
+        role: employee.role,
+      });
+    }
+
     res.status(200).json({
       success: true,
+      isIntern: false,
       leaveBalance: employee.leave_balance,
       role: employee.role,
     });
@@ -671,4 +875,6 @@ export {
   getLeavesByUser,
   getEmployeeLeaveBalance,
   getTotalLeaveDaysByEmployee,
+  getLeaveReportApproval,
+  saveLeaveReportApproval,
 };

@@ -115,10 +115,10 @@ export const updateAdvanceStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, remarks } = req.body;
-    if (!["Approved", "Rejected", "Revoked"].includes(status)) {
+    if (!["Approved", "Rejected"].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Status must be Approved, Rejected, or Revoked",
+        message: "Status must be Approved or Rejected",
       });
     }
 
@@ -127,23 +127,6 @@ export const updateAdvanceStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Advance request not found",
-      });
-    }
-
-    if (status === "Revoked") {
-      if (doc.status !== "Approved") {
-        return res.status(400).json({
-          success: false,
-          message: "Only approved advances can be revoked",
-        });
-      }
-      doc.status = "Revoked";
-      doc.remarks = remarks != null ? String(remarks).trim() : doc.remarks;
-      await doc.save();
-      return res.status(200).json({
-        success: true,
-        message: "Advance revoked successfully",
-        request: doc,
       });
     }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FaHandHoldingUsd, FaCheck, FaTimes, FaUndo } from "react-icons/fa";
+import { FaHandHoldingUsd, FaCheck, FaTimes } from "react-icons/fa";
 import { usePagination } from "../../hooks/usePagination.js";
 import TablePagination from "../ui/TablePagination.jsx";
 
@@ -162,15 +162,6 @@ const AdvanceRequestList = () => {
                             title={r.status !== "Pending" ? "Already processed" : "Reject"}
                           >
                             <FaTimes /> Reject
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateStatus(r._id, "Revoked")}
-                            disabled={updatingId === r._id || r.status !== "Approved"}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white text-xs rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={r.status === "Approved" ? "Revoke this advance" : "Only approved advances can be revoked"}
-                          >
-                            <FaUndo /> Revoke
                           </button>
                         </div>
                       </td>

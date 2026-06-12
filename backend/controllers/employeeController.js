@@ -6,9 +6,11 @@ import path from "path";
 import fs from "fs";
 import Department from "../models/Department.js";
 import { validateDesignationForDepartment } from "../utils/designationValidation.js";
+import { validateJobType } from "../utils/jobTypes.js";
 import { parseAllowance } from "../utils/parseAllowance.js";
 import { getNextEpfNumber, resolveEpfNumberForNewEmployee } from "../utils/epfValidation.js";
 import { getAllRoleKeys } from "../utils/roleMigration.js";
+import { normalizeRole } from "../utils/normalizeRole.js";
 import {
   validateEmployeeRegistrationFields,
   validateNic,
@@ -100,6 +102,7 @@ const addEmployee = async (req, res) => {
       resigned_date,
       designation,
       department,
+      job_type,
       address,
       mobile_number,
       basic_salary,
@@ -111,18 +114,10 @@ const addEmployee = async (req, res) => {
       food_allowance,
       holiday_payment,
       allowance_ns,
+      bonus,
       stamp_duty,
       mobile_deduction,
     } = req.body;
-
-    /* ---------------- ROLE NORMALIZATION ---------------- */
-    const normalizeRole = (r) => {
-      if (!r) return r;
-      const x = String(r).toLowerCase();
-      if (x === "hr_manager") return "hr";
-      if (x === "account_manager" || x === "accountant") return "accountant";
-      return x;
-    };
 
     const assignerRole = normalizeRole(req.user?.role);
 
@@ -148,6 +143,7 @@ const addEmployee = async (req, res) => {
       !joined_date ||
       !designation ||
       !department ||
+      !job_type ||
       !basic_salary ||
       !bank_name ||
       !bank_branch ||
@@ -236,6 +232,14 @@ const addEmployee = async (req, res) => {
       });
     }
 
+    const jobTypeCheck = validateJobType(job_type);
+    if (!jobTypeCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: jobTypeCheck.message,
+      });
+    }
+
     /* ---------------- CREATE USER ---------------- */
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -256,10 +260,9 @@ const addEmployee = async (req, res) => {
       sick: 0,
     };
 
-    // Interns get only 7 casual leaves
-    // All other roles get 7 casual + 14 annual + 21 sick
+    // Interns: half-day leave allowance only (tracked monthly at request time)
     if (assignedRole === "intern") {
-      leaveBalance.casual = 7;
+      leaveBalance.casual = 0.5;
     } else {
       leaveBalance.casual = 7;
       leaveBalance.annual = 14;
@@ -282,11 +285,13 @@ const addEmployee = async (req, res) => {
       resigned_date: resigned_date || null,
       designation,
       department,
+      job_type: jobTypeCheck.value,
       basic_salary,
       travel_allowance: parseAllowance(travel_allowance),
       food_allowance: parseAllowance(food_allowance),
       holiday_payment: parseAllowance(holiday_payment),
       allowance_ns: parseAllowance(allowance_ns),
+      bonus: parseAllowance(bonus),
       stamp_duty: parseAllowance(stamp_duty),
       mobile_deduction: parseAllowance(mobile_deduction),
       role: assignedRole,
@@ -317,6 +322,7 @@ const addEmployee = async (req, res) => {
         gender,
         maritalStatus: marital_status,
         designation,
+        jobType: jobTypeCheck.value,
         departmentName: departmentExists.dep_name,
         joinedDate: joined_date,
         resignedDate: resigned_date || null,
@@ -326,6 +332,7 @@ const addEmployee = async (req, res) => {
         foodAllowance: parseAllowance(food_allowance),
         holidayPayment: parseAllowance(holiday_payment),
         allowanceNs: parseAllowance(allowance_ns),
+        bonus: parseAllowance(bonus),
         stampDuty: parseAllowance(stamp_duty),
         mobileDeduction: parseAllowance(mobile_deduction),
         bankName: bank_name,
@@ -480,6 +487,7 @@ const updateEmployee = async (req, res) => {
       resigned_date,
       designation,
       department,
+      job_type,
       address,
       mobile_number,
       basic_salary,
@@ -491,6 +499,7 @@ const updateEmployee = async (req, res) => {
       food_allowance,
       holiday_payment,
       allowance_ns,
+      bonus,
       stamp_duty,
       mobile_deduction,
     } = req.body;
@@ -695,6 +704,15 @@ const updateEmployee = async (req, res) => {
       image: imagePath,
     };
 
+    const jobTypeCheck = validateJobType(job_type ?? employee.job_type);
+    if (!jobTypeCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: jobTypeCheck.message,
+      });
+    }
+    employeeUpdate.job_type = jobTypeCheck.value;
+
     if (canEditAllowances) {
       employeeUpdate.travel_allowance = parseAllowance(
         travel_allowance,
@@ -712,6 +730,7 @@ const updateEmployee = async (req, res) => {
         allowance_ns,
         employee.allowance_ns
       );
+      employeeUpdate.bonus = parseAllowance(bonus, employee.bonus);
       employeeUpdate.stamp_duty = parseAllowance(
         stamp_duty,
         employee.stamp_duty
@@ -933,14 +952,6 @@ const updateEmployeeRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
-    const normalizeRole = (r) => {
-      if (!r) return r;
-      const x = String(r).toLowerCase();
-      if (x === "hr_manager") return "hr";
-      if (x === "account_manager" || x === "accountant") return "accountant";
-      return x;
-    };
-
     const assignerRole = normalizeRole(req.user?.role);
 
     if (!assignerRole || (assignerRole !== "admin" && assignerRole !== "hr")) {
@@ -1002,9 +1013,19 @@ const updateEmployeeRole = async (req, res) => {
       });
     }
 
+    const previousRole = normalizeRole(userRecord.role);
+
     userRecord.role = assignedRole;
     userRecord.updatedAt = new Date();
     await userRecord.save();
+
+    employee.role = assignedRole;
+    if (assignedRole === "intern") {
+      employee.leave_balance = { casual: 0.5, annual: 0, sick: 0 };
+    } else if (previousRole === "intern") {
+      employee.leave_balance = { casual: 7, annual: 14, sick: 21 };
+    }
+    await employee.save();
 
     return res.status(200).json({
       success: true,

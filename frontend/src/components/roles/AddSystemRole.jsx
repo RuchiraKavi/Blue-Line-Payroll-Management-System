@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { createRole } from "../../utils/RoleHelper";
 import PermissionMatrix from "./PermissionMatrix.jsx";
 import { emptyPermissions } from "../../utils/permissionSections.js";
+import { keyToRoleLabel } from "../../utils/roleConstants.js";
 
 const AddSystemRole = () => {
   const navigate = useNavigate();
@@ -10,7 +11,6 @@ const AddSystemRole = () => {
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     key: "",
-    label: "",
   });
   const [permissions, setPermissions] = useState(emptyPermissions());
 
@@ -28,10 +28,6 @@ const AddSystemRole = () => {
       setError("Role key is required");
       return;
     }
-    if (!formData.label.trim()) {
-      setError("Role label is required");
-      return;
-    }
 
     const hasAnyPermission = Object.values(permissions).some((section) =>
       Object.values(section).some(Boolean)
@@ -45,7 +41,7 @@ const AddSystemRole = () => {
     try {
       const result = await createRole(
         formData.key.trim(),
-        formData.label.trim(),
+        keyToRoleLabel(formData.key),
         permissions
       );
       if (result.success) {
@@ -107,47 +103,26 @@ const AddSystemRole = () => {
             )}
 
             <form className="space-y-6" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label
-                    htmlFor="key"
-                    className="block text-sm font-semibold text-gray-700 mb-2"
-                  >
-                    Role Key <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="key"
-                    name="key"
-                    type="text"
-                    value={formData.key}
-                    onChange={handleChange}
-                    placeholder="e.g. supervisor"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
-                    required
-                  />
-                  <p className="mt-2 text-xs text-gray-500">
-                    Lowercase letters, numbers, and underscores only.
-                  </p>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="label"
-                    className="block text-sm font-semibold text-gray-700 mb-2"
-                  >
-                    Display Label <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="label"
-                    name="label"
-                    type="text"
-                    value={formData.label}
-                    onChange={handleChange}
-                    placeholder="e.g. Supervisor"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
-                    required
-                  />
-                </div>
+              <div>
+                <label
+                  htmlFor="key"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
+                >
+                  Role Key <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="key"
+                  name="key"
+                  type="text"
+                  value={formData.key}
+                  onChange={handleChange}
+                  placeholder="e.g. supervisor"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
+                  required
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  Lowercase letters, numbers, and underscores only.
+                </p>
               </div>
 
               <PermissionMatrix value={permissions} onChange={setPermissions} />

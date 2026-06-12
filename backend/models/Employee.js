@@ -52,6 +52,13 @@ const employeeSchema = new mongoose.Schema(
       required: true,
     },
 
+    job_type: {
+      type: String,
+      enum: ["Permanent", "Contract", "Probation", "Temporary", "Part-time"],
+      default: "Permanent",
+      required: true,
+    },
+
     // 🏢 DEPARTMENT
     department: {
       type: Schema.Types.ObjectId,
@@ -79,10 +86,10 @@ const employeeSchema = new mongoose.Schema(
     // 🖼 PROFILE IMAGE
     image: { type: String },
 
-    // 🧑‍💼 ROLE TYPE (admin, hr, accountant, manager, employee, intern)
+    // 🧑‍💼 ROLE TYPE (admin, hr, finance, manager, employee, intern)
     role: {
       type: String,
-      enum: ["admin", "hr", "accountant", "manager", "employee", "intern"],
+      enum: ["admin", "hr", "finance", "manager", "employee", "intern"],
       required: true,
     },
 
@@ -91,8 +98,7 @@ const employeeSchema = new mongoose.Schema(
       casual: {
         type: Number,
         default: function () {
-          // All roles get 7 casual leaves
-          return 7;
+          return this.role === "intern" ? 0.5 : 7;
         },
       },
       annual: {

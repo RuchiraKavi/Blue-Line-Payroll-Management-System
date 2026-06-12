@@ -2,6 +2,7 @@ import axios from "axios";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
+import normalizeRole from "../utils/normalizeRole.js";
 import Logo from "../assets/Logo.png";
 import loginBackground from "../assets/background.jpeg";
 
@@ -43,18 +44,19 @@ function Login() {
         localStorage.setItem("token", response.data.token);
         localStorage.setItem("role", user.role);
 
+        const role = normalizeRole(user.role);
         const hasAdminAccess =
-          user.role === "admin" ||
-          user.role === "hr" ||
-          user.role === "accountant" ||
+          role === "admin" ||
+          role === "hr" ||
+          role === "finance" ||
           (user.permissions &&
             Object.values(user.permissions).some((section) => section?.read));
 
-        if (user.role === "admin") {
+        if (role === "admin") {
           navigate("/admin-dashboard");
-        } else if (user.role === "employee" || user.role === "intern") {
+        } else if (role === "employee" || role === "intern") {
           navigate("/employee-dashboard");
-        } else if (user.role === "hr" || user.role === "accountant") {
+        } else if (role === "hr" || role === "finance") {
           setShowChoice(true);
         } else if (hasAdminAccess) {
           navigate("/admin-dashboard");

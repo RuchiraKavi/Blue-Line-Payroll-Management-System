@@ -9,6 +9,16 @@ export function filterAssignableRoles(masterRoles, userRole) {
   return [];
 }
 
+export function keyToRoleLabel(key) {
+  const normalized = String(key || "").trim().toLowerCase();
+  if (!normalized) return "";
+  return normalized
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function formatRoleLabel(role, masterRoles = []) {
   if (!role) return "N/A";
   const normalized = normalizeRole(role);

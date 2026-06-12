@@ -3,16 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { createDesignation } from "../../utils/DesignationHelper";
 
 const EXAMPLE_TITLES = [
-  "Production Supervisor",
-  "Quality Inspector",
+  "Supervisor",
+  "Inspector",
   "Accountant",
-  "Maintenance Technician",
-  "Marketing Executive",
-  "Production Operator",
-  "Quality Controller",
-  "Accounts Executive",
-  "Maintenance Supervisor",
-  "HR Executive",
+  "Technician",
+  "Executive",
+  "Operator",
+  "Controller",
 ];
 
 const AddDesignation = () => {
@@ -119,7 +116,7 @@ const AddDesignation = () => {
                     setTitle(e.target.value);
                     setError("");
                   }}
-                  placeholder="e.g. Production Supervisor"
+                  placeholder="e.g. Supervisor"
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 bg-white"
                   required
                   autoFocus

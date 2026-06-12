@@ -56,6 +56,7 @@ export function buildEmployeeRegistrationEmailHtml({
   gender,
   maritalStatus,
   designation,
+  jobType,
   departmentName,
   joinedDate,
   resignedDate,
@@ -65,6 +66,7 @@ export function buildEmployeeRegistrationEmailHtml({
   foodAllowance,
   holidayPayment,
   allowanceNs,
+  bonus,
   stampDuty,
   mobileDeduction,
   bankName,
@@ -89,6 +91,7 @@ export function buildEmployeeRegistrationEmailHtml({
   const jobRows = [
     row("Employee ID", employeeId),
     row("Designation", designation),
+    row("Job Type", jobType),
     row("Department", departmentName),
     row("Role", role),
     row("Joined Date", formatDate(joinedDate)),
@@ -101,6 +104,7 @@ export function buildEmployeeRegistrationEmailHtml({
     row("Food Allowance", formatCurrency(foodAllowance)),
     row("Holiday Payment", formatCurrency(holidayPayment)),
     row("Attendance Allowance", formatCurrency(allowanceNs)),
+    row("Bonus", formatCurrency(bonus)),
     row("Stamp Duty", formatCurrency(stampDuty)),
     row("Mobile Deduction", formatCurrency(mobileDeduction)),
   ].join("");
