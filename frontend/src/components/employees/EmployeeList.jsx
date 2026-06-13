@@ -2,8 +2,24 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import DataTable from "react-data-table-component";
 import axios from "axios";
-import { columns } from "../../utils/EmployeeHelper";
+import { columns, employeeTableCustomStyles } from "../../utils/EmployeeHelper";
 import { API_BASE } from "../../utils/apiConfig.js";
+
+const registerEmployeeButtonClass =
+  "inline-flex shrink-0 items-center justify-center gap-2 px-8 py-3 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-300/50 whitespace-nowrap";
+
+const RegisterEmployeePlusIcon = () => (
+  <svg
+    className="h-5 w-5 shrink-0"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    aria-hidden
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+  </svg>
+);
 
 const EmployeeList = () => {
   // 🔹 States
@@ -149,17 +165,17 @@ const EmployeeList = () => {
       </div>
 
       {/* Main Content Card */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100">
         
         {/* Controls Section */}
         <div className="bg-linear-to-r from-gray-50 to-blue-50 px-8 py-6 border-b border-gray-200">
-          <div className="flex flex-col xl:flex-row items-center justify-between gap-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-            {/* Left side: Search + Filter */}
-            <div className="flex flex-col lg:flex-row items-center gap-4 w-full xl:w-auto">
+            {/* Left: Search + Filter */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
 
               {/* Enhanced Search */}
-              <div className="relative w-full lg:w-80">
+              <div className="relative w-full sm:w-80 shrink-0">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -185,7 +201,7 @@ const EmployeeList = () => {
               </div>
 
               {/* Enhanced Department Dropdown */}
-              <div className="relative w-full lg:w-80" ref={dropdownRef}>
+              <div className="relative w-full sm:w-80 shrink-0" ref={dropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsOpen(!isOpen)}
@@ -246,18 +262,13 @@ const EmployeeList = () => {
 
             </div>
 
-            {/* Right side: Enhanced Add button */}
+            {/* Right: Add employee */}
             <Link
               to="/admin-dashboard/add-employee"
-              className="group relative overflow-hidden px-8 py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 focus:ring-4 focus:ring-blue-300 whitespace-nowrap"
+              className={registerEmployeeButtonClass}
             >
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                </svg>
-                Register New Employee
-              </div>
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+              <RegisterEmployeePlusIcon />
+              Register New Employee
             </Link>
 
           </div>
@@ -319,7 +330,7 @@ const EmployeeList = () => {
                 )}
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <div className="w-full overflow-x-auto rounded-xl border border-gray-200">
               <DataTable
                 columns={columns(fetchEmployees)}
                 data={filteredEmployees}
@@ -329,6 +340,7 @@ const EmployeeList = () => {
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
                 striped
+                customStyles={employeeTableCustomStyles}
                 noDataComponent={
                   <div className="py-20 text-center">
                     <svg className="w-24 h-24 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -344,83 +356,14 @@ const EmployeeList = () => {
                     {!search && selectedDepartments.length === 0 && (
                       <Link
                         to="/admin-dashboard/add-employee"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all duration-200"
+                        className={registerEmployeeButtonClass}
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                        </svg>
+                        <RegisterEmployeePlusIcon />
                         Add First Employee
                       </Link>
                     )}
                   </div>
                 }
-                customStyles={{
-                  header: {
-                    style: {
-                      fontSize: '16px',
-                      fontWeight: '600',
-                      color: '#374151',
-                      backgroundColor: '#f9fafb',
-                      borderBottom: '2px solid #e5e7eb',
-                      minHeight: '56px',
-                    },
-                  },
-                  headRow: {
-                    style: {
-                      backgroundColor: '#f8fafc',
-                      borderBottom: '2px solid #e2e8f0',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#475569',
-                      minHeight: '56px',
-                    },
-                  },
-                  headCells: {
-                    style: {
-                      paddingLeft: '16px',
-                      paddingRight: '16px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#475569',
-                    },
-                  },
-                  rows: {
-                    style: {
-                      fontSize: '14px',
-                      color: '#374151',
-                      minHeight: '72px',
-                      '&:hover': {
-                        backgroundColor: '#f8fafc',
-                        cursor: 'pointer',
-                      },
-                    },
-                    stripedStyle: {
-                      backgroundColor: '#fafafa',
-                    },
-                  },
-                  cells: {
-                    style: {
-                      paddingLeft: '16px',
-                      paddingRight: '16px',
-                      fontSize: '14px',
-                    },
-                  },
-                  table: {
-                    style: {
-                      tableLayout: 'fixed',
-                      minWidth: '960px',
-                    },
-                  },
-                  pagination: {
-                    style: {
-                      borderTop: '2px solid #e5e7eb',
-                      backgroundColor: '#f9fafb',
-                      fontSize: '14px',
-                      color: '#374151',
-                      padding: '16px',
-                    },
-                  },
-                }}
               />
               </div>
             </>

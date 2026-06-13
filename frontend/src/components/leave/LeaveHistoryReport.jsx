@@ -266,17 +266,17 @@ const LeaveHistoryReport = () => {
 
       {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm mb-4">{error}</div>}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 overflow-visible">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 gap-3 overflow-visible">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 overflow-x-auto">
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-center lg:gap-2 min-w-[min(100%,52rem)] lg:min-w-0">
           <input
             type="text"
-            placeholder="Search employee name / employee id / reason / type..."
+            placeholder="Search name, ID, reason, type..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="xl:col-span-4 px-4 py-2 border-2 border-gray-200 rounded-xl text-sm min-w-0"
+            className="w-full lg:flex-1 lg:min-w-40 px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm min-w-0 shadow-sm transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300"
           />
 
-          <div className="xl:col-span-2 min-w-0">
+          <div className="w-full lg:w-36 shrink-0">
             <SelectInput
               value={status}
               onChange={(e) => setStatus(e.target.value)}
@@ -290,7 +290,7 @@ const LeaveHistoryReport = () => {
             />
           </div>
 
-          <div className="xl:col-span-2 min-w-0">
+          <div className="w-full lg:w-36 shrink-0">
             <SelectInput
               value={leaveType}
               onChange={(e) => setLeaveType(e.target.value)}
@@ -305,7 +305,7 @@ const LeaveHistoryReport = () => {
             />
           </div>
 
-          <div className="xl:col-span-2 min-w-40">
+          <div className="w-full lg:w-32 shrink-0">
             <DateInput
               value={appliedFrom}
               onChange={(e) => setAppliedFrom(e.target.value)}
@@ -313,7 +313,7 @@ const LeaveHistoryReport = () => {
             />
           </div>
 
-          <div className="xl:col-span-2 min-w-40">
+          <div className="w-full lg:w-32 shrink-0">
             <DateInput
               value={appliedTo}
               onChange={(e) => setAppliedTo(e.target.value)}

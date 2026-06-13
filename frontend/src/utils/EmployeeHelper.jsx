@@ -6,39 +6,122 @@ import ProfileAvatar from "../components/common/ProfileAvatar.jsx";
 import { API_BASE } from "./apiConfig.js";
 
 export const columns = (refreshEmployees) => [
-  { name: "Serial.No", selector: (row) => row.sno, width: "100px", center: true },
-  { name: "Name", selector: (row) => row.name, sortable: true, minWidth: "160px", grow: 1 },
-
+  { name: "Serial.No", selector: (row) => row.sno, width: "90px", center: true, grow: 0 },
+  {
+    name: "Name",
+    selector: (row) => row.name,
+    sortable: true,
+    minWidth: "140px",
+    grow: 1,
+    wrap: true,
+  },
   {
     name: "Image",
-    width: "100px",
+    width: "90px",
     center: true,
+    grow: 0,
     cell: (row) => <ProfileAvatar name={row.name} filename={row.image} />,
   },
-
   {
     name: "Department",
     selector: (row) => row.dep_name,
     sortable: true,
-    minWidth: "140px",
-    grow: 1,
+    minWidth: "120px",
+    width: "140px",
+    grow: 0,
+    wrap: true,
   },
   {
     name: "Joined Date",
     selector: (row) => row.joined_date,
     sortable: true,
-    minWidth: "130px",
-    grow: 1,
+    width: "120px",
+    grow: 0,
   },
-
   {
     name: "Actions",
-    minWidth: "340px",
-    width: "340px",
+    width: "360px",
+    minWidth: "360px",
+    grow: 0,
     center: true,
     cell: (row) => <EmployeeButtons _id={row._id} refresh={refreshEmployees} />,
   },
 ];
+
+export const employeeTableCustomStyles = {
+  header: {
+    style: {
+      fontSize: "16px",
+      fontWeight: "600",
+      color: "#374151",
+      backgroundColor: "#f9fafb",
+      borderBottom: "2px solid #e5e7eb",
+      minHeight: "56px",
+    },
+  },
+  headRow: {
+    style: {
+      backgroundColor: "#f8fafc",
+      borderBottom: "2px solid #e2e8f0",
+      fontSize: "14px",
+      fontWeight: "600",
+      color: "#475569",
+      minHeight: "56px",
+    },
+  },
+  headCells: {
+    style: {
+      paddingLeft: "12px",
+      paddingRight: "12px",
+      fontSize: "14px",
+      fontWeight: "600",
+      color: "#475569",
+    },
+  },
+  rows: {
+    style: {
+      fontSize: "14px",
+      color: "#374151",
+      minHeight: "72px",
+      "&:hover": {
+        backgroundColor: "#f8fafc",
+      },
+    },
+    stripedStyle: {
+      backgroundColor: "#fafafa",
+    },
+  },
+  cells: {
+    style: {
+      paddingLeft: "12px",
+      paddingRight: "12px",
+      fontSize: "14px",
+      overflow: "visible",
+    },
+  },
+  table: {
+    style: {
+      tableLayout: "auto",
+      width: "max-content",
+      minWidth: "100%",
+    },
+  },
+  tableWrapper: {
+    style: {
+      display: "block",
+      overflow: "visible",
+    },
+  },
+  pagination: {
+    style: {
+      borderTop: "2px solid #e5e7eb",
+      backgroundColor: "#f9fafb",
+      fontSize: "14px",
+      color: "#374151",
+      padding: "16px",
+    },
+  },
+};
 
 export const fetchDesignationsByDepartment = async (departmentId) => {
   if (!departmentId) return [];
@@ -79,9 +162,10 @@ export const EmployeeButtons = ({ _id, refresh }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-nowrap items-center justify-center gap-1.5 py-1 min-w-[320px]">
+    <div className="flex flex-nowrap items-center justify-center gap-1 w-full max-w-[360px] mx-auto">
       <button
-        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-green-500 to-emerald-500 rounded-md hover:from-green-600 hover:to-emerald-600 focus:ring-2 focus:ring-green-200 transition-colors shadow-sm"
+        type="button"
+        className="inline-flex shrink-0 items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-white bg-linear-to-r from-green-500 to-emerald-500 rounded-md hover:from-green-600 hover:to-emerald-600 focus:ring-2 focus:ring-green-200 transition-colors shadow-sm whitespace-nowrap"
         onClick={() => navigate(`/admin-dashboard/employees/${_id}`)}
         title="View Employee Details"
       >
@@ -93,7 +177,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
       </button>
 
       <button
-        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-colors shadow-sm"
+        type="button"
+        className="inline-flex shrink-0 items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-colors shadow-sm whitespace-nowrap"
         onClick={() => navigate(`/admin-dashboard/employees/edit/${_id}`)}
         title="Edit Employee"
       >
@@ -104,7 +189,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
       </button>
 
       <button
-        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-yellow-500 to-amber-500 rounded-md hover:from-yellow-600 hover:to-amber-600 focus:ring-2 focus:ring-yellow-200 transition-colors shadow-sm"
+        type="button"
+        className="inline-flex shrink-0 items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-white bg-linear-to-r from-yellow-500 to-amber-500 rounded-md hover:from-yellow-600 hover:to-amber-600 focus:ring-2 focus:ring-yellow-200 transition-colors shadow-sm whitespace-nowrap"
         onClick={() => navigate(`/admin-dashboard/employees/salary/${_id}`)}
         title="View Salary History"
       >
@@ -115,7 +201,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
       </button>
 
       <button
-        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-orange-500 to-red-500 rounded-md hover:from-orange-600 hover:to-red-600 focus:ring-2 focus:ring-orange-200 transition-colors shadow-sm"
+        type="button"
+        className="inline-flex shrink-0 items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-white bg-linear-to-r from-orange-500 to-red-500 rounded-md hover:from-orange-600 hover:to-red-600 focus:ring-2 focus:ring-orange-200 transition-colors shadow-sm whitespace-nowrap"
         onClick={() => navigate(`/admin-dashboard/employees/leaves/${_id}`)}
         title="Manage Leaves"
       >

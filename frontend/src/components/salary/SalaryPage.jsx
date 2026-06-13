@@ -32,6 +32,20 @@ const getAuthHeader = () => ({
 
 const APPROVAL = { PENDING: "pending", APPROVED: "approved", REJECTED: "rejected" };
 
+const salaryCardsGridClass = (isIntern, compact = false) => {
+  const pad = compact ? "p-4 sm:p-5" : "p-4 sm:p-5";
+  const gap = compact ? "gap-3 sm:gap-4" : "gap-3 sm:gap-4";
+  if (isIntern) {
+    return `${pad} grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 ${gap} items-stretch min-w-0 w-full`;
+  }
+  return `${pad} grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 ${gap} items-stretch min-w-0 w-full`;
+};
+
+const salaryCardClass = "min-w-0";
+const salaryMoneyClass = "shrink-0 whitespace-nowrap tabular-nums text-right text-xs sm:text-sm";
+const salaryRowLabelClass = "text-gray-700 min-w-0 truncate text-xs leading-tight";
+const salaryInputClass = "w-[4.75rem] sm:w-20 shrink-0 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right text-xs sm:text-sm";
+
 const employeeMetaLine = (row) =>
   [
     row.employee_id,
@@ -1331,30 +1345,30 @@ const SalaryPage = () => {
                           </div>
                         </div>
 
-                    <div className={`p-6 grid grid-cols-1 md:grid-cols-2 ${isIntern ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-6 max-w-6xl mx-auto items-stretch`}>
-                      <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1">
+                    <div className={salaryCardsGridClass(isIntern)}>
+                      <div className={`border-2 border-amber-200 rounded-xl p-3 sm:p-4 bg-amber-50/50 ${salaryCardClass}`}>
                         <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Earnings</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Basic Salary</span>
-                            <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm" title="From employee record">{formatMoneyValue(row.basic_salary)}</span>
+                            <span className="w-20 px-1.5 sm:px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm" title="From employee record">{formatMoneyValue(row.basic_salary)}</span>
                           </div>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Travel</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances (set on employee profile)" : ""} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances (set on employee profile)" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Food</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Holiday</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           <div className="space-y-0.5">
                             <label className="flex justify-between items-center gap-2">
-                              <span className="text-gray-700" title="Monthly entitlement; paid amount depends on attendance">Attendance Allowance</span>
-                              <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : "Full monthly entitlement from profile"} />
+                              <span className={salaryRowLabelClass} title="Attendance Allowance — monthly entitlement; paid amount depends on attendance">Att. allowance</span>
+                              <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : "Full monthly entitlement from profile"} />
                             </label>
                             {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
                               <div className="flex justify-between text-xs text-amber-800">
@@ -1365,31 +1379,34 @@ const SalaryPage = () => {
                           </div>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Bonus</span>
-                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
+                            <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                           </label>
                           {showJoinMonthRow && (
                             <label className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
-                              <span className="text-indigo-900" title="Present days from join-month attendance, paid with this salary">
-                                Join Month Pay ({computed.join_month_worked_days} attendance days)
+                              <span className={`${salaryRowLabelClass} text-indigo-900`} title="Present days from join-month attendance, paid with this salary">
+                                Join pay ({computed.join_month_worked_days}d)
                               </span>
-                              <input type="number" readOnly value={joinCarry} className="w-24 px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
+                              <input type="number" readOnly value={joinCarry} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-indigo-200 rounded-xl text-right bg-indigo-50 text-indigo-900 cursor-not-allowed" />
                             </label>
                           )}
-                          <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {formatPaysheetMoney(gross)}</div>
+                          <div className="pt-2 mt-2 border-t border-amber-200 flex justify-center items-center gap-2 font-bold text-amber-900 min-w-0 text-center">
+                            <span className="whitespace-nowrap">Gross Salary:</span>
+                            <span className={`${salaryMoneyClass} text-center`}>{formatPaysheetMoney(gross)}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-1">
+                      <div className={`border-2 border-slate-300 rounded-xl p-3 sm:p-4 bg-slate-50/70 ${salaryCardClass}`}>
                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">Deductions</h3>
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
                         <div className="space-y-2 text-sm">
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Stamp Duty</span>
-                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
+                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Mobile Deduction</span>
-                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={inputClass(`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
+                                <input type="number" min="0" step="1" readOnly={locked || !canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={inputClass(`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`)} />
                               </label>
                               <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                                 <span>Total Service Charges</span>
@@ -1397,7 +1414,7 @@ const SalaryPage = () => {
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
                               </label>
                               {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
                                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">
@@ -1413,17 +1430,17 @@ const SalaryPage = () => {
                               )}
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
-                                <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
+                                <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
                               </label>
                               <label className="flex justify-between items-center gap-2">
                                 <span className="text-gray-700">Salary Advance</span>
-                                <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="From approved advance requests (read-only)" />
+                                <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="From approved advance requests (read-only)" />
                               </label>
                         </div>
 
                       </div>
                       {!isIntern && (
-                        <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1">
+                        <div className={`border-2 border-blue-300 rounded-xl p-3 sm:p-4 bg-blue-50/70 ${salaryCardClass}`}>
                           <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
@@ -1431,12 +1448,12 @@ const SalaryPage = () => {
                               <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
                             </div>
                             <div className="flex justify-between items-center gap-2">
-                              <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                              <span className={salaryRowLabelClass} title="Earnings base excluding bonus">EPF base</span>
                               <span className="font-medium">{formatMoneyValue(computed.total_for_epf)}</span>
                             </div>
-                            <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                              <span>Employee EPF (8%) — deducted</span>
-                              <span>{formatMoneyValue(epf)}</span>
+                            <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between items-center gap-2 min-w-0">
+                              <span className={`${salaryRowLabelClass} font-semibold`} title="Deducted from salary">Employee EPF (8%)</span>
+                              <span className={salaryMoneyClass}>{formatMoneyValue(epf)}</span>
                             </div>
                             <div className="flex justify-between items-center gap-2 text-gray-700">
                               <span>Employer EPF (12%)</span>
@@ -1449,7 +1466,7 @@ const SalaryPage = () => {
                           </div>
                         </div>
                       )}
-                      <div className="lg:col-span-1">
+                      <div className={salaryCardClass}>
                         <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
                           <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">Summary</h4>
                           <div className="space-y-3 text-sm">
@@ -1461,9 +1478,9 @@ const SalaryPage = () => {
                               <span className="text-gray-700">Total Deduction</span>
                               <span className="font-semibold">{formatMoneyValue(totalDed)}</span>
                             </div>
-                            <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
-                              <span className="font-bold text-emerald-900">Net Pay</span>
-                              <span className="text-lg font-bold text-emerald-800">{formatPaysheetMoney(net)}</span>
+                            <div className="flex justify-between items-center gap-2 min-w-0 pt-3 border-t-2 border-emerald-300">
+                              <span className="font-bold text-emerald-900 shrink-0 whitespace-nowrap">Net Pay</span>
+                              <span className={`text-sm sm:text-base font-bold text-emerald-800 ${salaryMoneyClass}`}>{formatPaysheetMoney(net)}</span>
                             </div>
                           </div>
                         </div>
@@ -1721,7 +1738,7 @@ const SalaryPage = () => {
                   <FaTimes className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden min-w-[280px]">
                   <div className="px-4 sm:px-6 py-4 bg-linear-to-r from-gray-50 to-blue-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1770,30 +1787,30 @@ const SalaryPage = () => {
                       </button>
                     </div>
                   </div>
-                  <div className={`p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 ${isIntern ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-4 sm:gap-6 items-stretch min-w-0`}>
-                    <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50 lg:col-span-1 min-w-0">
+                  <div className={salaryCardsGridClass(isIntern, true)}>
+                    <div className={`border-2 border-amber-200 rounded-xl p-3 sm:p-4 bg-amber-50/50 ${salaryCardClass}`}>
                       <h3 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3 text-center">Earnings</h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Basic Salary</span>
-                          <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm">{formatMoneyValue(row.basic_salary)}</span>
+                          <span className="w-20 px-1.5 sm:px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm">{formatMoneyValue(row.basic_salary)}</span>
                         </div>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Travel</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.travel_allowance} onChange={(e) => updateRow(idx, "travel_allowance", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} title={!canEditAllowances ? "Only Admin/HR can edit allowances" : ""} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Food</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.food_allowance} onChange={(e) => updateRow(idx, "food_allowance", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Holiday</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.holiday_payment} onChange={(e) => updateRow(idx, "holiday_payment", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         <div className="space-y-0.5">
                           <label className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700" title="Monthly entitlement; paid amount depends on attendance">Attendance Allowance</span>
-                            <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                            <span className={salaryRowLabelClass} title="Attendance Allowance — monthly entitlement; paid amount depends on attendance">Att. allowance</span>
+                            <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.allowance_ns} onChange={(e) => updateRow(idx, "allowance_ns", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                           </label>
                           {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
                             <div className="flex justify-between text-xs text-amber-800">
@@ -1804,32 +1821,35 @@ const SalaryPage = () => {
                         </div>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Bonus</span>
-                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                          <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.bonus} onChange={(e) => updateRow(idx, "bonus", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                         </label>
                         {showJoinMonthRow && (
                           <div className="flex justify-between items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-2 py-1.5">
-                            <span className="text-indigo-900" title="Work days from join month, paid with this salary">
-                              Join Month Pay ({computed.join_month_worked_days} attendance days)
+                            <span className={`${salaryRowLabelClass} text-indigo-900`} title="Work days from join month, paid with this salary">
+                              Join pay ({computed.join_month_worked_days}d)
                             </span>
-                            <span className="w-28 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200 text-xs sm:text-sm">
+                            <span className="w-20 px-1.5 sm:px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200 text-xs sm:text-sm">
                               {formatMoneyValue(joinCarry)}
                             </span>
                           </div>
                         )}
-                        <div className="pt-2 mt-2 border-t border-amber-200 font-bold text-amber-900">Gross Salary: {formatPaysheetMoney(gross)}</div>
+                        <div className="pt-2 mt-2 border-t border-amber-200 flex justify-center items-center gap-2 font-bold text-amber-900 min-w-0 text-center">
+                          <span className="whitespace-nowrap">Gross Salary:</span>
+                          <span className={`${salaryMoneyClass} text-center`}>{formatPaysheetMoney(gross)}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="border-2 border-slate-300 rounded-xl p-4 bg-slate-50/70 lg:col-span-1 min-w-0">
+                    <div className={`border-2 border-slate-300 rounded-xl p-3 sm:p-4 bg-slate-50/70 ${salaryCardClass}`}>
                       <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 text-center">Deductions</h3>
                       <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Service Charges</h4>
                       <div className="space-y-2 text-sm">
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Stamp Duty</span>
-                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.stamp_duty} onChange={(e) => updateRow(idx, "stamp_duty", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                             </label>
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Mobile Deduction</span>
-                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={`w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
+                              <input type="number" min="0" step="1" readOnly={!canEditAllowances} value={row.mobile_deduction} onChange={(e) => updateRow(idx, "mobile_deduction", e.target.value)} className={`w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right focus:ring-4 focus:ring-blue-100 focus:border-blue-500 ${!canEditAllowances ? "bg-gray-100 cursor-not-allowed" : ""}`} />
                             </label>
                             <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                               <span>Total Service Charges</span>
@@ -1837,7 +1857,7 @@ const SalaryPage = () => {
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
-                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
                             </label>
                             {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
                               <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">
@@ -1852,16 +1872,16 @@ const SalaryPage = () => {
                             )}
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700" title="Sri Lanka APIT (PAYE) 2025/26 — auto from gross after no-pay">APIT (PAYE)</span>
-                              <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
+                              <input type="number" min="0" step="1" readOnly value={computed.paye} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title="Calculated: LKR 1.8M annual relief, progressive tax slabs" />
                             </label>
                             <label className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Salary Advance</span>
-                              <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-24 px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" />
+                              <input type="number" min="0" step="0.01" readOnly value={row.salary_advance} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" />
                             </label>
                       </div>
                     </div>
                     {!isIntern && (
-                      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50/70 lg:col-span-1 min-w-0">
+                      <div className={`border-2 border-blue-300 rounded-xl p-3 sm:p-4 bg-blue-50/70 ${salaryCardClass}`}>
                         <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-4 text-center">EPF & ETF Payment</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2 pb-2 border-b border-blue-200">
@@ -1869,12 +1889,12 @@ const SalaryPage = () => {
                             <span className="font-mono font-semibold text-blue-900">{row.epf_number || "—"}</span>
                           </div>
                           <div className="flex justify-between items-center gap-2">
-                            <span className="text-gray-700">Earnings base (excl. bonus)</span>
+                            <span className={salaryRowLabelClass} title="Earnings base excluding bonus">EPF base</span>
                             <span className="font-medium">{formatMoneyValue(computed.total_for_epf)}</span>
                           </div>
-                          <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
-                            <span>Employee EPF (8%) — deducted</span>
-                            <span>{formatMoneyValue(epf)}</span>
+                          <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between items-center gap-2 min-w-0">
+                            <span className={`${salaryRowLabelClass} font-semibold`} title="Deducted from salary">Employee EPF (8%)</span>
+                            <span className={salaryMoneyClass}>{formatMoneyValue(epf)}</span>
                           </div>
                           <div className="flex justify-between items-center gap-2 text-gray-700">
                             <span>Employer EPF (12%)</span>
@@ -1887,7 +1907,7 @@ const SalaryPage = () => {
                         </div>
                       </div>
                     )}
-                    <div className="lg:col-span-1 min-w-0">
+                    <div className={salaryCardClass}>
                       <div className="border-2 border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
                         <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-3 text-center">Summary</h4>
                         <div className="space-y-3 text-sm">
@@ -1899,9 +1919,9 @@ const SalaryPage = () => {
                             <span className="text-gray-700">Total Deduction</span>
                             <span className="font-semibold">{formatMoneyValue(totalDed)}</span>
                           </div>
-                          <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
-                            <span className="font-bold text-emerald-900">Net Pay</span>
-                            <span className="text-lg font-bold text-emerald-800">{formatPaysheetMoney(net)}</span>
+                          <div className="flex justify-between items-center gap-2 min-w-0 pt-3 border-t-2 border-emerald-300">
+                            <span className="font-bold text-emerald-900 shrink-0 whitespace-nowrap">Net Pay</span>
+                            <span className={`text-sm sm:text-base font-bold text-emerald-800 ${salaryMoneyClass}`}>{formatPaysheetMoney(net)}</span>
                           </div>
                         </div>
                       </div>
