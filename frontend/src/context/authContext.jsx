@@ -54,6 +54,9 @@ const AuthProvider = ({ children }) => {
 
         if (response.data.success) {
           setUser(response.data.user);
+          if (response.data.user?.role) {
+            localStorage.setItem("role", response.data.user.role);
+          }
           setLoading(false);
         } else {
           logout();

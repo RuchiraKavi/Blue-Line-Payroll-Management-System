@@ -10,7 +10,7 @@ import {
 } from "../../utils/RoleHelper";
 import PermissionMatrix from "./PermissionMatrix.jsx";
 import { emptyPermissions, sanitizePermissions } from "../../utils/permissionSections.js";
-import { keyToRoleLabel } from "../../utils/roleConstants.js";
+import { keyToRoleLabel, formatRoleLabel } from "../../utils/roleConstants.js";
 
 const RoleList = () => {
   const [roles, setRoles] = useState([]);
@@ -30,7 +30,7 @@ const RoleList = () => {
       _id: role._id,
       sno: index + 1,
       key: role.key,
-      label: role.label,
+      label: formatRoleLabel(role.key),
       isSystem: role.isSystem,
       permissions: sanitizePermissions(role.permissions),
     }));

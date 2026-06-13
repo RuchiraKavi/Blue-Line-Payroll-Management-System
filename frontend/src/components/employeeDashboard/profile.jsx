@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { formatRoleLabel } from "../../utils/roleConstants.js";
 
 const Profile = () => {
   const [employee, setEmployee] = useState(null);
@@ -134,7 +135,7 @@ const Profile = () => {
                   <p>
                     <b>Role:</b>{" "}
                     <span className="px-2 py-1 bg-blue-100 rounded-full">
-                      {employee.userId?.role}
+                      {formatRoleLabel(employee.userId?.role)}
                     </span>
                   </p>
                 </div>

@@ -18,13 +18,13 @@ export const login = async (req, res) => {
             return res.status(401).json({ success: false, msg: "Invalid password" });
         }
 
+        const userWithPermissions = await attachPermissionsToUser(user);
+
         const token = jwt.sign(
-            { _id: user._id, role: user.role },
+            { _id: user._id, role: userWithPermissions.role },
             process.env.JWT_SECRET,
             { expiresIn: "1h" }
         );
-
-        const userWithPermissions = await attachPermissionsToUser(user);
 
         res.json({
             success: true,

@@ -312,7 +312,7 @@ const AddRole = () => {
                       { value: "", label: "Select role" },
                       ...assignableRoles.map((role) => ({
                         value: role.key,
-                        label: role.label,
+                        label: formatRoleLabel(role.key, masterRoles),
                         disabled:
                           selectedEmployee?.currentRole === role.key,
                       })),
@@ -321,7 +321,7 @@ const AddRole = () => {
                   <p className="mt-2 text-xs text-gray-500">
                     You can assign:{" "}
                     <span className="font-medium text-gray-700">
-                      {assignableRoles.map((role) => role.label).join(", ")}
+                      {assignableRoles.map((role) => formatRoleLabel(role.key, masterRoles)).join(", ")}
                     </span>
                   </p>
                 </div>
@@ -349,7 +349,7 @@ const AddRole = () => {
                                 : "border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-800"
                             }`}
                           >
-                            {role.label}
+                            {formatRoleLabel(role.key, masterRoles)}
                             {isCurrent && " (current)"}
                           </button>
                         );

@@ -4,6 +4,7 @@ import axios from "axios";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import EmployeePDF from "./EmployeePDF";
 import EmployeeIDCardPDF from "./EmployeeIDCardPDF";
+import { formatRoleLabel } from "../../utils/roleConstants.js";
 
 const ViewEmployee = () => {
   const { id } = useParams();
@@ -108,7 +109,7 @@ const ViewEmployee = () => {
                   <p>
                     <b>Role:</b>{" "}
                     <span className="px-2 py-1 bg-blue-100 rounded-full">
-                      {employee.userId?.role}
+                      {formatRoleLabel(employee.userId?.role)}
                     </span>
                   </p>
                 </div>

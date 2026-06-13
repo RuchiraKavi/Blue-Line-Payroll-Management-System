@@ -208,7 +208,7 @@ const RoleManagement = () => {
             disabled={savingId === row._id}
             options={assignableRoles.map((role) => ({
               value: role.key,
-              label: role.label,
+              label: formatRoleLabel(role.key, masterRoles),
             }))}
             className="min-w-[10rem]"
           />
@@ -274,7 +274,7 @@ const RoleManagement = () => {
             <p className="text-sm text-gray-600 text-center xl:text-right">
               You can assign:{" "}
               <span className="font-semibold text-gray-900">
-                {assignableRoles.map((role) => role.label).join(", ")}
+                {assignableRoles.map((role) => formatRoleLabel(role.key, masterRoles)).join(", ")}
               </span>
             </p>
           </div>
