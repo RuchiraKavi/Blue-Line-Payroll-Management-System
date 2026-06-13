@@ -2,29 +2,42 @@
 
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import ProfileAvatar from "../components/common/ProfileAvatar.jsx";
+import { API_BASE } from "./apiConfig.js";
 
 export const columns = (refreshEmployees) => [
-  { name: 'Serial.No', selector: row => row.sno, width: "120px" },
-  { name: 'Name', selector: row => row.name, sortable:true, width: "160px" },
+  { name: "Serial.No", selector: (row) => row.sno, width: "100px", center: true },
+  { name: "Name", selector: (row) => row.name, sortable: true, minWidth: "160px", grow: 1 },
 
   {
-    name: 'Image', width: "140px",
-    cell: row => (
-      <img
-        src={`http://localhost:5000/uploads/${row.image}`}
-        alt="profile"
-        className="w-12 h-12 rounded-full object-cover"
-      />
-    )
+    name: "Image",
+    width: "100px",
+    center: true,
+    cell: (row) => <ProfileAvatar name={row.name} filename={row.image} />,
   },
 
-  { name: 'Department', selector: row => row.dep_name, sortable:true, width: "140px"},
-  { name: 'Joined Date', selector: row => row.joined_date, sortable:true, width: "200px" },
+  {
+    name: "Department",
+    selector: (row) => row.dep_name,
+    sortable: true,
+    minWidth: "140px",
+    grow: 1,
+  },
+  {
+    name: "Joined Date",
+    selector: (row) => row.joined_date,
+    sortable: true,
+    minWidth: "130px",
+    grow: 1,
+  },
 
   {
-    name: 'Actions', center: "true",
-    cell: row => <EmployeeButtons _id={row._id} refresh={refreshEmployees} />
-  }
+    name: "Actions",
+    minWidth: "340px",
+    width: "340px",
+    center: true,
+    cell: (row) => <EmployeeButtons _id={row._id} refresh={refreshEmployees} />,
+  },
 ];
 
 export const fetchDesignationsByDepartment = async (departmentId) => {
@@ -32,7 +45,7 @@ export const fetchDesignationsByDepartment = async (departmentId) => {
 
   try {
     const response = await axios.get(
-      `http://localhost:5000/api/departments/${departmentId}/designations`,
+      `${API_BASE}/departments/${departmentId}/designations`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -49,7 +62,7 @@ export const fetchDesignationsByDepartment = async (departmentId) => {
 
 export const fetchDepartments = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/api/departments', {
+    const response = await axios.get(`${API_BASE}/departments`, {
       headers: {
         "Authorization": `Bearer ${localStorage.getItem("token")}`
       }
@@ -66,9 +79,9 @@ export const EmployeeButtons = ({ _id, refresh }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-wrap gap-1 justify-center max-w-64">
-      <button 
-        className="group relative inline-flex items-center px-4 py-0.5 text-xs font-medium text-white bg-linear-to-r from-green-500 to-emerald-500 rounded-md hover:from-green-600 hover:to-emerald-600 focus:ring-2 focus:ring-green-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+    <div className="flex flex-nowrap items-center justify-center gap-1.5 py-1 min-w-[320px]">
+      <button
+        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-green-500 to-emerald-500 rounded-md hover:from-green-600 hover:to-emerald-600 focus:ring-2 focus:ring-green-200 transition-colors shadow-sm"
         onClick={() => navigate(`/admin-dashboard/employees/${_id}`)}
         title="View Employee Details"
       >
@@ -79,8 +92,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
         View
       </button>
 
-      <button 
-        className="group relative inline-flex items-center px-4 py-0.5 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+      <button
+        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-blue-500 to-indigo-500 rounded-md hover:from-blue-600 hover:to-indigo-600 focus:ring-2 focus:ring-blue-200 transition-colors shadow-sm"
         onClick={() => navigate(`/admin-dashboard/employees/edit/${_id}`)}
         title="Edit Employee"
       >
@@ -90,8 +103,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
         Edit
       </button>
 
-      <button 
-        className="group relative inline-flex items-center px-4 py-0.5 text-xs font-medium text-white bg-linear-to-r from-yellow-500 to-amber-500 rounded-md hover:from-yellow-600 hover:to-amber-600 focus:ring-2 focus:ring-yellow-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+      <button
+        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-yellow-500 to-amber-500 rounded-md hover:from-yellow-600 hover:to-amber-600 focus:ring-2 focus:ring-yellow-200 transition-colors shadow-sm"
         onClick={() => navigate(`/admin-dashboard/employees/salary/${_id}`)}
         title="View Salary History"
       >
@@ -101,8 +114,8 @@ export const EmployeeButtons = ({ _id, refresh }) => {
         Salary
       </button>
 
-      <button 
-        className="group relative inline-flex items-center px-4 py-0.5 text-xs font-medium text-white bg-linear-to-r from-orange-500 to-red-500 rounded-md hover:from-orange-600 hover:to-red-600 focus:ring-2 focus:ring-orange-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md"
+      <button
+        className="inline-flex shrink-0 items-center px-2.5 py-1 text-xs font-medium text-white bg-linear-to-r from-orange-500 to-red-500 rounded-md hover:from-orange-600 hover:to-red-600 focus:ring-2 focus:ring-orange-200 transition-colors shadow-sm"
         onClick={() => navigate(`/admin-dashboard/employees/leaves/${_id}`)}
         title="Manage Leaves"
       >

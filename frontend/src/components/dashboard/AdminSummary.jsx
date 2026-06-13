@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import SummaryCard from './SummaryCard'
+import { formatPaysheetMoney } from '../../utils/paysheetFormat.js'
 import { FaBuilding, FaCheckCircle, FaFileAlt, FaHourglassHalf, FaMoneyBillWave, FaThLarge, FaTimesCircle, FaUser } from 'react-icons/fa'
 
 const API_BASE = 'http://localhost:5000/api'
@@ -102,7 +103,7 @@ const AdminSummary = () => {
         <SummaryCard
           icon={<FaMoneyBillWave className="text-2xl text-white" />}
           text="Monthly Cost"
-          number={typeof stats.monthlySalary === 'number' ? stats.monthlySalary.toLocaleString('en-US', { minimumFractionDigits: 2 }) : stats.monthlySalary}
+          number={formatPaysheetMoney(stats.monthlySalary)}
           variant="green"
         />
       </div>

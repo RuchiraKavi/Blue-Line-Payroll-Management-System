@@ -52,12 +52,15 @@ export function resolvePaysheetAmounts(row, computed = null) {
   };
 }
 
-export function formatPaysheetMoney(value) {
-  const formatted = Number(value || 0).toLocaleString("en-LK", {
+export function formatMoneyValue(value) {
+  return Number(value || 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  return `Rs. ${formatted}`;
+}
+
+export function formatPaysheetMoney(value) {
+  return `Rs. ${formatMoneyValue(value)}`;
 }
 
 function getColumnWidths(tableW) {

@@ -8,7 +8,7 @@ import SalarySummaryTable from "./SalarySummaryTable.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { calculateMonthlyApit } from "../../utils/sriLankaPaye.js";
 import { resolveAttendanceAllowance, resolveNoPayDeduction } from "../../utils/payrollAttendance.js";
-import { formatPaysheetMoney } from "../../utils/paysheetFormat.js";
+import { formatMoneyValue, formatPaysheetMoney } from "../../utils/paysheetFormat.js";
 import normalizeRole from "../../utils/normalizeRole.js";
 import {
   getEmployeeEffectiveRole,
@@ -1235,7 +1235,7 @@ const SalaryPage = () => {
                         {" · "}
                         Joined {d.joined_date ? String(d.joined_date).slice(0, 10) : "—"}
                         {" · "}
-                        {d.join_month_worked_days} attendance day(s) → {formatPaysheetMoney(d.join_month_carry_forward)} next month
+                        {d.join_month_worked_days} attendance day(s) → {formatMoneyValue(d.join_month_carry_forward)} next month
                       </li>
                     ))}
                   </ul>
@@ -1337,7 +1337,7 @@ const SalaryPage = () => {
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Basic Salary</span>
-                            <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm" title="From employee record">{formatPaysheetMoney(row.basic_salary)}</span>
+                            <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm" title="From employee record">{formatMoneyValue(row.basic_salary)}</span>
                           </div>
                           <label className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Travel</span>
@@ -1359,7 +1359,7 @@ const SalaryPage = () => {
                             {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
                               <div className="flex justify-between text-xs text-amber-800">
                                 <span>Paid (attendance)</span>
-                                <span className="font-medium">{formatPaysheetMoney(computed.attendance_allowance_paid)}</span>
+                                <span className="font-medium">{formatMoneyValue(computed.attendance_allowance_paid)}</span>
                               </div>
                             )}
                           </div>
@@ -1393,7 +1393,7 @@ const SalaryPage = () => {
                               </label>
                               <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                                 <span>Total Service Charges</span>
-                                <span>{formatPaysheetMoney(totalSc)}</span>
+                                <span>{formatMoneyValue(totalSc)}</span>
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
@@ -1432,19 +1432,19 @@ const SalaryPage = () => {
                             </div>
                             <div className="flex justify-between items-center gap-2">
                               <span className="text-gray-700">Earnings base (excl. bonus)</span>
-                              <span className="font-medium">{formatPaysheetMoney(computed.total_for_epf)}</span>
+                              <span className="font-medium">{formatMoneyValue(computed.total_for_epf)}</span>
                             </div>
                             <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
                               <span>Employee EPF (8%) — deducted</span>
-                              <span>{formatPaysheetMoney(epf)}</span>
+                              <span>{formatMoneyValue(epf)}</span>
                             </div>
                             <div className="flex justify-between items-center gap-2 text-gray-700">
                               <span>Employer EPF (12%)</span>
-                              <span className="font-medium">{formatPaysheetMoney(computed.employer_epf_payment)}</span>
+                              <span className="font-medium">{formatMoneyValue(computed.employer_epf_payment)}</span>
                             </div>
                             <div className="flex justify-between items-center gap-2 text-gray-700">
                               <span>Employer ETF (3%)</span>
-                              <span className="font-medium">{formatPaysheetMoney(etf)}</span>
+                              <span className="font-medium">{formatMoneyValue(etf)}</span>
                             </div>
                           </div>
                         </div>
@@ -1455,11 +1455,11 @@ const SalaryPage = () => {
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-center">
                               <span className="text-gray-700">Total Earnings</span>
-                              <span className="font-semibold">{formatPaysheetMoney(totalEarnings)}</span>
+                              <span className="font-semibold">{formatMoneyValue(totalEarnings)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                               <span className="text-gray-700">Total Deduction</span>
-                              <span className="font-semibold">{formatPaysheetMoney(totalDed)}</span>
+                              <span className="font-semibold">{formatMoneyValue(totalDed)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
                               <span className="font-bold text-emerald-900">Net Pay</span>
@@ -1776,7 +1776,7 @@ const SalaryPage = () => {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Basic Salary</span>
-                          <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm">{formatPaysheetMoney(row.basic_salary)}</span>
+                          <span className="w-28 px-2 py-1.5 text-right font-medium text-gray-900 rounded-lg bg-white border border-gray-200 text-xs sm:text-sm">{formatMoneyValue(row.basic_salary)}</span>
                         </div>
                         <label className="flex justify-between items-center gap-2">
                           <span className="text-gray-700">Travel</span>
@@ -1798,7 +1798,7 @@ const SalaryPage = () => {
                           {computed.attendance_allowance_paid !== Number(row.allowance_ns) && (
                             <div className="flex justify-between text-xs text-amber-800">
                               <span>Paid (attendance)</span>
-                              <span className="font-medium">{formatPaysheetMoney(computed.attendance_allowance_paid)}</span>
+                              <span className="font-medium">{formatMoneyValue(computed.attendance_allowance_paid)}</span>
                             </div>
                           )}
                         </div>
@@ -1812,7 +1812,7 @@ const SalaryPage = () => {
                               Join Month Pay ({computed.join_month_worked_days} attendance days)
                             </span>
                             <span className="w-28 px-2 py-1.5 text-right font-medium text-indigo-900 rounded-lg bg-indigo-50 border border-indigo-200 text-xs sm:text-sm">
-                              {formatPaysheetMoney(joinCarry)}
+                              {formatMoneyValue(joinCarry)}
                             </span>
                           </div>
                         )}
@@ -1833,7 +1833,7 @@ const SalaryPage = () => {
                             </label>
                             <div className="pt-2 mt-2 border-t border-slate-200 font-semibold flex justify-between">
                               <span>Total Service Charges</span>
-                              <span>{formatPaysheetMoney(totalSc)}</span>
+                              <span>{formatMoneyValue(totalSc)}</span>
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
@@ -1870,19 +1870,19 @@ const SalaryPage = () => {
                           </div>
                           <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-700">Earnings base (excl. bonus)</span>
-                            <span className="font-medium">{formatPaysheetMoney(computed.total_for_epf)}</span>
+                            <span className="font-medium">{formatMoneyValue(computed.total_for_epf)}</span>
                           </div>
                           <div className="pt-2 border-t border-blue-200 font-semibold flex justify-between">
                             <span>Employee EPF (8%) — deducted</span>
-                            <span>{formatPaysheetMoney(epf)}</span>
+                            <span>{formatMoneyValue(epf)}</span>
                           </div>
                           <div className="flex justify-between items-center gap-2 text-gray-700">
                             <span>Employer EPF (12%)</span>
-                            <span className="font-medium">{formatPaysheetMoney(computed.employer_epf_payment)}</span>
+                            <span className="font-medium">{formatMoneyValue(computed.employer_epf_payment)}</span>
                           </div>
                           <div className="flex justify-between items-center gap-2 text-gray-700">
                             <span>Employer ETF (3%)</span>
-                            <span className="font-medium">{formatPaysheetMoney(etf)}</span>
+                            <span className="font-medium">{formatMoneyValue(etf)}</span>
                           </div>
                         </div>
                       </div>
@@ -1893,11 +1893,11 @@ const SalaryPage = () => {
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between items-center">
                             <span className="text-gray-700">Total Earnings</span>
-                            <span className="font-semibold">{formatPaysheetMoney(totalEarnings)}</span>
+                            <span className="font-semibold">{formatMoneyValue(totalEarnings)}</span>
                           </div>
                           <div className="flex justify-between items-center pt-2 border-t border-emerald-200">
                             <span className="text-gray-700">Total Deduction</span>
-                            <span className="font-semibold">{formatPaysheetMoney(totalDed)}</span>
+                            <span className="font-semibold">{formatMoneyValue(totalDed)}</span>
                           </div>
                           <div className="flex justify-between items-center pt-3 border-t-2 border-emerald-300">
                             <span className="font-bold text-emerald-900">Net Pay</span>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import DataTable from "react-data-table-component";
 import axios from "axios";
 import { columns } from "../../utils/EmployeeHelper";
+import { API_BASE } from "../../utils/apiConfig.js";
 
 const EmployeeList = () => {
   // 🔹 States
@@ -21,14 +22,11 @@ const EmployeeList = () => {
   ========================== */
   const fetchEmployees = async () => {
     try {
-      const res = await axios.get(
-        "http://localhost:5000/api/employees",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      const res = await axios.get(`${API_BASE}/employees`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
       if (res.data.success) {
         const mapped = res.data.employees.map((emp, index) => ({
@@ -57,14 +55,11 @@ const EmployeeList = () => {
   ========================== */
   const fetchDepartments = async () => {
     try {
-      const res = await axios.get(
-        "http://localhost:5000/api/departments",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      const res = await axios.get(`${API_BASE}/departments`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
       if (res.data.success) {
         setDepartments(res.data.departments);
@@ -324,12 +319,12 @@ const EmployeeList = () => {
                 )}
               </div>
 
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
               <DataTable
                 columns={columns(fetchEmployees)}
                 data={filteredEmployees}
                 progressPending={loading}
                 highlightOnHover
-                responsive
                 pagination
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 15, 20, 25]}
@@ -410,6 +405,12 @@ const EmployeeList = () => {
                       fontSize: '14px',
                     },
                   },
+                  table: {
+                    style: {
+                      tableLayout: 'fixed',
+                      minWidth: '960px',
+                    },
+                  },
                   pagination: {
                     style: {
                       borderTop: '2px solid #e5e7eb',
@@ -421,6 +422,7 @@ const EmployeeList = () => {
                   },
                 }}
               />
+              </div>
             </>
           )}
         </div>
