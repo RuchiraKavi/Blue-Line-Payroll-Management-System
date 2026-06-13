@@ -22,32 +22,31 @@ function sectionHasAnyAccess(sectionPerms) {
   return Boolean(sectionPerms.create || sectionPerms.read || sectionPerms.update || sectionPerms.delete);
 }
 
-/** Copy legacy combined departments access into the new designations section. */
+/**
+ * One-time migration: add designations permissions for roles saved before that
+ * section existed. Skip roles that already have a designations key (including
+ * when the admin intentionally saved all designations flags as false).
+ */
 async function migrateDesignationsPermissionSection() {
   const roles = await Role.find();
   for (const role of roles) {
-    const perms = sanitizePermissions(role.permissions);
+    const raw = role.permissions;
+    if (!raw || typeof raw !== "object") continue;
+    if (Object.prototype.hasOwnProperty.call(raw, "designations")) continue;
+
+    const perms = sanitizePermissions(raw);
     const departments = perms.departments || {};
-    const designations = perms.designations || {};
 
-    if (sectionHasAnyAccess(departments) && !sectionHasAnyAccess(designations)) {
+    if (sectionHasAnyAccess(departments)) {
       perms.designations = { ...departments };
-      role.permissions = perms;
-      role.markModified("permissions");
-      await role.save();
-      continue;
+    } else {
+      const defaults = getDefaultPermissionsForRole(role.key);
+      perms.designations = { ...defaults.designations };
     }
 
-    const defaults = getDefaultPermissionsForRole(role.key);
-    if (
-      sectionHasAnyAccess(defaults.designations) &&
-      !sectionHasAnyAccess(designations)
-    ) {
-      perms.designations = { ...defaults.designations };
-      role.permissions = perms;
-      role.markModified("permissions");
-      await role.save();
-    }
+    role.permissions = perms;
+    role.markModified("permissions");
+    await role.save();
   }
 }
 
@@ -113,6 +112,7 @@ export async function migrateLegacyRoles() {
 
     if (!hasPermissions) {
       role.permissions = getDefaultPermissionsForRole(role.key);
+      role.markModified("permissions");
       await role.save();
     }
   }

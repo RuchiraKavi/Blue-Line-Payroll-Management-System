@@ -1,5 +1,4 @@
 import axios from "axios";
-import { formatRoleLabel } from "./roleConstants.js";
 
 /* eslint-disable react-refresh/only-export-components */
 
@@ -125,12 +124,12 @@ export const roleColumns = (onEdit, onDelete) => [
   },
   {
     name: "Role",
-    selector: (row) => formatRoleLabel(row.key),
+    selector: (row) => row.label || row.key,
     sortable: true,
     grow: 1,
     center: true,
     cell: (row) => (
-      <span className="font-medium text-gray-900">{formatRoleLabel(row.key)}</span>
+      <span className="font-medium text-gray-900">{row.label || row.key}</span>
     ),
   },
   {

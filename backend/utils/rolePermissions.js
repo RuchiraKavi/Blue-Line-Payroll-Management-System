@@ -25,22 +25,12 @@ export function getRequestUserId(user) {
 }
 
 export async function attachPermissionsToUser(user) {
-  await migrateLegacyRoles();
-
-  const userId = user?._id ?? user?.id;
-  let source = user;
-  if (userId) {
-    const fresh = await User.findById(userId).select("-password").lean();
-    if (fresh) source = fresh;
-  }
-
-  const plain = source?.toObject
-    ? source.toObject({ virtuals: true })
-    : { ...source };
+  const plain = user?.toObject
+    ? user.toObject({ virtuals: true })
+    : { ...user };
   if (plain._id && !plain.id) {
     plain.id = plain._id;
   }
-  plain.role = normalizeRole(plain.role);
   plain.permissions = await getPermissionsForRoleKey(plain.role);
   return plain;
 }

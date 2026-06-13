@@ -1,19 +1,10 @@
 import Role from "../models/Role.js";
 import User from "../models/User.js";
 import { migrateLegacyRoles } from "../utils/roleMigration.js";
-import { LEGACY_FINANCE_ROLES } from "../utils/normalizeRole.js";
 import {
   PERMISSION_SECTIONS,
   sanitizePermissions,
 } from "../utils/permissionSections.js";
-
-const CANONICAL_ROLE_LABELS = {
-  admin: "Admin",
-  hr: "HR",
-  finance: "Finance",
-  employee: "Employee",
-  intern: "Intern",
-};
 
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -40,15 +31,9 @@ const getAllRoles = async (req, res) => {
   try {
     await migrateLegacyRoles();
 
-    const roles = await Role.find().sort({ label: 1 }).lean();
-    const filtered = roles
-      .filter((role) => !LEGACY_FINANCE_ROLES.includes(role.key))
-      .map((role) => ({
-        ...role,
-        label: CANONICAL_ROLE_LABELS[role.key] || role.label,
-      }));
+    const roles = await Role.find().sort({ label: 1 });
 
-    return res.status(200).json({ success: true, roles: filtered });
+    return res.status(200).json({ success: true, roles });
   } catch {
     return res.status(500).json({
       success: false,
@@ -180,6 +165,7 @@ const updateRole = async (req, res) => {
     role.label = trimmedLabel;
     if (permissions !== undefined) {
       role.permissions = sanitizePermissions(permissions);
+      role.markModified("permissions");
     }
     await role.save();
 

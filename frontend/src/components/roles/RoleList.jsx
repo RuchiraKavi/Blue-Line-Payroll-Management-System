@@ -10,7 +10,7 @@ import {
 } from "../../utils/RoleHelper";
 import PermissionMatrix from "./PermissionMatrix.jsx";
 import { emptyPermissions, sanitizePermissions } from "../../utils/permissionSections.js";
-import { keyToRoleLabel, formatRoleLabel } from "../../utils/roleConstants.js";
+import { keyToRoleLabel } from "../../utils/roleConstants.js";
 
 const RoleList = () => {
   const [roles, setRoles] = useState([]);
@@ -19,6 +19,7 @@ const RoleList = () => {
   const [error, setError] = useState("");
   const [editRow, setEditRow] = useState(null);
   const [editKey, setEditKey] = useState("");
+  const [editLabel, setEditLabel] = useState("");
   const [editPermissions, setEditPermissions] = useState(emptyPermissions());
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +31,7 @@ const RoleList = () => {
       _id: role._id,
       sno: index + 1,
       key: role.key,
-      label: formatRoleLabel(role.key),
+      label: role.label,
       isSystem: role.isSystem,
       permissions: sanitizePermissions(role.permissions),
     }));
@@ -55,6 +56,7 @@ const RoleList = () => {
   const handleEdit = (row) => {
     setEditRow(row);
     setEditKey(row.key);
+    setEditLabel(row.label || "");
     setEditPermissions(sanitizePermissions(row.permissions));
     setError("");
   };
@@ -62,6 +64,7 @@ const RoleList = () => {
   const handleCloseEdit = () => {
     setEditRow(null);
     setEditKey("");
+    setEditLabel("");
     setEditPermissions(emptyPermissions());
     setError("");
   };
@@ -81,7 +84,7 @@ const RoleList = () => {
       const result = await updateRole(
         editRow._id,
         editKey.trim(),
-        keyToRoleLabel(editKey),
+        editLabel.trim() || keyToRoleLabel(editKey),
         editPermissions
       );
       if (result.success) {
@@ -248,24 +251,45 @@ const RoleList = () => {
             )}
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="editKey"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Role Key
-                </label>
-                <input
-                  id="editKey"
-                  type="text"
-                  value={editKey}
-                  onChange={(e) => setEditKey(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Lowercase identifier stored on user accounts (e.g. hr, employee).
-                </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="editKey"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Role Key
+                  </label>
+                  <input
+                    id="editKey"
+                    type="text"
+                    value={editKey}
+                    onChange={(e) => setEditKey(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Lowercase identifier stored on user accounts (e.g. hr, employee).
+                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="editLabel"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Display Label
+                  </label>
+                  <input
+                    id="editLabel"
+                    type="text"
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Shown in role lists and assignment screens (e.g. HR, Finance).
+                  </p>
+                </div>
               </div>
 
               <PermissionMatrix

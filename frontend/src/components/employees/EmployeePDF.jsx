@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Image,
 } from "@react-pdf/renderer";
-import { formatRoleLabel } from "../../utils/roleConstants.js";
 
 const styles = StyleSheet.create({
   page: {
@@ -190,7 +189,7 @@ const EmployeePDF = ({ employee }) => (
 
         <View style={styles.row}>
           <Text style={styles.label}>Role:</Text>
-          <Text style={styles.value}>{formatRoleLabel(employee.userId?.role)}</Text>
+          <Text style={styles.value}>{employee.userId?.role}</Text>
         </View>
       </View>
 
