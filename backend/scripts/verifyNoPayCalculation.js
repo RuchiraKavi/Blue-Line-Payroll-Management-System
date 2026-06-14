@@ -41,8 +41,8 @@ assert(
 );
 
 const hoursCase = calculateNoPayFromHoursShortfall(240000, "employee", 160);
-assert("hours shortfall amount", hoursCase.no_pay_from_hours === 40000);
-assert("hours shortfall value", hoursCase.shortfall_hours === 32);
+assert("hours shortfall helper amount", hoursCase.no_pay_from_hours === 40000);
+assert("hours shortfall helper value", hoursCase.shortfall_hours === 32);
 
 const resolved = resolveNoPayDeduction({
   basicSalary: 240000,
@@ -53,7 +53,9 @@ const resolved = resolveNoPayDeduction({
   payrollMonth: 6,
   payrollYear: 2024,
 });
-assert("uses max of leave and hours", resolved.no_pay === 40000);
+assert("no-pay uses leave only when hours short", resolved.no_pay === 20000);
+assert("no-pay from hours is zero", resolved.no_pay_from_hours === 0);
+assert("still tracks actual hours for allowance", resolved.actual_hours === 160);
 
 const missingAttendance = resolveNoPayDeduction({
   basicSalary: 240000,
@@ -65,6 +67,8 @@ const missingAttendance = resolveNoPayDeduction({
   payrollYear: 2024,
   asOfDate: new Date(2024, 5, 7),
 });
+assert("missing attendance does not create no-pay", missingAttendance.no_pay === 0);
+
 const leaveOnly = resolveNoPayDeduction({
   basicSalary: 240000,
   role: "employee",
@@ -73,16 +77,8 @@ const leaveOnly = resolveNoPayDeduction({
   hasAttendanceRecords: false,
   payrollMonth: 6,
   payrollYear: 2024,
-  asOfDate: new Date(2024, 5, 7),
 });
-assert(
-  "uses max of leave and missing-attendance pro-rate",
-  leaveOnly.no_pay === Math.max(20000, missingAttendance.no_pay)
-);
-assert(
-  "missing attendance pro-rates to date",
-  missingAttendance.no_pay === Math.round((240000 / 192) * 56 * 100) / 100
-);
+assert("leave-only no-pay without attendance", leaveOnly.no_pay === 20000);
 assert("expected hours to June 7", getExpectedHoursToDate("employee", 6, 2024, new Date(2024, 5, 7)) === 56);
 
 console.log(`\n${passed} passed, ${failed} failed`);

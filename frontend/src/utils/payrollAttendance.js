@@ -1,5 +1,4 @@
 import {
-  INTERN_MONTHLY_GRACE_HOURS,
   INTERN_MONTHLY_LEAVE_DAYS,
   isInternRole,
 } from "./internPayroll.js";
@@ -101,6 +100,10 @@ export function calculateNoPayFromHoursShortfall(basicSalary, role, actualHours)
   };
 }
 
+/**
+ * No-pay from approved no-pay leave days only.
+ * Attendance hours are returned for attendance allowance pro-rating (not no-pay).
+ */
 export function resolveNoPayDeduction({
   basicSalary,
   role,
@@ -109,51 +112,35 @@ export function resolveNoPayDeduction({
   hasAttendanceRecords = false,
   payrollMonth = null,
   payrollYear = null,
-  asOfDate = new Date(),
 }) {
   const standard_hours = getStandardMonthlyHours(role);
-  const basic = Math.max(0, Number(basicSalary) || 0);
 
-  let rawShortfallHours = 0;
   let effective_actual = 0;
+  let shortfall_hours = 0;
 
   if (hasAttendanceRecords) {
-    const hoursPart = calculateNoPayFromHoursShortfall(basicSalary, role, actualHours);
-    rawShortfallHours = hoursPart.shortfall_hours;
-    effective_actual = hoursPart.actual_hours;
-  } else if (payrollMonth && payrollYear) {
-    const payrollAsOf = getPayrollAsOfDate(payrollMonth, payrollYear, asOfDate);
-    rawShortfallHours = Math.max(
-      0,
-      getExpectedHoursToDate(role, payrollMonth, payrollYear, payrollAsOf)
-    );
+    const actual = Math.max(0, Number(actualHours) || 0);
+    effective_actual = Math.round(actual * 10) / 10;
+    shortfall_hours = Math.round(Math.max(0, standard_hours - actual) * 10) / 10;
   }
 
   let billableNoPayDays = Math.max(0, Number(noPayDays) || 0);
-  let billableShortfallHours = rawShortfallHours;
   if (isInternRole(role)) {
     billableNoPayDays = Math.max(0, billableNoPayDays - INTERN_MONTHLY_LEAVE_DAYS);
-    billableShortfallHours = Math.max(0, billableShortfallHours - INTERN_MONTHLY_GRACE_HOURS);
   }
 
   const no_pay_leave = calculateNoPayFromLeave(basicSalary, role, billableNoPayDays);
-  let no_pay_from_hours = 0;
-  if (billableShortfallHours > 0 && basic > 0 && standard_hours > 0) {
-    const hourlyRate = basic / standard_hours;
-    no_pay_from_hours = Math.round(hourlyRate * billableShortfallHours * 100) / 100;
-  }
-
-  const no_pay = Math.round(Math.max(no_pay_leave, no_pay_from_hours) * 100) / 100;
+  const no_pay = Math.round(no_pay_leave * 100) / 100;
 
   return {
     no_pay_days: Math.max(0, Number(noPayDays) || 0),
     no_pay_leave,
-    no_pay_from_hours,
+    no_pay_from_hours: 0,
     no_pay,
     no_pay_calculated: no_pay,
     standard_hours,
     actual_hours: effective_actual,
-    shortfall_hours: Math.round(billableShortfallHours * 10) / 10,
+    shortfall_hours,
     intern_grace_applied: isInternRole(role),
     has_attendance_records: Boolean(hasAttendanceRecords),
     attendance_missing: !hasAttendanceRecords && Boolean(payrollMonth && payrollYear),

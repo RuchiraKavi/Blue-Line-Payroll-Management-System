@@ -143,7 +143,6 @@ const LeaveDetail = () => {
   }
 
   const isPending = leave.status?.toLowerCase() === "pending";
-  const isAssigned = Boolean(leave.assignedTo?._id);
   const isProcessed = !isPending;
   const approverName = leave.approvedBy?.name || "—";
   const approverRole = leave.approvedBy?.role ? formatRoleLabel(leave.approvedBy.role) : "—";
@@ -220,7 +219,7 @@ const LeaveDetail = () => {
           {isPending && (
             <div className="mt-2 px-6">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <div className="font-semibold text-gray-800 mb-2">Assign</div>
+                <div className="font-semibold text-gray-800 mb-2">Assign (optional)</div>
                 <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
                   <SelectInput
                     value={selectedAssignee}
@@ -258,11 +257,6 @@ const LeaveDetail = () => {
                     No other employees found with the same department and designation as the applicant.
                   </p>
                 )}
-                {!isAssigned && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    You must assign someone from the same department and designation before approving.
-                  </p>
-                )}
               </div>
             </div>
           )}
@@ -296,9 +290,9 @@ const LeaveDetail = () => {
               <button
                 type="button"
                 onClick={() => setPendingAction("Approved")}
-                disabled={updating || !isAssigned}
+                disabled={updating}
                 className={`px-4 py-2 rounded-lg font-semibold transition ${
-                  updating || !isAssigned
+                  updating
                     ? "bg-green-200 text-green-700 cursor-not-allowed"
                     : "bg-green-600 text-white hover:bg-green-700"
                 }`}

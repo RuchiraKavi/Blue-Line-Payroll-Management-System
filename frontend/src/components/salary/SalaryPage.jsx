@@ -1414,7 +1414,7 @@ const SalaryPage = () => {
                               </div>
                               <label className="flex justify-between items-center gap-2 pt-2">
                                 <span className="text-gray-700">No Pay</span>
-                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                                <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly no-pay allowance" : "From approved no-pay leave days only"} />
                               </label>
                               {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
                                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">
@@ -1857,7 +1857,7 @@ const SalaryPage = () => {
                             </div>
                             <label className="flex justify-between items-center gap-2 pt-2">
                               <span className="text-gray-700">No Pay</span>
-                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={computed.attendance_missing ? "No attendance uploaded — pro-rated no-pay until attendance is added" : isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly allowance" : "Max(no-pay leave, shortfall from attendance hours)"} />
+                              <input type="number" min="0" step="0.01" readOnly value={computed.no_pay} className="w-20 px-1.5 sm:px-2 py-1.5 border-2 border-gray-200 rounded-xl text-right bg-gray-100 text-gray-700 cursor-not-allowed" title={isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) ? "Intern: after half-day monthly no-pay allowance" : "From approved no-pay leave days only"} />
                             </label>
                             {isInternRole(getEmployeeEffectiveRole(row.employee || row) || row.role) && (
                               <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2">

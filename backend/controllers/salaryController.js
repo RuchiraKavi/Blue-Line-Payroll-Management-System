@@ -164,7 +164,7 @@ async function loadPayrollPeriodContext(month, year) {
   return { noPayDaysMap, hoursMap, prevPresentDatesMap, currentPresentDatesMap };
 }
 
-/** Resolve no-pay (leave vs attendance shortfall) and attach breakdown fields to salary input. */
+/** Resolve no-pay from approved leave days; attach attendance fields for allowance pro-rating. */
 function applyResolvedNoPay(input, employee, noPayDaysMap, hoursMap, month, year) {
   const empId = String(employee._id);
   const noPayDays = noPayDaysMap.get(empId) || 0;

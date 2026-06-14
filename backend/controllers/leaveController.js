@@ -408,7 +408,7 @@ const getLeaveAssignees = async (req, res) => {
   }
 };
 
-// Assign an employee (same department and designation) before approval
+// Assign an employee (same department and designation) — optional before approval
 const assignLeave = async (req, res) => {
   try {
     const { id } = req.params; // leave ID
@@ -549,14 +549,6 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Leave already ${leave.status}`,
-      });
-    }
-
-    // Require assignment before approval
-    if (normalizedStatus === "approved" && !leave.assignedTo) {
-      return res.status(400).json({
-        success: false,
-        message: "Please assign an employee from the same department and designation before approving",
       });
     }
 
