@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../hooks/useAuth";
 import { Link } from "react-router-dom";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 import {
   FaCalendarAlt,
   FaHeartbeat,
@@ -215,7 +216,7 @@ const EmployeeSummary = () => {
             <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/15 ring-2 ring-white/30">
               {profileImage ? (
                 <img
-                  src={`http://localhost:5000/uploads/${profileImage}`}
+                  src={getUploadUrl(profileImage) || undefined}
                   alt={employee.userId?.name || "Profile"}
                   className="h-full w-full object-cover"
                 />

@@ -1,0 +1,69 @@
+{
+  "name": "payroll-management",
+  "version": "1.0.0",
+  "description": "Payroll Management Desktop Application",
+  "author": "Blue Line",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "build:frontend": "npm run build --prefix frontend",
+    "electron:dev": "npm run build:frontend && electron .",
+    "electron:start": "electron .",
+    "rebuild:native": "electron-rebuild -f -m backend -w bcrypt",
+    "postinstall": "electron-builder install-app-deps && npm run rebuild:native",
+    "dist": "npm run build:frontend && electron-builder --win",
+    "dist:dir": "npm run build:frontend && electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.blueline.payroll",
+    "productName": "Payroll Management",
+    "copyright": "Copyright © 2026 Blue Line",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/.env",
+          "!uploads/**",
+          "!**/scripts/**",
+          "!**/node_modules/nodemon/**"
+        ]
+      },
+      {
+        "from": "frontend/dist",
+        "to": "frontend/dist"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Payroll Management"
+    }
+  }
+}

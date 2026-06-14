@@ -1,0 +1,5 @@
+employeeId,date,name,inTime,outTime,workingHours,status
+BL001,1/12/2026,Ruchira Kavinda,9:05,17:10,8.05,Present
+BL002,1/12/2026,Bhagya,9:05,17:10,8.05,Present
+,,,,,,
+,,,,,,

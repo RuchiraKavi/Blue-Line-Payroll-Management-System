@@ -2,6 +2,7 @@ import axios from "axios";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DateInput from "../ui/DateInput.jsx";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 import {
   getMaxDobForMinimumAge,
   validateAddress,
@@ -247,7 +248,7 @@ const EditProfile = () => {
             <div className="flex items-center gap-4">
               {employee?.userId?.profileImage ? (
                 <img
-                  src={`http://localhost:5000/uploads/${employee.userId.profileImage}`}
+                  src={getUploadUrl(employee.userId.profileImage) || undefined}
                   alt="Profile"
                   className="w-16 h-16 rounded-full object-cover border border-gray-200"
                 />

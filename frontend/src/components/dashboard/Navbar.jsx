@@ -16,13 +16,13 @@ const Navbar = ({ showWelcome = true }) => {
         navigate('/login');
     };
     return (
-        <div className="flex items-center justify-between h-14 px-6 bg-gray-900 text-white border-b border-gray-800 font-poppins">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-800 bg-gray-900 px-6 text-white font-poppins">
 
             {/* LEFT SIDE — WELCOME */}
             {showWelcome ? (
-                <div className="flex items-center gap-3 text-lg">
-                    <FaUser className="text-gray-400" />
-                    <p>
+                <div className="flex items-center gap-3 text-lg leading-none">
+                    <FaUser className="text-gray-400 shrink-0" />
+                    <p className="m-0">
                         Welcome <span className="font-semibold">{user.name}</span>
                     </p>
                 </div>

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Image,
 } from "@react-pdf/renderer";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 
 const styles = StyleSheet.create({
   page: {
@@ -98,7 +99,7 @@ const EmployeePDF = ({ employee }) => (
         <View style={styles.headerLeft}>
           {employee.userId?.profileImage && (
             <Image
-              src={`http://localhost:5000/uploads/${employee.userId.profileImage}`}
+              src={getUploadUrl(employee.userId.profileImage, { absolute: true })}
               style={styles.image}
             />
           )}

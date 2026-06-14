@@ -20,11 +20,14 @@ import {
   validateDobMinimumAge,
 } from "../utils/employeeFieldValidation.js";
 import { sendEmployeeRegistrationEmail } from "../utils/employeeRegistrationEmail.js";
+import { ensureUploadsDir, getUploadsDir, getUploadFilePath } from "../utils/uploadsPath.js";
 
 /* ================= MULTER SETUP ================= */
+ensureUploadsDir();
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "public/uploads");
+  destination: (_req, _file, cb) => {
+    cb(null, getUploadsDir());
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
@@ -437,12 +440,14 @@ const removeEmployee = async (req, res) => {
 
     // 2️⃣ Delete uploaded image if exists
     if (employee.image) {
-      const imagePath = path.join("public", "uploads", employee.image);
-      fs.unlink(imagePath, (err) => {
-        if (err) {
-          console.warn("Could not delete image:", err.message);
-        }
-      });
+      const imagePath = getUploadFilePath(employee.image);
+      if (imagePath) {
+        fs.unlink(imagePath, (err) => {
+          if (err) {
+            console.warn("Could not delete image:", err.message);
+          }
+        });
+      }
     }
 
     // 3️⃣ Get linked userId BEFORE deleting employee

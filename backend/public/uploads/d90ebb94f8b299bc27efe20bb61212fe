@@ -1,0 +1,5 @@
+employeeId,date,name,inTime,outTime,workingHours,status
+BL001,1/11/2026,John Doe,9:05,17:10,8.05,Present
+BL002,1/11/2026,John Doe,9:05,17:10,8.05,Absent
+BL003,1/11/2026,John Doe,9:05,17:10,8.05,Absent
+BL004,1/11/2026,John Doe,9:05,17:10,8.05,Present

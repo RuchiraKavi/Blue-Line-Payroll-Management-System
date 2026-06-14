@@ -1,51 +1,54 @@
-import express from 'express';
-import cors from 'cors';
-import authRouter from './routes/auth.js';
-import departmentRouter from './routes/department.js';
-import designationRouter from './routes/designation.js';
-import employeeRouter from './routes/employee.js';
-import attendanceRouter from './routes/attendance.js';
-import connectToDatabase from './db/db.js';
-import leaveRouter from './routes/leave.js';
-import passwordRouter from './routes/password.js';
-import salaryRouter from './routes/salary.js';
-import dashboardRouter from './routes/dashboard.js';
-import advanceRouter from './routes/advance.js';
-import roleRouter from './routes/role.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { loadEnv, isEmailConfigured } from "./loadEnv.js";
+import connectToDatabase from "./db/db.js";
+import { createApp } from "./createApp.js";
+import { ensureUploadsDir } from "./utils/uploadsPath.js";
+import fs from "fs";
+import path from "path";
 
+const envFile = loadEnv();
+if (envFile) {
+  console.log(`Environment loaded from: ${envFile}`);
+}
+console.log(
+  isEmailConfigured()
+    ? "Email: configured"
+    : "Email: not configured (set EMAIL_USER and EMAIL_PASS in backend/.env or secrets.env)"
+);
 
-connectToDatabase();
-const app = express();
+const uploadsDir = ensureUploadsDir();
+const uploadCount = fs.existsSync(uploadsDir)
+  ? fs.readdirSync(uploadsDir).filter((name) =>
+      fs.statSync(path.join(uploadsDir, name)).isFile()
+    ).length
+  : 0;
+console.log(`Uploads directory: ${uploadsDir} (${uploadCount} file(s))`);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+try {
+  await connectToDatabase();
+} catch (error) {
+  console.error(
+    "Startup failed:",
+    error instanceof Error ? error.message : error
+  );
+  process.exit(1);
+}
 
-app.use(cors());
-app.use(express.json({ limit: "5mb" }));
+const app = createApp();
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || "127.0.0.1";
 
-app.use('/api/auth', authRouter);
-app.use('/api/departments', departmentRouter);
-app.use('/api/designations', designationRouter);
-app.use('/api/roles', roleRouter);
-app.use('/api/employees', employeeRouter);
-app.use('/api/attendance', attendanceRouter);
-app.use('/api/leaves', leaveRouter);
-app.use("/api/password-change", passwordRouter);
-app.use("/api/salary", salaryRouter);
-app.use("/api/dashboard", dashboardRouter);
-app.use("/api/advance", advanceRouter);
-
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
-
-app.use(cors({
-  origin: "http://localhost:5173", // frontend URL
-  methods: ["GET","POST","PUT","DELETE"],
-  credentials: true
-}));
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+const server = app.listen(PORT, HOST, () => {
+  console.log(`Server is running on http://${HOST}:${PORT}`);
 });
+
+server.on("error", (error) => {
+  console.error("Server failed to start:", error);
+  process.exit(1);
+});
+
+function shutdown() {
+  server.close(() => process.exit(0));
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

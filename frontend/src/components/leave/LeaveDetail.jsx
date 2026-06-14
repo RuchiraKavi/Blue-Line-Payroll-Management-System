@@ -4,6 +4,7 @@ import axios from "axios";
 import SelectInput from "../ui/SelectInput.jsx";
 import LeaveActionModal from "./LeaveActionModal.jsx";
 import { formatRoleLabel } from "../../utils/roleConstants.js";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 
 const LeaveDetail = () => {
   const { id } = useParams(); // leave ID from route
@@ -176,9 +177,8 @@ const LeaveDetail = () => {
         <div className="flex justify-center -mt-16">
           <img
             src={
-              leave.employeeId?.userId?.profileImage
-                ? `http://localhost:5000/uploads/${leave.employeeId.userId.profileImage}`
-                : `https://via.placeholder.com/150`
+              getUploadUrl(leave.employeeId?.userId?.profileImage) ||
+              "https://via.placeholder.com/150"
             }
             alt="Employee"
             className="w-36 h-36 rounded-full object-cover border-4 border-white shadow-md"

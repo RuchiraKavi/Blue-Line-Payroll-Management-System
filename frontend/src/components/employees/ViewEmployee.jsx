@@ -4,6 +4,7 @@ import axios from "axios";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import EmployeePDF from "./EmployeePDF";
 import EmployeeIDCardPDF from "./EmployeeIDCardPDF";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 
 const ViewEmployee = () => {
   const { id } = useParams();
@@ -52,7 +53,7 @@ const ViewEmployee = () => {
             {/* Profile Image */}
             <div className="flex justify-center -mt-36">
               <img
-                src={`http://localhost:5000/uploads/${employee.userId?.profileImage}`}
+                src={getUploadUrl(employee.userId?.profileImage) || undefined}
                 alt="Employee"
                 className="w-56 h-56 rounded-full object-cover border-4 border-white shadow-md"
               />

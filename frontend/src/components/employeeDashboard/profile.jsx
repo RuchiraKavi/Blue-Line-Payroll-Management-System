@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 
 const Profile = () => {
   const [employee, setEmployee] = useState(null);
@@ -78,7 +79,7 @@ const Profile = () => {
             {/* Profile Image */}
             <div className="flex justify-center -mt-36">
               <img
-                src={`http://localhost:5000/uploads/${employee.userId?.profileImage}`}
+                src={getUploadUrl(employee.userId?.profileImage) || undefined}
                 alt="Employee"
                 className="w-56 h-56 rounded-full object-cover border-4 border-white shadow-md"
               />

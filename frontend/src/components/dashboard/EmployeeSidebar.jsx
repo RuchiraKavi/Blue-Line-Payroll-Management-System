@@ -13,8 +13,8 @@ const EmployeeSidebar = () => {
     <div className="h-screen bg-gray-900 text-white w-80 shrink-0 flex flex-col shadow-lg">
 
       {/* Logo */}
-      <div className="p-6 border-b border-gray-800">
-        <h3 className="text-2xl font-bold tracking-wide">Blue Line MS</h3>
+      <div className="flex h-14 shrink-0 items-center border-b border-gray-800 px-6">
+        <h3 className="text-2xl font-bold leading-none tracking-wide">Blue Line MS</h3>
       </div>
 
       {/* Navigation */}

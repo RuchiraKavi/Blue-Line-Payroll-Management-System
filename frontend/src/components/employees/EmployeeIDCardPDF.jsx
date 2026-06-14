@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Page, Text, View, Document, Image, StyleSheet } from "@react-pdf/renderer";
 import QRCode from "qrcode";
+import { getUploadUrl } from "../../utils/apiConfig.js";
 
 // ===== Styles =====
 const styles = StyleSheet.create({
@@ -46,7 +47,7 @@ const IDCard = ({ employee, qrCode, issueDate, validUntil }) => {
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
             <Image
-              src={employee.userId?.profileImage ? `http://localhost:5000/uploads/${employee.userId.profileImage}` : "https://via.placeholder.com/60"}
+              src={getUploadUrl(employee.userId?.profileImage, { absolute: true }) || "https://via.placeholder.com/60"}
               style={styles.profileImage}
             />
           </View>
